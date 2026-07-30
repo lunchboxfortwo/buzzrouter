@@ -1,0 +1,345 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-30T11:06:14-04:00",
+  "title": "Design System: BuzzRouter",
+  "extensions": {
+    "colorMeta": {
+      "cool-canvas": {
+        "role": "neutral",
+        "displayName": "Cool Canvas",
+        "canonical": "#f4f5f7",
+        "tonalRamp": ["oklch(15% 0.008 255)", "oklch(26% 0.008 255)", "oklch(38% 0.008 255)", "oklch(50% 0.008 255)", "oklch(62% 0.008 255)", "oklch(74% 0.008 255)", "oklch(86% 0.008 255)", "oklch(95% 0.008 255)"]
+      },
+      "working-surface": {
+        "role": "neutral",
+        "displayName": "Working Surface",
+        "canonical": "#ffffff",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(62% 0 0)", "oklch(74% 0 0)", "oklch(86% 0 0)", "oklch(100% 0 0)"]
+      },
+      "muted-surface": {
+        "role": "neutral",
+        "displayName": "Muted Surface",
+        "canonical": "#f8f9fb",
+        "tonalRamp": ["oklch(15% 0.007 255)", "oklch(26% 0.007 255)", "oklch(38% 0.007 255)", "oklch(50% 0.007 255)", "oklch(62% 0.007 255)", "oklch(74% 0.007 255)", "oklch(86% 0.007 255)", "oklch(97% 0.007 255)"]
+      },
+      "selected-surface": {
+        "role": "primary",
+        "displayName": "Selected Lavender Plane",
+        "canonical": "#f1f1ff",
+        "tonalRamp": ["oklch(15% 0.025 285)", "oklch(26% 0.03 285)", "oklch(38% 0.035 285)", "oklch(50% 0.04 285)", "oklch(62% 0.04 285)", "oklch(74% 0.035 285)", "oklch(86% 0.03 285)", "oklch(95% 0.025 285)"]
+      },
+      "graphite": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "canonical": "#111318",
+        "tonalRamp": ["oklch(15% 0.015 255)", "oklch(26% 0.015 255)", "oklch(38% 0.014 255)", "oklch(50% 0.012 255)", "oklch(62% 0.01 255)", "oklch(74% 0.008 255)", "oklch(86% 0.006 255)", "oklch(95% 0.004 255)"]
+      },
+      "reading-graphite": {
+        "role": "neutral",
+        "displayName": "Reading Graphite",
+        "canonical": "#414958",
+        "tonalRamp": ["oklch(15% 0.025 255)", "oklch(26% 0.025 255)", "oklch(38% 0.024 255)", "oklch(50% 0.022 255)", "oklch(62% 0.019 255)", "oklch(74% 0.015 255)", "oklch(86% 0.01 255)", "oklch(95% 0.006 255)"]
+      },
+      "soft-ink": {
+        "role": "neutral",
+        "displayName": "Soft Ink",
+        "canonical": "#667085",
+        "tonalRamp": ["oklch(15% 0.035 255)", "oklch(26% 0.035 255)", "oklch(38% 0.034 255)", "oklch(50% 0.032 255)", "oklch(62% 0.028 255)", "oklch(74% 0.022 255)", "oklch(86% 0.014 255)", "oklch(95% 0.008 255)"]
+      },
+      "divider": {
+        "role": "neutral",
+        "displayName": "Divider",
+        "canonical": "#dfe2e8",
+        "tonalRamp": ["oklch(15% 0.012 255)", "oklch(26% 0.012 255)", "oklch(38% 0.012 255)", "oklch(50% 0.012 255)", "oklch(62% 0.011 255)", "oklch(74% 0.01 255)", "oklch(86% 0.009 255)", "oklch(92% 0.008 255)"]
+      },
+      "divider-strong": {
+        "role": "neutral",
+        "displayName": "Strong Divider",
+        "canonical": "#c9ced8",
+        "tonalRamp": ["oklch(15% 0.018 255)", "oklch(26% 0.018 255)", "oklch(38% 0.018 255)", "oklch(50% 0.017 255)", "oklch(62% 0.016 255)", "oklch(74% 0.014 255)", "oklch(82% 0.012 255)", "oklch(95% 0.007 255)"]
+      },
+      "electric-indigo": {
+        "role": "primary",
+        "displayName": "Electric Indigo",
+        "canonical": "#5657f2",
+        "tonalRamp": ["oklch(15% 0.16 280)", "oklch(26% 0.21 280)", "oklch(38% 0.25 280)", "oklch(50% 0.27 280)", "oklch(62% 0.23 280)", "oklch(74% 0.17 280)", "oklch(86% 0.10 280)", "oklch(95% 0.045 280)"]
+      },
+      "electric-indigo-strong": {
+        "role": "primary",
+        "displayName": "Strong Electric Indigo",
+        "canonical": "#4445d8",
+        "tonalRamp": ["oklch(15% 0.15 280)", "oklch(26% 0.20 280)", "oklch(38% 0.24 280)", "oklch(48% 0.25 280)", "oklch(62% 0.21 280)", "oklch(74% 0.16 280)", "oklch(86% 0.09 280)", "oklch(95% 0.04 280)"]
+      },
+      "electric-indigo-soft": {
+        "role": "primary",
+        "displayName": "Indigo Wash",
+        "canonical": "#ececff",
+        "tonalRamp": ["oklch(15% 0.035 280)", "oklch(26% 0.04 280)", "oklch(38% 0.045 280)", "oklch(50% 0.05 280)", "oklch(62% 0.05 280)", "oklch(74% 0.045 280)", "oklch(86% 0.04 280)", "oklch(95% 0.03 280)"]
+      },
+      "activity-emerald": {
+        "role": "secondary",
+        "displayName": "Activity Emerald",
+        "canonical": "#087c5b",
+        "tonalRamp": ["oklch(15% 0.08 165)", "oklch(26% 0.11 165)", "oklch(38% 0.14 165)", "oklch(50% 0.14 165)", "oklch(62% 0.12 165)", "oklch(74% 0.09 165)", "oklch(86% 0.055 165)", "oklch(95% 0.025 165)"]
+      },
+      "activity-emerald-soft": {
+        "role": "secondary",
+        "displayName": "Activity Emerald Wash",
+        "canonical": "#e9f8f2",
+        "tonalRamp": ["oklch(15% 0.025 165)", "oklch(26% 0.03 165)", "oklch(38% 0.035 165)", "oklch(50% 0.04 165)", "oklch(62% 0.04 165)", "oklch(74% 0.035 165)", "oklch(86% 0.03 165)", "oklch(95% 0.02 165)"]
+      },
+      "caution-ochre": {
+        "role": "secondary",
+        "displayName": "Caution Ochre",
+        "canonical": "#8a5b00",
+        "tonalRamp": ["oklch(15% 0.08 75)", "oklch(26% 0.10 75)", "oklch(38% 0.12 75)", "oklch(50% 0.12 75)", "oklch(62% 0.11 75)", "oklch(74% 0.08 75)", "oklch(86% 0.05 75)", "oklch(95% 0.025 75)"]
+      },
+      "caution-soft": {
+        "role": "secondary",
+        "displayName": "Caution Wash",
+        "canonical": "#fff5d6",
+        "tonalRamp": ["oklch(15% 0.03 85)", "oklch(26% 0.035 85)", "oklch(38% 0.04 85)", "oklch(50% 0.045 85)", "oklch(62% 0.045 85)", "oklch(74% 0.04 85)", "oklch(86% 0.035 85)", "oklch(95% 0.025 85)"]
+      },
+      "danger-red": {
+        "role": "secondary",
+        "displayName": "Danger Red",
+        "canonical": "#b42336",
+        "tonalRamp": ["oklch(15% 0.10 20)", "oklch(26% 0.13 20)", "oklch(38% 0.16 20)", "oklch(50% 0.17 20)", "oklch(62% 0.14 20)", "oklch(74% 0.10 20)", "oklch(86% 0.06 20)", "oklch(95% 0.025 20)"]
+      },
+      "focus-violet": {
+        "role": "secondary",
+        "displayName": "Focus Violet",
+        "canonical": "#7957ff",
+        "tonalRamp": ["oklch(15% 0.16 295)", "oklch(26% 0.21 295)", "oklch(38% 0.25 295)", "oklch(50% 0.27 295)", "oklch(62% 0.24 295)", "oklch(74% 0.18 295)", "oklch(86% 0.10 295)", "oklch(95% 0.045 295)"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Secondary content-page titles only; never a discovery-workspace hero."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Selected-community and dialog headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section headings and strong content labels."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "General reading, fields, and content-page explanations."
+      },
+      "compact-body": {
+        "displayName": "Compact Body",
+        "purpose": "Rows, inspector copy, navigation, and controls."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Column headings, filter prefixes, timestamps, and helper text."
+      },
+      "metric": {
+        "displayName": "Metric",
+        "purpose": "Inspector activity and rating values with tabular numerals."
+      }
+    },
+    "shadows": [
+      {
+        "name": "selected-row",
+        "value": "inset 0 0 0 1px var(--accent)",
+        "purpose": "Identifies the selected community without lifting the row."
+      },
+      {
+        "name": "keycap",
+        "value": "0 1px 1px rgb(17 19 24 / 7%)",
+        "purpose": "Gives keyboard hints a small physical edge."
+      },
+      {
+        "name": "comparison-tray",
+        "value": "0 -10px 32px rgb(17 19 24 / 10%)",
+        "purpose": "Separates the fixed comparison shortlist from page content."
+      },
+      {
+        "name": "modal-overlay",
+        "value": "0 24px 70px rgb(17 19 24 / 24%)",
+        "purpose": "Identifies a blocking dialog above its dark backdrop."
+      }
+    ],
+    "motion": [
+      {
+        "name": "duration-standard",
+        "value": "180ms",
+        "purpose": "Navigation, row, button, and control state transitions."
+      },
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(.2, .8, .2, 1)",
+        "purpose": "Quick, settled interface response."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0.01ms",
+        "purpose": "Near-instant animation and transition duration under reduced-motion preference."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "workspace-compact",
+        "value": "1180px"
+      },
+      {
+        "name": "workspace-stacked",
+        "value": "920px"
+      },
+      {
+        "name": "small-screen",
+        "value": "680px"
+      },
+      {
+        "name": "narrow-screen",
+        "value": "380px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Branded Masthead",
+      "kind": "nav",
+      "description": "Binding BuzzRouter identity beside short route navigation.",
+      "html": "<header class=\"ds-masthead\"><a class=\"ds-brand\" href=\"#\" aria-label=\"BuzzRouter directory\"><img src=\"/assets/brand/buzzrouter-logo.png\" alt=\"\" width=\"34\" height=\"34\"><span>BuzzRouter</span></a><nav class=\"ds-nav\" aria-label=\"Primary navigation\"><a class=\"ds-nav-current\" href=\"#\">Discover</a><a href=\"#\">Method</a><a href=\"#\">Submit</a></nav></header>",
+      "css": ".ds-masthead { min-height: 62px; display: flex; align-items: center; gap: 24px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--surface); font-family: var(--font-sans); } .ds-brand { min-height: 44px; display: inline-flex; align-items: center; gap: 9px; color: var(--ink); font-size: 1.2rem; font-weight: 700; letter-spacing: -.025em; text-decoration: none; } .ds-brand img { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%; object-fit: cover; } .ds-nav { display: flex; gap: 4px; } .ds-nav a { position: relative; min-height: 44px; display: inline-flex; align-items: center; padding: 0 14px; color: var(--ink-soft); font-size: .91rem; font-weight: 600; text-decoration: none; } .ds-nav a:hover, .ds-nav-current { color: var(--accent-strong) !important; } .ds-nav-current::after { position: absolute; right: 14px; bottom: 2px; left: 14px; height: 2px; border-radius: 2px; background: var(--accent); content: \"\"; } .ds-masthead a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The decisive action for joining, comparing, submitting, retrying, and confirming.",
+      "html": "<button class=\"ds-button-primary\" type=\"button\">Join community <span aria-hidden=\"true\">→</span></button>",
+      "css": ".ds-button-primary { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 15px; border: 1px solid transparent; border-radius: var(--radius-sm); background: var(--accent); color: #fff; font: 700 .87rem/1.2 var(--font-sans); cursor: pointer; transition: background var(--duration) var(--ease), transform var(--duration) var(--ease); } .ds-button-primary:hover { background: var(--accent-strong); transform: translateY(-1px); } .ds-button-primary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; } .ds-button-primary:active { background: var(--accent-strong); transform: none; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A bordered surface action for filters, comparison, and reversible choices.",
+      "html": "<button class=\"ds-button-secondary\" type=\"button\">Filter &amp; sort</button>",
+      "css": ".ds-button-secondary { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 15px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font: 700 .87rem/1.2 var(--font-sans); cursor: pointer; transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease), color var(--duration) var(--ease); } .ds-button-secondary:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); } .ds-button-secondary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; } .ds-button-secondary:active { background: var(--surface-selected); }"
+    },
+    {
+      "name": "Command Search",
+      "kind": "input",
+      "refersTo": "search-field",
+      "description": "The masthead command field for communities and topics.",
+      "html": "<label class=\"ds-search\"><span class=\"ds-visually-hidden\">Search communities</span><span class=\"ds-search-field\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"7\"></circle><path d=\"m16.5 16.5 4 4\"></path></svg><input type=\"search\" placeholder=\"Search communities or topics\"><kbd aria-hidden=\"true\">⌘ K</kbd></span></label>",
+      "css": ".ds-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } .ds-search { display: block; font-family: var(--font-sans); } .ds-search-field { position: relative; display: block; } .ds-search svg { position: absolute; top: 50%; left: 13px; width: 19px; height: 19px; fill: none; stroke: var(--ink-soft); stroke-linecap: round; stroke-width: 1.8; transform: translateY(-50%); pointer-events: none; } .ds-search input { width: 100%; height: 46px; padding: 0 54px 0 42px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font: 400 1rem/1.5 var(--font-sans); } .ds-search kbd { position: absolute; top: 50%; right: 10px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-muted); color: var(--ink-soft); font: 500 .72rem/1.2 var(--font-sans); box-shadow: 0 1px 1px rgb(17 19 24 / 7%); transform: translateY(-50%); } .ds-search input:hover { border-color: var(--accent); } .ds-search input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }"
+    },
+    {
+      "name": "Command Filter",
+      "kind": "input",
+      "refersTo": "command-filter",
+      "description": "A compact label-and-value selector in the slim filter strip.",
+      "html": "<label class=\"ds-command-filter\"><span>Category</span><select><option>All</option><option>Agent tools</option></select></label>",
+      "css": ".ds-command-filter { height: 46px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; padding-left: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); font-family: var(--font-sans); } .ds-command-filter > span { color: var(--ink-soft); font-size: .79rem; font-weight: 600; } .ds-command-filter select { min-width: 0; height: 42px; border: 0; outline: 0; background: transparent; color: var(--ink); font: 600 .86rem/1.2 var(--font-sans); cursor: pointer; } .ds-command-filter:hover { border-color: var(--accent); } .ds-command-filter:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }"
+    },
+    {
+      "name": "Active Filter Chip",
+      "kind": "chip",
+      "refersTo": "filter-chip",
+      "description": "A quiet pill summarizing an active query or filter.",
+      "html": "<span class=\"ds-filter-chip\">Agent tools</span>",
+      "css": ".ds-filter-chip { min-height: 30px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-strong); font: 600 .78rem/1.3 var(--font-sans); }"
+    },
+    {
+      "name": "Written Activity Status",
+      "kind": "chip",
+      "description": "Compact emerald activity evidence that always includes plain-language status.",
+      "html": "<span class=\"ds-activity\"><span aria-hidden=\"true\"></span>Very active</span>",
+      "css": ".ds-activity { display: inline-flex; align-items: center; gap: 7px; color: var(--positive); font: 600 .79rem/1.3 var(--font-sans); } .ds-activity > span { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: currentColor; }"
+    },
+    {
+      "name": "Community Index Row",
+      "kind": "card",
+      "refersTo": "community-row-selected",
+      "description": "The selected factual row that preserves identity, activity, freshness, and rating in one plane.",
+      "html": "<button class=\"ds-community-row ds-selected\" type=\"button\" aria-pressed=\"true\"><span class=\"ds-community\"><span class=\"ds-insignia\" aria-hidden=\"true\"></span><span><strong>Agent Commons</strong><small>Open agent infrastructure and shared tooling.</small></span></span><span class=\"ds-focus\">Agent tools</span><span class=\"ds-activity\"><i aria-hidden=\"true\"></i>Very active</span><span class=\"ds-freshness\">2d ago</span><span class=\"ds-rating\"><strong>4.8</strong><small>86 ratings</small></span><span class=\"ds-arrow\" aria-hidden=\"true\">›</span></button>",
+      "css": ".ds-community-row { width: 100%; min-height: 88px; display: grid; grid-template-columns: minmax(260px, 2fr) minmax(110px, 1fr) minmax(100px, .9fr) minmax(76px, .65fr) minmax(68px, .62fr) 24px; align-items: center; gap: 12px; padding: 10px 15px; border: 0; background: var(--surface); color: var(--ink); text-align: left; font-family: var(--font-sans); cursor: pointer; transition: background var(--duration) var(--ease), box-shadow var(--duration) var(--ease); } .ds-community-row:hover { background: var(--surface-muted); } .ds-community-row:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; } .ds-community-row.ds-selected { background: var(--surface-selected); box-shadow: inset 0 0 0 1px var(--accent); } .ds-community { min-width: 0; display: flex; align-items: center; gap: 12px; } .ds-insignia { width: 48px; height: 48px; flex: 0 0 48px; border: 1px solid rgb(17 19 24 / 8%); border-radius: var(--radius-sm); background: var(--surface-muted); } .ds-community strong, .ds-community small, .ds-rating strong, .ds-rating small { display: block; } .ds-community strong { font-size: .93rem; font-weight: 700; } .ds-community small, .ds-focus, .ds-freshness { color: var(--ink-soft); font-size: .78rem; } .ds-activity { display: inline-flex; align-items: center; gap: 7px; color: var(--positive); font-size: .79rem; font-weight: 600; } .ds-activity i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; } .ds-rating strong { font-size: .93rem; font-variant-numeric: tabular-nums; } .ds-rating small { color: var(--ink-soft); font-size: .68rem; } .ds-arrow { color: var(--accent); font-size: 1.5rem; transition: transform var(--duration) var(--ease); } .ds-community-row:hover .ds-arrow { transform: translateX(2px); }"
+    },
+    {
+      "name": "Persistent Community Inspector",
+      "kind": "custom",
+      "description": "The selected-community plane with a visible Join action and evidence in ruled reading order.",
+      "html": "<article class=\"ds-inspector\"><header><div><h2>Agent Commons</h2><p>Open agent infrastructure, evaluation methods, and shared tooling.</p><span class=\"ds-activity\"><i aria-hidden=\"true\"></i>Very active</span></div><button type=\"button\">Join community →</button></header><dl><div><dt>Activity · 30d</dt><dd>98<small>Illustrative score</small></dd></div><div><dt>Rating</dt><dd>4.8<small>86 illustrative ratings</small></dd></div></dl><section><h3>Current work</h3><p>Maintaining an open evaluation dataset for interoperable agents.</p></section><section class=\"ds-evidence\"><h3>Evidence and limitations</h3><p>Activity is illustrative and operator-reported; no private relay content was inspected.</p></section></article>",
+      "css": ".ds-inspector { overflow: hidden; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-family: var(--font-sans); } .ds-inspector header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 20px; border-bottom: 1px solid var(--line); } .ds-inspector h2 { margin: 0 0 4px; font-size: 1.5rem; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; } .ds-inspector h3 { margin: 0 0 9px; font-size: .88rem; } .ds-inspector p { margin: 0; color: #414958; font-size: .84rem; line-height: 1.55; } .ds-inspector header button { min-height: 44px; padding: 0 15px; border: 0; border-radius: var(--radius-sm); background: var(--accent); color: #fff; font: 700 .87rem/1.2 var(--font-sans); cursor: pointer; } .ds-inspector header button:hover { background: var(--accent-strong); } .ds-inspector header button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; } .ds-inspector dl { display: grid; grid-template-columns: 1fr 1fr; margin: 0; border-bottom: 1px solid var(--line); } .ds-inspector dl > div { padding: 18px 20px; } .ds-inspector dl > div + div { border-left: 1px solid var(--line); } .ds-inspector dt { color: var(--ink-soft); font-size: .72rem; font-weight: 600; } .ds-inspector dd { margin: 5px 0 0; font-size: 1.65rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; } .ds-inspector dd small { display: block; margin-top: 4px; color: var(--ink-soft); font-size: .68rem; font-weight: 400; } .ds-inspector section { padding: 20px; border-bottom: 1px solid var(--line); } .ds-inspector .ds-evidence { background: var(--surface-muted); } .ds-activity { display: inline-flex; align-items: center; gap: 7px; margin-top: 8px; color: var(--positive); font-size: .79rem; font-weight: 600; } .ds-activity i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Focused Community Workspace",
+    "overview": "BuzzRouter is a calm, information-dense developer workspace for choosing one community with confidence. A cool canvas holds white working planes; compact factual rows remain visible beside a persistent inspector, so browsing and evaluation feel like one continuous task rather than a sequence of promotional pages.\n\nThe system is precise without becoming clinical. Graphite type, electric-indigo selection, written emerald activity, and crisp dividers create hierarchy with almost no decorative depth. The binding BuzzRouter logo anchors the masthead and favicon, while the rest of the interface stays light, planar, and factual.",
+    "keyCharacteristics": [
+      "Index and inspector remain visually connected on wide screens.",
+      "Electric indigo identifies the current item, current route, and decisive action.",
+      "Activity appears as plain language with a small emerald dot, never as a decorative chart.",
+      "Compact Instrument Sans typography carries both interface and content.",
+      "White working planes and precise dividers do most of the structural work.",
+      "The BuzzRouter logo appears as a circular brand asset in the masthead and browser identity."
+    ],
+    "rules": [
+      {
+        "name": "The One Interaction Color Rule",
+        "body": "Electric indigo carries selection, navigation, links, and action; semantic colors do not become general accents.",
+        "section": "colors"
+      },
+      {
+        "name": "The Written Status Rule",
+        "body": "Emerald, ochre, and red supplement explicit status language; color never carries meaning alone.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Grotesk Rule",
+        "body": "Use Instrument Sans for brand wordmark text, interface, labels, metrics, and reading copy; vary scale and weight instead of introducing a second typeface.",
+        "section": "typography"
+      },
+      {
+        "name": "The Compact Hierarchy Rule",
+        "body": "Keep the workspace hierarchy shallow; large display type belongs to secondary content pages, not above the index.",
+        "section": "typography"
+      },
+      {
+        "name": "The Context Stays Put Rule",
+        "body": "Preserve the index while inspecting a community; wide layouts use a persistent side inspector, and narrow layouts place the inspector directly after the selectable list.",
+        "section": "layout"
+      },
+      {
+        "name": "The Facts Before Ornament Rule",
+        "body": "Use aligned columns, consistent row geometry, and dividers to make comparison effortless; do not replace factual density with cards or decoration.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Working Plane Rule",
+        "body": "Index rows, inspectors, command bars, fields, and content cards stay shadowless at rest; only overlays and small physical key hints cast shadows.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Precise Divider Rule",
+        "body": "Let 1px rules describe adjacency and reading order; rounded containers must not dissolve the index-and-inspector structure.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do use the BuzzRouter logo in the masthead and favicon at its shipped circular proportions.",
+      "Do keep the selected community and Join action visible in the first workspace view.",
+      "Do preserve compact factual rows and the adjacent or immediately following inspector.",
+      "Do pair activity color and dots with plain-language status and freshness.",
+      "Do retain 44px interactive targets, visible focus, reduced-motion behavior, and non-color status cues.",
+      "Do use indigo sparingly for current route, selection, links, tags, and decisive action."
+    ],
+    "donts": [
+      "Don't generalize the logo’s dark dimensional material into UI panels, buttons, or container shadows.",
+      "Don't turn the directory into promotional cards, a chart dashboard, or a social feed.",
+      "Don't add waveforms, sparklines, decorative squiggles, or other invented activity graphics.",
+      "Don't introduce dark-neon, glass, gradient, terminal, civic-ledger, or Craigslist-derived styling.",
+      "Don't hide the inspector behind a route change when the index and selection can remain in context.",
+      "Don't use semantic emerald, ochre, or red as general-purpose emphasis."
+    ]
+  }
+}

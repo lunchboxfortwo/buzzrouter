@@ -45,7 +45,7 @@ health="$(
 
 node -e '
   const health = JSON.parse(process.argv[1]);
-  if (health.status !== "ok" || health.migration !== "0005_reliability_metrics.sql") {
+  if (health.status !== "ok" || health.migration !== "0006_listing_curation.sql") {
     process.exit(1);
   }
 ' "${health}"

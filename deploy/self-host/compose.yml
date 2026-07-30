@@ -66,13 +66,20 @@ services:
       start_period: 20s
     ports:
       - "127.0.0.1:${BUZZROUTER_PORT:-13100}:3000"
-    networks:
-      default:
-      ingress:
-        aliases:
-          - buzzrouter-web
 
-networks:
-  ingress:
-    external: true
-    name: ${BUZZROUTER_INGRESS_NETWORK:-buzz-prod_buzz-net}
+  tunnel:
+    image: cloudflare/cloudflared:2026.5.0
+    restart: unless-stopped
+    command:
+      [
+        "tunnel",
+        "--no-autoupdate",
+        "run",
+        "--token-file",
+        "/run/secrets/cloudflared.token",
+      ]
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - ${BUZZROUTER_CONFIG_DIR:-/etc/buzzrouter}/cloudflared.token:/run/secrets/cloudflared.token:ro

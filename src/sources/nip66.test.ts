@@ -168,7 +168,8 @@ describe("parseNip66Candidate", () => {
       .fn()
       .mockResolvedValueOnce(firstPage)
       .mockResolvedValueOnce(boundary)
-      .mockResolvedValueOnce(finalPage);
+      .mockResolvedValueOnce(finalPage)
+      .mockResolvedValueOnce([]);
 
     await expect(
       runNip66Source(
@@ -235,6 +236,47 @@ describe("parseNip66Candidate", () => {
     expect(query).toHaveBeenLastCalledWith(
       expect.stringContaining("last_error_code"),
       ["nip66", "incomplete_results"],
+    );
+  });
+
+  it("retries a transient relay query without widening trust", async () => {
+    const event = unsignedEvent(now, 1);
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ cursor: { since: now - 10 } }] })
+      .mockResolvedValueOnce({ rows: [] });
+    const pool = { query } as unknown as Pool;
+    const sourceQuery = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("relay timeout"))
+      .mockResolvedValueOnce([event])
+      .mockResolvedValueOnce([]);
+
+    await expect(
+      runNip66Source(
+        pool,
+        {} as PgBoss,
+        { query: sourceQuery },
+        {
+          monitorPubkeys: [monitorPubkey, otherMonitor],
+          sourceRelays: ["wss://source.example"],
+        },
+        now,
+      ),
+    ).resolves.toMatchObject({
+      candidatesIgnored: 1,
+      eventsRead: 1,
+    });
+    expect(sourceQuery).toHaveBeenCalledTimes(3);
+    expect(sourceQuery).toHaveBeenNthCalledWith(
+      1,
+      ["wss://source.example"],
+      expect.objectContaining({ authors: [monitorPubkey] }),
+    );
+    expect(sourceQuery).toHaveBeenNthCalledWith(
+      2,
+      ["wss://source.example"],
+      expect.objectContaining({ authors: [monitorPubkey] }),
     );
   });
 });

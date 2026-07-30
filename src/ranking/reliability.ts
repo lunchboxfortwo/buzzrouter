@@ -177,7 +177,7 @@ export async function rollUpReliabilityMetrics(
               FILTER (WHERE source_type = 'github') AS repos
           FROM community_sources
           WHERE candidate_id = candidates.id
-            AND source_observed_at >= now() - ($1 || ' days')::interval
+            AND source_observed_at >= now() - make_interval(days => $1::integer)
         ) AS adoption ON true
         LEFT JOIN LATERAL (
           SELECT
@@ -188,7 +188,7 @@ export async function rollUpReliabilityMetrics(
             ) AS successful
           FROM probe_snapshots
           WHERE candidate_id = candidates.id
-            AND probed_at >= now() - ($1 || ' days')::interval
+            AND probed_at >= now() - make_interval(days => $1::integer)
         ) AS probes ON true
         LEFT JOIN LATERAL (
           SELECT max(probed_at) AS changed_at
@@ -202,7 +202,7 @@ export async function rollUpReliabilityMetrics(
             FROM probe_snapshots
             WHERE candidate_id = candidates.id
               AND result_code = 'exact_software_and_protocol'
-              AND probed_at >= now() - ($1 || ' days')::interval
+              AND probed_at >= now() - make_interval(days => $1::integer)
           ) AS history
           WHERE prev_description IS NOT NULL
             AND (
@@ -237,7 +237,7 @@ export async function rollUpReliabilityMetrics(
       SELECT
         candidate_id,
         now(),
-        $1,
+        $1::integer,
         adoption_pubkeys,
         adoption_repos,
         adoption_score,
@@ -269,7 +269,7 @@ export async function rollUpReliabilityMetrics(
             100,
             round(
               (
-                ln(1 + adoption_pubkeys + adoption_repos * 0.5)
+                ln((1 + adoption_pubkeys + adoption_repos * 0.5)::numeric)
                 / ln(1 + $7::numeric)
               ) * 100,
               2
@@ -287,7 +287,7 @@ export async function rollUpReliabilityMetrics(
                 (
                   1 - (
                     EXTRACT(EPOCH FROM now() - metadata_changed_at)
-                    / ($1 * 24 * 60 * 60)
+                    / ($1::numeric * 24 * 60 * 60)
                   )
                 ) * 100,
                 2
@@ -300,7 +300,7 @@ export async function rollUpReliabilityMetrics(
               100,
               round(
                 (
-                  ln(1 + corroboration_sources)
+                  ln((1 + corroboration_sources)::numeric)
                   / ln(1 + $8::numeric)
                 ) * 100,
                 2

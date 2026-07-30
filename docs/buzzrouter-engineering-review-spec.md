@@ -5,6 +5,10 @@
 **Date:** 2026-07-30  
 **Purpose:** Give an engineer enough specificity to challenge the product, verify it against Buzz, compare two architectures, and cut a credible MVP. This is not an implementation mandate.
 
+> **Superseded:** Version 0.2 replaces this design with paired, Slack
+> Connect-style shared channels. See
+> [buzzrouter-cross-community-messaging-v0.2.md](./buzzrouter-cross-community-messaging-v0.2.md).
+
 ## 1. Decision in one page
 
 BuzzRouter should let a person send a text request to an opted-in Buzz community using a stable human-readable handle, and receive a threaded reply without joining that community.

@@ -101,6 +101,19 @@ services:
       postgres:
         condition: service_healthy
 
+  nip66-discovery:
+    image: buzzrouter-self-hosted:latest
+    profiles: ["discovery"]
+    restart: "no"
+    environment:
+      <<: *app-environment
+      NIP66_MONITOR_PUBKEYS: ${NIP66_MONITOR_PUBKEYS:-}
+      NIP66_SOURCE_RELAYS: ${NIP66_SOURCE_RELAYS:-}
+    command: ["npm", "run", "discovery:nip66"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   tunnel:
     image: cloudflare/cloudflared:2026.5.0
     restart: unless-stopped

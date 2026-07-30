@@ -4,6 +4,7 @@ import type { Pool } from "pg";
 import { recordSourceFailure } from "../db/source-state";
 import {
   isSourceEnabled,
+  loadNip66SourceConfig,
   parseCsv,
   parsePubkeys,
   validateSourceRelays,
@@ -64,23 +65,11 @@ export async function registerSourceWorkers(
 
       for (const _job of jobs) {
         await runSafely(pool, "nip66", async () => {
-          const sourceRelays = await configuredSourceRelays(
-            "NIP66_SOURCE_RELAYS",
-          );
-          const monitorPubkeys = parsePubkeys(
-            process.env.NIP66_MONITOR_PUBKEYS,
-            {
-              field: "NIP66_MONITOR_PUBKEYS",
-              maximum: 100,
-              minimum: 2,
-            },
-          );
-
           await runNip66Source(
             pool,
             boss,
             createNostrQueryClient(),
-            { monitorPubkeys, sourceRelays },
+            await loadNip66SourceConfig(),
           );
         });
       }

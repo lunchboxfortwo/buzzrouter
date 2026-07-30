@@ -1,6 +1,7 @@
 import { resolvePublicAddresses } from "../discovery/network-policy";
 import { normalizeRelayUrl } from "../discovery/normalize";
 import { SourceAdapterError } from "./errors";
+import type { Nip66SourceConfig } from "./nip66";
 
 const HEX_PUBKEY = /^[a-f0-9]{64}$/;
 
@@ -65,6 +66,33 @@ export function parsePubkeys(
   }
 
   return pubkeys;
+}
+
+export async function loadNip66SourceConfig(
+  environment: Readonly<Record<string, string | undefined>> =
+    process.env,
+  relayValidator: (
+    relayInputs: string[],
+  ) => Promise<string[]> = validateSourceRelays,
+): Promise<Nip66SourceConfig> {
+  const sourceRelays = parseCsv(environment.NIP66_SOURCE_RELAYS, {
+    field: "NIP66_SOURCE_RELAYS",
+    maximum: 10,
+    minimum: 1,
+  });
+  const monitorPubkeys = parsePubkeys(
+    environment.NIP66_MONITOR_PUBKEYS,
+    {
+      field: "NIP66_MONITOR_PUBKEYS",
+      maximum: 100,
+      minimum: 2,
+    },
+  );
+
+  return {
+    monitorPubkeys,
+    sourceRelays: await relayValidator(sourceRelays),
+  };
 }
 
 export async function validateSourceRelays(

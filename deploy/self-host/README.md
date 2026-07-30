@@ -23,6 +23,27 @@ container access to the GitHub API without exposing the underlying read-only
 GitHub credential. Candidate URLs remain private until the normal strict Buzz
 relay probe succeeds.
 
+`buzzrouter-nip66-discovery.timer` runs hourly in a disposable one-shot
+container. It remains fail-closed until `NIP66_SOURCE_RELAYS` contains 1-10
+operator-reviewed public WSS relays and `NIP66_MONITOR_PUBKEYS` contains 2-100
+distinct, independently operated 64-character hex monitor pubkeys. Keep
+`DISCOVERY_NIP66_ENABLED=false` in this deployment when the host timer is
+enabled; the advisory lock prevents overlap, but only one scheduler should own
+normal operation.
+
+After adding both allowlists to `/etc/buzzrouter/runtime.env`, install the
+checked-in units and enable the timer:
+
+```bash
+sudo install -m 0644 \
+  deploy/self-host/systemd/buzzrouter-nip66-discovery.service \
+  deploy/self-host/systemd/buzzrouter-nip66-discovery.timer \
+  /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now buzzrouter-nip66-discovery.timer
+sudo systemctl start buzzrouter-nip66-discovery.service
+```
+
 Local dumps protect against application and operator errors, but not loss of
 the host or its two-device linear LVM volume. Configure encrypted off-host
 backup replication before treating this host as the only durable copy of

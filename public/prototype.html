@@ -30,8 +30,7 @@
 
       <nav class="primary-nav" aria-label="Primary navigation">
         <a href="?view=directory" data-nav-view="directory">Discover</a>
-        <a href="?view=method" data-nav-view="method">Method</a>
-        <a href="?view=submit" data-nav-view="submit">Submit</a>
+        <a href="?view=submit" data-nav-view="submit">List a community</a>
       </nav>
 
       <label class="header-search">
@@ -58,14 +57,24 @@
     <div id="view-root"></div>
   </main>
 
-  <div id="compare-tray" class="compare-tray" hidden></div>
-
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p><strong>BuzzRouter</strong> helps people discover and compare communities built on Buzz.</p>
-      <nav aria-label="Footer navigation">
-        <a href="?view=method" data-nav-view="method">Ranking method</a>
-        <a href="?view=submit" data-nav-view="submit">Submit a listing</a>
+      <div class="site-footer__brand">
+        <a class="brand brand--footer" href="?view=directory" data-nav-view="directory" aria-label="BuzzRouter directory">
+          <img class="brand__logo" src="/assets/brand/buzzrouter-logo.png" alt="" width="28" height="28">
+          <span>BuzzRouter</span>
+        </a>
+        <p>Discover and compare communities built on Buzz, then join through each community’s own space.</p>
+      </div>
+      <div class="site-footer__method">
+        <h2>How ranking works</h2>
+        <p>Activity is observed directly at each relay, thin evidence is discounted, and popularity is never a substitute for quality.</p>
+        <a href="?view=method" data-nav-view="method">Read the ranking method</a>
+      </div>
+      <nav class="site-footer__nav" aria-label="Footer navigation">
+        <h2>Directory</h2>
+        <a href="?view=directory" data-nav-view="directory">Discover communities</a>
+        <a href="?view=submit" data-nav-view="submit">List your community</a>
       </nav>
     </div>
   </footer>
@@ -80,11 +89,6 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
         </button>
       </div>
-
-      <label class="field">
-        <span>Category</span>
-        <select id="mobile-category"></select>
-      </label>
 
       <label class="field">
         <span>Focus area</span>
@@ -102,7 +106,6 @@
         <span>Sort by</span>
         <select id="mobile-sort">
           <option value="rank">Example rank</option>
-          <option value="quality">Highest rated</option>
           <option value="activity">Most active</option>
           <option value="new">Newest listing</option>
         </select>
@@ -115,16 +118,6 @@
           <option value="Very active">Very active</option>
           <option value="Active">Active</option>
         </select>
-      </label>
-
-      <label class="field">
-        <span>Technical identity</span>
-        <select id="mobile-verification">
-          <option value="Any">Any status</option>
-          <option value="Verified">Buzz relay verified</option>
-          <option value="Pending">Relay check pending</option>
-        </select>
-        <small>Verification checks relay software identity, not community quality.</small>
       </label>
 
       <div class="dialog-actions">
@@ -144,7 +137,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
         </button>
       </div>
-      <p>Community names, scores, ratings, activity, and relay-link opens are illustrative. BuzzRouter’s relay discovery checks are implemented; public listings and rankings are not connected yet.</p>
+      <p>Community names, scores, ratings, activity, and relay-link opens are illustrative. BuzzRouter contacts relays directly for its checks, but public listings and rankings are not live yet.</p>
       <p>No private messages, member lists, or private activity are read.</p>
       <button class="button button--primary" type="button" data-close-preview>Understood</button>
     </div>
@@ -169,7 +162,7 @@
   <div id="announcer" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <noscript>
-    <div class="noscript">BuzzRouter’s interactive directory requires JavaScript. The public data pipeline is not connected yet.</div>
+    <div class="noscript">BuzzRouter’s interactive directory requires JavaScript. Enable it to browse and compare communities.</div>
   </noscript>
 </body>
 </html>

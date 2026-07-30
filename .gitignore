@@ -9,3 +9,4 @@ node_modules/
 config/reviewed-relays.json
 *.tsbuildinfo
 .DS_Store
+.cgstack/

@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "instrument sans",
+        "createdAt": "2026-07-30T20:26:23.782Z",
+        "reason": "User codified Instrument Sans as the binding typeface in DESIGN.md (One Grotesk Rule)"
+      }
+    ]
+  }
+}

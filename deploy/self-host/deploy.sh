@@ -53,16 +53,31 @@ compose=(
   worker \
   tunnel
 
-health="$(
-  curl --fail --silent --show-error --max-time 15 \
-    "http://127.0.0.1:${BUZZROUTER_PORT:-13100}/api/health"
-)"
+release_ready=false
+for attempt in $(seq 1 30); do
+  if health="$(
+    curl --fail --silent --show-error --max-time 10 \
+      "http://127.0.0.1:${BUZZROUTER_PORT:-13100}/api/health"
+  )" &&
+    node -e '
+      const health = JSON.parse(process.argv[1]);
+      const expectedRelease = process.argv[2];
+      const valid =
+        health.status === "ok" &&
+        health.migration === "0006_community_icons.sql" &&
+        health.release === expectedRelease;
+      process.exit(valid ? 0 : 1);
+    ' "${health}" "${target_revision}"; then
+    release_ready=true
+    break
+  fi
 
-node -e '
-  const health = JSON.parse(process.argv[1]);
-  if (health.status !== "ok" || health.migration !== "0006_community_icons.sql") {
-    process.exit(1);
-  }
-' "${health}"
+  sleep 2
+done
+
+if [[ "${release_ready}" != true ]]; then
+  echo "BuzzRouter did not become healthy at ${target_revision}." >&2
+  exit 1
+fi
 
 printf '%s\n' "${target_revision}" >"${state_dir}/deployed-revision"

@@ -26,9 +26,14 @@ request URLs must match this configured origin exactly, regardless of proxy or
 host headers.
 
 The claim and public listing routes require a Node.js runtime with PostgreSQL.
-Production runs the Next.js web process and the discovery worker as separate
-Fly.io process groups. A release command applies migrations before a rolling
-web deployment.
+Production runs the Next.js web process on Fly.io and scales it to zero during
+idle periods. A release command applies migrations before a rolling web
+deployment.
+
+The continuously running discovery worker is intentionally disabled while all
+automatic discovery sources are disabled. Re-enable the `worker` process group
+before turning on a discovery source or seeding candidates that need recurring
+probes.
 
 ## Claim flow
 
@@ -102,5 +107,5 @@ strict probe becomes stale.
 - No browser console errors on tested pages
 
 The Fly.io release workflow runs the complete verification suite, applies
-migrations, deploys both process groups, and verifies the database-backed
-health endpoint before declaring the release successful.
+migrations, deploys the configured process groups, and verifies the
+database-backed health endpoint before declaring the release successful.

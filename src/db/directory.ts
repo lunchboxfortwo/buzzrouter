@@ -1,10 +1,9 @@
 import type { Pool } from "pg";
 
-export const DIRECTORY_SORTS = ["evidence", "recent", "activity"] as const;
+export const DIRECTORY_SORTS = ["evidence", "recent", "reliable", "new"] as const;
 export type DirectorySort = (typeof DIRECTORY_SORTS)[number];
 
 export interface DirectoryCommunity {
-  activityScore: number;
   adoptionPubkeys: number;
   adoptionRepos: number;
   authRequired: boolean | null;
@@ -12,10 +11,12 @@ export interface DirectoryCommunity {
   canonicalRelayUrl: string;
   categories: string[];
   claimed: boolean;
+  corroborationSources: number;
   description: string | null;
   displayName: string;
   evidenceCount: number;
   evidenceSufficient: boolean;
+  firstSeenAt: string;
   joinMode: string | null;
   joinUrl: string | null;
   lastVerifiedAt: string;
@@ -23,6 +24,7 @@ export interface DirectoryCommunity {
   probesSuccessful: number;
   probesTotal: number;
   relayHost: string;
+  reliabilityScore: number;
   slug: string | null;
   softwareVersion: string | null;
   sourceTypes: string[];
@@ -54,20 +56,23 @@ export async function listDirectoryCommunities(
   let orderBy = "evidence_count DESC, last_verified_at DESC, relay_host";
   if (sort === "recent") {
     orderBy = "last_verified_at DESC, evidence_count DESC, relay_host";
-  } else if (sort === "activity") {
+  } else if (sort === "reliable") {
     orderBy =
-      "evidence_sufficient DESC, activity_score DESC, last_verified_at DESC, relay_host";
+      "evidence_sufficient DESC, reliability_score DESC, last_verified_at DESC, relay_host";
+  } else if (sort === "new") {
+    orderBy = "first_seen_at DESC, relay_host";
   }
 
   const result = await pool.query<{
-    activity_score: string | null;
     adoption_pubkeys: number | null;
     adoption_repos: number | null;
     auth_required: boolean | null;
+    corroboration_sources: number | null;
     evidence_sufficient: boolean | null;
     metadata_changed_at: Date | null;
     probes_successful: number | null;
     probes_total: number | null;
+    reliability_score: string | null;
     candidate_id: string;
     canonical_relay_url: string;
     categories: string[];
@@ -75,6 +80,7 @@ export async function listDirectoryCommunities(
     description: string | null;
     display_name: string;
     evidence_count: string;
+    first_seen_at: Date;
     join_mode: string | null;
     join_url: string | null;
     last_verified_at: Date;
@@ -91,6 +97,7 @@ export async function listDirectoryCommunities(
           candidates.id AS candidate_id,
           candidates.host AS relay_host,
           candidates.canonical_relay_url,
+          candidates.first_seen_at,
           COALESCE(
             CASE
               WHEN communities.visibility = 'public'
@@ -153,9 +160,10 @@ export async function listDirectoryCommunities(
           latest.auth_required,
           COALESCE(evidence.evidence_count, 0)::text AS evidence_count,
           COALESCE(evidence.source_types, '{}'::text[]) AS source_types,
-          COALESCE(metrics.activity_score, 0)::text AS activity_score,
+          COALESCE(metrics.reliability_score, 0)::text AS reliability_score,
           COALESCE(metrics.adoption_pubkeys, 0) AS adoption_pubkeys,
           COALESCE(metrics.adoption_repos, 0) AS adoption_repos,
+          COALESCE(metrics.corroboration_sources, 0) AS corroboration_sources,
           COALESCE(metrics.probes_total, 0) AS probes_total,
           COALESCE(metrics.probes_successful, 0) AS probes_successful,
           metrics.metadata_changed_at,
@@ -189,7 +197,7 @@ export async function listDirectoryCommunities(
           FROM community_sources
           WHERE candidate_id = candidates.id
         ) AS evidence ON true
-        LEFT JOIN community_activity_metrics AS metrics
+        LEFT JOIN community_reliability_metrics AS metrics
           ON metrics.candidate_id = candidates.id
         WHERE candidates.state = 'verified_buzz'
           AND latest.probed_at >= now() - interval '48 hours'
@@ -207,16 +215,18 @@ export async function listDirectoryCommunities(
   );
 
   return result.rows.map((row) => ({
-    activityScore: Number(row.activity_score ?? 0),
     adoptionPubkeys: Number(row.adoption_pubkeys ?? 0),
     adoptionRepos: Number(row.adoption_repos ?? 0),
     authRequired: row.auth_required,
+    corroborationSources: Number(row.corroboration_sources ?? 0),
     evidenceSufficient: row.evidence_sufficient ?? false,
+    firstSeenAt: row.first_seen_at.toISOString(),
     metadataChangedAt: row.metadata_changed_at
       ? row.metadata_changed_at.toISOString()
       : null,
     probesSuccessful: Number(row.probes_successful ?? 0),
     probesTotal: Number(row.probes_total ?? 0),
+    reliabilityScore: Number(row.reliability_score ?? 0),
     candidateId: row.candidate_id,
     canonicalRelayUrl: row.canonical_relay_url,
     categories: row.categories,

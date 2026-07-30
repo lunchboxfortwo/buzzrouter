@@ -1,32 +1,46 @@
-import { ACTIVITY_WINDOW_DAYS } from "./activity";
+import { RELIABILITY_WINDOW_DAYS, ADOPTION_ENABLED } from "./reliability";
 
-export type ActivityLabel =
-  | "Very active"
-  | "Active"
-  | "Quiet"
-  | "Limited evidence";
+export type ReliabilityLabel = "Live" | "Intermittent" | "Stale" | "New";
 
-export interface ActivityFacts {
-  activityScore: number;
+export interface ReliabilityFacts {
   adoptionPubkeys: number;
   adoptionRepos: number;
   evidenceSufficient: boolean;
   lastVerifiedAt: string | null;
   metadataChangedAt: string | null;
+  monitorCount: number;
   probesSuccessful: number;
   probesTotal: number;
+  reliabilityScore: number;
 }
 
+const STALE_AFTER_MS = 48 * 60 * 60 * 1_000;
+
 /**
- * Below the evidence floor we say so, rather than publishing a small number
- * that reads like a measurement. A new listing stays discoverable without
- * being given false confidence.
+ * Below the evidence floor we say so, rather than publishing a label that
+ * reads like a measurement. A new listing stays discoverable without being
+ * given false confidence.
  */
-export function activityLabel(facts: ActivityFacts): ActivityLabel {
-  if (!facts.evidenceSufficient) return "Limited evidence";
-  if (facts.activityScore >= 70) return "Very active";
-  if (facts.activityScore >= 40) return "Active";
-  return "Quiet";
+export function reliabilityLabel(
+  facts: ReliabilityFacts,
+  now: Date = new Date(),
+): ReliabilityLabel {
+  if (!facts.evidenceSufficient) return "New";
+
+  const lastVerified = facts.lastVerifiedAt ? new Date(facts.lastVerifiedAt) : null;
+  if (
+    !lastVerified ||
+    Number.isNaN(lastVerified.getTime()) ||
+    now.getTime() - lastVerified.getTime() > STALE_AFTER_MS
+  ) {
+    return "Stale";
+  }
+
+  const uptime = facts.probesTotal > 0
+    ? facts.probesSuccessful / facts.probesTotal
+    : 0;
+  if (uptime >= 0.9) return "Live";
+  return "Intermittent";
 }
 
 const plural = (count: number, singular: string, pluralForm: string): string =>
@@ -47,19 +61,20 @@ function relativeDays(iso: string | null, now: Date): string | null {
 }
 
 /**
- * The recommendation copy IS the ranking inputs, rendered. Nothing here is
- * authored per community, so the explanation cannot drift from the score.
+ * The explanation IS the ranking inputs, rendered. Nothing here is authored
+ * per community, so the copy cannot drift from the score. Only live signals
+ * render today; the adoption line stays in the code, gated dark, so it lights
+ * up automatically once NIP-65 adoption is enabled.
  */
-export function explainRecommendation(facts: ActivityFacts): string[] {
+export function explainChecks(facts: ReliabilityFacts): string[] {
   const reasons: string[] = [];
 
-  if (facts.adoptionPubkeys > 0) {
+  if (facts.probesTotal > 0) {
+    const uptime = Math.round(
+      (facts.probesSuccessful / facts.probesTotal) * 100,
+    );
     reasons.push(
-      `Named in ${plural(
-        facts.adoptionPubkeys,
-        "person's",
-        "people's",
-      )} public relay list`,
+      `Reachable on ${uptime}% of checks over ${RELIABILITY_WINDOW_DAYS} days`,
     );
   }
 
@@ -73,12 +88,9 @@ export function explainRecommendation(facts: ActivityFacts): string[] {
     );
   }
 
-  if (facts.probesTotal > 0) {
-    const uptime = Math.round(
-      (facts.probesSuccessful / facts.probesTotal) * 100,
-    );
+  if (facts.monitorCount > 0) {
     reasons.push(
-      `Reachable on ${uptime}% of checks over ${ACTIVITY_WINDOW_DAYS} days`,
+      `Seen by ${plural(facts.monitorCount, "independent monitor", "independent monitors")}`,
     );
   }
 
@@ -87,8 +99,18 @@ export function explainRecommendation(facts: ActivityFacts): string[] {
     reasons.push(`Relay details updated ${tended}`);
   }
 
+  if (ADOPTION_ENABLED && facts.adoptionPubkeys > 0) {
+    reasons.push(
+      `Named in ${plural(
+        facts.adoptionPubkeys,
+        "person's",
+        "people's",
+      )} public relay list`,
+    );
+  }
+
   if (reasons.length === 0) {
-    reasons.push("Not enough observations yet to explain a ranking");
+    reasons.push("Not enough checks yet to describe this relay");
   }
 
   return reasons;

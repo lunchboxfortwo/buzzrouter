@@ -4,8 +4,10 @@
   const communities = [
     {
       id: "agent-commons",
-      adoptionPubkeys: 41,
+      adoptionPubkeys: 0,
       adoptionRepos: 3,
+      sourceTypes: ["probe", "github", "nip66"],
+      monitorCount: 3,
       probesTotal: 30,
       probesSuccessful: 30,
       metadataTended: "4 days ago",
@@ -18,8 +20,6 @@
       ratings: 86,
       relayOpens: 312,
       activity: 98,
-      activityLabel: "Very active",
-      activityAsOf: "Example: 2 days ago",
       listedAt: "2026-03-14",
       score: 96,
       quality: 94,
@@ -34,8 +34,10 @@
     },
     {
       id: "prompt-forge",
-      adoptionPubkeys: 27,
+      adoptionPubkeys: 0,
       adoptionRepos: 2,
+      sourceTypes: ["probe", "github", "nip66"],
+      monitorCount: 3,
       probesTotal: 30,
       probesSuccessful: 29,
       metadataTended: "yesterday",
@@ -48,8 +50,6 @@
       ratings: 64,
       relayOpens: 241,
       activity: 91,
-      activityLabel: "Very active",
-      activityAsOf: "Example: 3 days ago",
       listedAt: "2025-12-08",
       score: 90,
       quality: 90,
@@ -64,10 +64,12 @@
     },
     {
       id: "open-research",
-      adoptionPubkeys: 12,
+      adoptionPubkeys: 0,
       adoptionRepos: 1,
+      sourceTypes: ["probe", "github"],
+      monitorCount: 2,
       probesTotal: 30,
-      probesSuccessful: 28,
+      probesSuccessful: 25,
       metadataTended: "2 weeks ago",
       name: "Open Research Guild",
       focusArea: "Research & knowledge",
@@ -78,8 +80,6 @@
       ratings: 38,
       relayOpens: 154,
       activity: 82,
-      activityLabel: "Active",
-      activityAsOf: "Example: 5 days ago",
       listedAt: "2026-04-23",
       score: 84,
       quality: 93,
@@ -94,8 +94,10 @@
     },
     {
       id: "growth-operators",
-      adoptionPubkeys: 18,
+      adoptionPubkeys: 0,
       adoptionRepos: 0,
+      sourceTypes: ["probe", "nip66"],
+      monitorCount: 2,
       probesTotal: 30,
       probesSuccessful: 30,
       metadataTended: "6 days ago",
@@ -108,8 +110,6 @@
       ratings: 51,
       relayOpens: 207,
       activity: 88,
-      activityLabel: "Very active",
-      activityAsOf: "Example: 4 days ago",
       listedAt: "2026-01-16",
       score: 86,
       quality: 84,
@@ -124,8 +124,10 @@
     },
     {
       id: "story-lab",
-      adoptionPubkeys: 9,
+      adoptionPubkeys: 0,
       adoptionRepos: 0,
+      sourceTypes: ["probe"],
+      monitorCount: 1,
       probesTotal: 30,
       probesSuccessful: 27,
       metadataTended: "3 weeks ago",
@@ -138,8 +140,6 @@
       ratings: 29,
       relayOpens: 188,
       activity: 76,
-      activityLabel: "Active",
-      activityAsOf: "Example: 8 days ago",
       listedAt: "2026-05-30",
       score: 80,
       quality: 85,
@@ -147,17 +147,19 @@
       verified: true,
       claimed: true,
       access: "public",
-      probedAgo: "16h ago",
+      probedAgo: "3d ago",
       currentWork: "Producing a community-authored serial with reusable agent characters.",
       whyRanked: "The example shows encouraging activity, with confidence limited by a shorter track record.",
       evidenceLimit: "No private creative work or community conversations were inspected."
     },
     {
       id: "vibe-coders-nyc",
-      adoptionPubkeys: 2,
+      adoptionPubkeys: 0,
       adoptionRepos: 0,
-      probesTotal: 6,
-      probesSuccessful: 5,
+      sourceTypes: ["probe"],
+      monitorCount: 1,
+      probesTotal: 3,
+      probesSuccessful: 3,
       metadataTended: null,
       name: "Vibe Coders NYC",
       focusArea: "Local & regional",
@@ -168,8 +170,6 @@
       ratings: 17,
       relayOpens: 96,
       activity: 71,
-      activityLabel: "Active",
-      activityAsOf: "Example: 12 days ago",
       listedAt: "2026-07-08",
       score: 74,
       quality: 77,
@@ -177,7 +177,7 @@
       verified: false,
       claimed: false,
       access: "public",
-      probedAgo: null,
+      probedAgo: "5h ago",
       currentWork: "Organizing a small-project demo night for New York builders.",
       whyRanked: "Not ranked because the example relay identity check is still pending.",
       evidenceLimit: "Technical identity is pending, so the listing would be excluded from public rankings."
@@ -198,7 +198,7 @@
       .map((community, index) => [community.id, index + 1])
   );
   const allowedViews = new Set(["directory", "community", "method", "submit"]);
-  const allowedSorts = new Set(["activity", "new"]);
+  const allowedSorts = new Set(["reliable", "new"]);
   let searchTimer;
   let shouldFocusHeading = false;
   let lastRenderedView = null;
@@ -224,8 +224,7 @@
       focusArea: FOCUS_AREAS.includes(params.get("focus"))
         ? params.get("focus")
         : "Any",
-      activityFilter: ["Very active", "Active"].includes(params.get("activity")) ? params.get("activity") : "Any",
-      sort: allowedSorts.has(params.get("sort")) ? params.get("sort") : "activity"
+      sort: allowedSorts.has(params.get("sort")) ? params.get("sort") : "reliable"
     };
   };
 
@@ -239,8 +238,7 @@
     if (state.q) params.set("q", state.q);
     if (state.access !== "Any") params.set("access", state.access);
     if (state.focusArea !== "Any") params.set("focus", state.focusArea);
-    if (state.activityFilter !== "Any") params.set("activity", state.activityFilter);
-    if (state.sort !== "activity") params.set("sort", state.sort);
+    if (state.sort !== "reliable") params.set("sort", state.sort);
     const nextUrl = `${window.location.pathname}${params.size ? `?${params}` : ""}`;
     window.history[push ? "pushState" : "replaceState"]({}, "", nextUrl);
   };
@@ -281,58 +279,76 @@
 
   const rankLabel = (community) => community.verified ? `#${String(exampleRanks.get(community.id)).padStart(2, "0")}` : "—";
 
-  // Mirrors src/ranking/activity.ts. Adoption is the popularity proxy: distinct
-  // people naming this relay in their signed public relay list.
+  // Mirrors src/ranking/activity.ts and src/ranking/explain.ts. Adoption is
+  // disabled today (NIP-65 is off and nobody's relay list names a Buzz
+  // relay), so it stays in the weights at zero rather than being deleted.
   const ACTIVITY_WINDOW_DAYS = 30;
-  const ADOPTION_SATURATION = 250;
-  const EVIDENCE_FLOOR = { adoptionPubkeys: 3, probesTotal: 5 };
+  const ADOPTION_ENABLED = false;
+  const RELIABILITY_WEIGHTS = { uptime: 0.55, tending: 0.25, corroboration: 0.2, adoption: 0 };
+  const CORROBORATION_SATURATION = 6;
+  const EVIDENCE_FLOOR = { probesTotal: 5 };
+  const STALE_AFTER_HOURS = 48;
 
-  const activityScore = (community) => {
-    const weighted = community.adoptionPubkeys + community.adoptionRepos * 0.5;
-    const adoption = weighted <= 0
-      ? 0
-      : Math.min(100, (Math.log1p(weighted) / Math.log1p(ADOPTION_SATURATION)) * 100);
-    const liveness = community.probesTotal <= 0
-      ? 0
-      : (community.probesSuccessful / community.probesTotal) * 100;
-    const tending = community.metadataTended ? 60 : 0;
-    return Math.round(adoption * 0.5 + liveness * 0.3 + tending * 0.2);
+  const uptimePercent = (community) =>
+    community.probesTotal <= 0 ? 0 : (community.probesSuccessful / community.probesTotal) * 100;
+
+  const tendingScore = (community) => (community.metadataTended ? 60 : 0);
+
+  const corroborationScore = (community) => {
+    const sources = community.sourceTypes.length;
+    if (sources <= 0) return 0;
+    return Math.min(100, (Math.log1p(sources) / Math.log1p(CORROBORATION_SATURATION)) * 100);
   };
 
-  const hasEnoughEvidence = (community) =>
-    community.adoptionPubkeys >= EVIDENCE_FLOOR.adoptionPubkeys &&
-    community.probesTotal >= EVIDENCE_FLOOR.probesTotal;
+  const reliabilityScore = (community) => Math.round(
+    uptimePercent(community) * RELIABILITY_WEIGHTS.uptime +
+    tendingScore(community) * RELIABILITY_WEIGHTS.tending +
+    corroborationScore(community) * RELIABILITY_WEIGHTS.corroboration
+  );
 
-  const activityLabel = (community) => {
-    if (!hasEnoughEvidence(community)) return "Limited evidence";
-    const score = activityScore(community);
-    if (score >= 70) return "Very active";
-    if (score >= 40) return "Active";
-    return "Quiet";
+  const hasEnoughEvidence = (community) => community.probesTotal >= EVIDENCE_FLOOR.probesTotal;
+
+  // "Xh ago" is the only shape the illustrative fixtures use; anything else
+  // (including no probe yet) reads as older than the staleness window.
+  const probeAgeHours = (community) => {
+    const match = /^(\d+)([hd]) ago$/.exec(community.probedAgo || "");
+    if (!match) return Infinity;
+    return Number(match[1]) * (match[2] === "d" ? 24 : 1);
+  };
+
+  const reliabilityLabel = (community) => {
+    if (!hasEnoughEvidence(community)) return "New";
+    if (probeAgeHours(community) > STALE_AFTER_HOURS) return "Stale";
+    return uptimePercent(community) / 100 >= 0.9 ? "Live" : "Intermittent";
   };
 
   const plural = (count, singular, pluralForm) =>
     `${count} ${count === 1 ? singular : pluralForm}`;
 
-  // The recommendation copy is the ranking inputs rendered, so it cannot drift
-  // from the score it explains.
-  const recommendationReasons = (community) => {
+  // The check list is the ranking inputs rendered, so it cannot drift from
+  // the score it explains. Only live signals render; the adoption line stays
+  // in the code, gated dark, so it lights up automatically once NIP-65
+  // adoption is enabled.
+  const explainChecks = (community) => {
     const reasons = [];
-    if (community.adoptionPubkeys > 0) {
-      reasons.push(`Named in ${plural(community.adoptionPubkeys, "person's", "people's")} public relay list`);
+    if (community.probesTotal > 0) {
+      const uptime = Math.round(uptimePercent(community));
+      reasons.push(`Reachable on ${uptime}% of checks over ${ACTIVITY_WINDOW_DAYS} days`);
     }
     if (community.adoptionRepos > 0) {
       reasons.push(`Referenced in ${plural(community.adoptionRepos, "public code file", "public code files")}`);
     }
-    if (community.probesTotal > 0) {
-      const uptime = Math.round((community.probesSuccessful / community.probesTotal) * 100);
-      reasons.push(`Reachable on ${uptime}% of checks over ${ACTIVITY_WINDOW_DAYS} days`);
+    if (community.monitorCount > 0) {
+      reasons.push(`Seen by ${plural(community.monitorCount, "independent monitor", "independent monitors")}`);
     }
     if (community.metadataTended) {
       reasons.push(`Relay details updated ${community.metadataTended}`);
     }
+    if (ADOPTION_ENABLED && community.adoptionPubkeys > 0) {
+      reasons.push(`Named in ${plural(community.adoptionPubkeys, "person's", "people's")} public relay list`);
+    }
     if (!reasons.length) {
-      reasons.push("Not enough observations yet to explain a ranking");
+      reasons.push("Not enough checks yet to describe this relay");
     }
     return reasons;
   };
@@ -342,9 +358,8 @@
       ? `Buzz relay verified · probed ${community.probedAgo} (example)`
       : "Relay check pending";
 
-  const accessFlag = (community) => `
-    <span class="access-flag${community.access === "invite" ? " is-invite" : ""}">${community.access === "invite" ? "Private" : "Public"}</span>
-  `;
+  const accessFlag = (community) =>
+    community.access === "invite" ? `<span class="access-flag is-invite">Invite-only</span>` : "";
 
   const identityMarkup = (community) => `
     <div class="identity-line${community.verified ? "" : " pending"}">
@@ -356,14 +371,12 @@
     </div>
   `;
 
-  const freshnessLabel = (community) =>
-    community.activityAsOf
-      .replace("Example: ", "")
-      .replace(" days ago", "d ago")
-      .replace(" day ago", "d ago");
+  const freshnessLabel = (community) => community.probedAgo || "not yet checked";
 
   const communityIndexRow = (community, selectedId, index) => {
     const selected = community.id === selectedId;
+    const label = reliabilityLabel(community);
+    const unproven = label === "New" || label === "Stale";
     return `
       <li style="--stagger-i: ${Math.min(index, 8)}">
         <button
@@ -383,9 +396,9 @@
             </span>
           </span>
           <span class="index-focus-cell">${escapeHtml(community.focusArea)}</span>
-          <span class="index-activity-cell${activityLabel(community) === "Very active" ? " is-very-active" : ""}${hasEnoughEvidence(community) ? "" : " is-unproven"}">
+          <span class="index-activity-cell${label === "Live" ? " is-very-active" : ""}${unproven ? " is-unproven" : ""}">
             <span class="activity-dot" aria-hidden="true"></span>
-            ${escapeHtml(activityLabel(community))}
+            ${escapeHtml(label)}
           </span>
           <span class="index-freshness-cell">${escapeHtml(freshnessLabel(community))}</span>
           <svg class="index-row-arrow" viewBox="0 0 24 24" aria-hidden="true">
@@ -405,9 +418,9 @@
             <h2 id="inspector-title" tabindex="-1">${escapeHtml(community.name)}</h2>
             <p>${escapeHtml(community.summary)}</p>
             <div class="inspector-status">
-              <span class="activity-label${activityLabel(community) === "Very active" ? " is-very-active" : ""}${hasEnoughEvidence(community) ? "" : " is-unproven"}">
+              <span class="activity-label${reliabilityLabel(community) === "Live" ? " is-very-active" : ""}${["New", "Stale"].includes(reliabilityLabel(community)) ? " is-unproven" : ""}">
                 <span class="activity-dot" aria-hidden="true"></span>
-                ${escapeHtml(activityLabel(community))}
+                ${escapeHtml(reliabilityLabel(community))}
               </span>
               <span>Updated ${escapeHtml(freshnessLabel(community))}</span>
               ${accessFlag(community)}
@@ -416,19 +429,19 @@
           </div>
         </div>
         <button class="button button--primary inspector-join" type="button" data-open-join="${community.id}">
-          Join community
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+          Copy relay URL
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="4" width="8" height="4" rx="1"></rect><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"></path></svg>
         </button>
       </header>
 
       <dl class="inspector-metrics">
         <div>
-          <dt>Activity · 30d</dt>
-          <dd>${hasEnoughEvidence(community) ? activityScore(community) : "—"}<small>${hasEnoughEvidence(community) ? "Illustrative score" : "Not enough evidence yet"}</small></dd>
+          <dt>Uptime · 30d</dt>
+          <dd>${hasEnoughEvidence(community) ? `${Math.round(uptimePercent(community))}%` : "—"}<small>${hasEnoughEvidence(community) ? "Illustrative uptime" : "Not enough evidence yet"}</small></dd>
         </div>
         <div>
-          <dt>Freshness</dt>
-          <dd>${escapeHtml(freshnessLabel(community))}<small>Last illustrative update</small></dd>
+          <dt>Last checked</dt>
+          <dd>${escapeHtml(freshnessLabel(community))}<small>Illustrative probe time</small></dd>
         </div>
       </dl>
 
@@ -445,9 +458,9 @@
           <small>Shared by the community’s operator.</small>
         </section>` : ""}
         <section>
-          <h3>Why it’s recommended</h3>
+          <h3>What we checked</h3>
           <ul class="reason-list">
-            ${recommendationReasons(community).map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
+            ${explainChecks(community).map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
           </ul>
           <small>These are the ranking inputs, not a written summary.</small>
         </section>
@@ -473,14 +486,13 @@
         .includes(query);
       const matchesAccess = state.access === "Any" || community.access === state.access;
       const matchesFocus = state.focusArea === "Any" || community.focusArea === state.focusArea;
-      const matchesActivity = state.activityFilter === "Any" || activityLabel(community) === state.activityFilter;
-      return matchesQuery && matchesAccess && matchesFocus && matchesActivity;
+      return matchesQuery && matchesAccess && matchesFocus;
     });
     return result.sort((a, b) => {
       if (state.sort === "new") return new Date(b.listedAt) - new Date(a.listedAt);
       const evidenceGap = Number(hasEnoughEvidence(b)) - Number(hasEnoughEvidence(a));
       if (evidenceGap !== 0) return evidenceGap;
-      return activityScore(b) - activityScore(a);
+      return reliabilityScore(b) - reliabilityScore(a);
     });
   };
 
@@ -491,7 +503,6 @@
     const filters = [];
     if (state.q) filters.push(`Search: “${escapeHtml(state.q)}”`);
     if (state.focusArea !== "Any") filters.push(escapeHtml(state.focusArea));
-    if (state.activityFilter !== "Any") filters.push(`${escapeHtml(state.activityFilter)} · 30d`);
     if (!filters.length) return "";
     return `
       <div class="active-filters" aria-label="Active filters">
@@ -545,14 +556,10 @@
             <span>Focus</span>
             <select id="focus-filter">${optionMarkup(["Any", ...FOCUS_AREAS], state.focusArea)}</select>
           </label>
-          <label class="command-filter activity-command-filter">
-            <span>Activity</span>
-            <select id="activity-filter">${optionMarkup(["Any", "Very active", "Active"], state.activityFilter)}</select>
-          </label>
           <label class="command-filter sort-command-filter">
             <span>Sort</span>
             <select id="sort-control">
-              <option value="activity"${state.sort === "activity" ? " selected" : ""}>Most active</option>
+              <option value="reliable"${state.sort === "reliable" ? " selected" : ""}>Most reliable</option>
               <option value="new"${state.sort === "new" ? " selected" : ""}>Newest listing</option>
             </select>
           </label>
@@ -561,7 +568,7 @@
         </section>
 
         <div class="category-rail" role="group" aria-label="Filter by access">
-          ${[["Any", "All"], ["public", "Public"], ["invite", "Private"]].map(([value, label]) => `
+          ${[["Any", "All"], ["invite", "Invite-only"]].map(([value, label]) => `
             <button class="category-chip" type="button" data-access-chip="${value}" aria-pressed="${state.access === value}">${label}</button>
           `).join("")}
         </div>
@@ -573,7 +580,7 @@
             <div class="community-index-header" aria-hidden="true">
               <span>Community</span>
               <span>Focus</span>
-              <span>Activity</span>
+              <span>Status</span>
               <span>Freshness</span>
               <span></span>
             </div>
@@ -648,11 +655,14 @@
             <div class="profile-meta">
               <span class="status-label${community.verified ? "" : " pending"}">${probeReceipt(community)}</span>
               <span class="status-label${community.claimed ? "" : " pending"}">${community.claimed ? "Operator claimed" : "Unclaimed preview"}</span>
-              <span class="status-label neutral">${community.access === "invite" ? "Private" : "Public"}</span>
+              ${community.access === "invite" ? '<span class="status-label neutral">Invite-only</span>' : ""}
             </div>
           </div>
           <div class="profile-actions">
-            <button class="button button--primary" type="button" data-open-join="${community.id}">Join ${escapeHtml(community.name)}</button>
+            <button class="button button--primary" type="button" data-open-join="${community.id}">
+              Copy relay URL
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="4" width="8" height="4" rx="1"></rect><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"></path></svg>
+            </button>
           </div>
         </header>
         <div class="content-page__body">
@@ -678,7 +688,7 @@
             <p>Signals are separated so popularity cannot stand in for quality.</p>
             <div class="evidence-grid">
               <div class="evidence-item"><strong>Technical identity</strong><p>${probeReceipt(community)}. This is a software identity check, not a quality endorsement.</p></div>
-              <div class="evidence-item"><strong>Activity</strong><p>${escapeHtml(activityLabel(community))} · from ${community.adoptionPubkeys} public relay lists and ${community.probesSuccessful}/${community.probesTotal} successful checks.</p></div>
+              <div class="evidence-item"><strong>Reliability</strong><p>${escapeHtml(reliabilityLabel(community))} · from ${plural(community.monitorCount, "independent monitor", "independent monitors")} and ${community.probesSuccessful}/${community.probesTotal} successful checks in 30 days.</p></div>
               <div class="evidence-item"><strong>Join intent</strong><p>${community.relayOpens} illustrative relay-link opens in 30 days. Opens do not confirm membership.</p></div>
               <div class="evidence-item"><strong>Listing basis</strong><p>${community.claimed ? "Illustrative operator claim" : "Unclaimed example listing"} · profile details are example data.</p></div>
               <div class="evidence-item"><strong>Privacy boundary</strong><p>BuzzRouter does not read messages, channels, members, or private activity.</p></div>
@@ -775,10 +785,8 @@
 
   const syncFilterDialog = () => {
     const focus = document.querySelector("#mobile-focus");
-    const activity = document.querySelector("#mobile-activity");
     const sort = document.querySelector("#mobile-sort");
     if (focus) focus.value = state.focusArea;
-    if (activity) activity.value = state.activityFilter;
     if (sort) sort.value = state.sort;
   };
 
@@ -798,10 +806,9 @@
     }
   };
 
-  const updateFilters = ({ access, focusArea, activityFilter, sort, q } = {}) => {
+  const updateFilters = ({ access, focusArea, sort, q } = {}) => {
     if (access !== undefined) state.access = access;
     if (focusArea !== undefined) state.focusArea = focusArea;
-    if (activityFilter !== undefined) state.activityFilter = activityFilter;
     if (sort !== undefined) state.sort = sort;
     if (q !== undefined) state.q = q;
     state.directoryStatus = "ready";
@@ -846,7 +853,7 @@
       return;
     }
     if (event.target.closest("[data-clear-filters]")) {
-      updateFilters({ access: "Any", focusArea: "Any", activityFilter: "Any", sort: "activity", q: "" });
+      updateFilters({ access: "Any", focusArea: "Any", sort: "reliable", q: "" });
       if (filterDialog.open) filterDialog.close();
       announce("All directory filters cleared.");
       return;
@@ -874,6 +881,16 @@
     const joinTrigger = event.target.closest("[data-open-join]");
     if (joinTrigger) {
       const community = communities.find((item) => item.id === joinTrigger.dataset.openJoin);
+      if (community && community.verified) {
+        const relayUrl = `wss://${community.id}.buzz.example`;
+        const copyPromise = navigator.clipboard && navigator.clipboard.writeText
+          ? navigator.clipboard.writeText(relayUrl)
+          : Promise.reject(new Error("Clipboard unavailable"));
+        copyPromise
+          .then(() => announce(`Copied ${community.name}’s relay URL.`))
+          .catch(() => announce(`${community.name}’s relay URL is ${relayUrl}.`));
+        return;
+      }
       const copy = document.querySelector("#join-community-copy");
       if (copy && community) {
         copy.textContent = `${community.name} is an illustrative listing without a public relay URL. No external site will be opened.`;
@@ -895,7 +912,6 @@
 
   document.addEventListener("change", (event) => {
     if (event.target.id === "focus-filter") updateFilters({ focusArea: event.target.value });
-    if (event.target.id === "activity-filter") updateFilters({ activityFilter: event.target.value });
     if (event.target.id === "sort-control") updateFilters({ sort: event.target.value });
   });
 
@@ -924,7 +940,6 @@
     if (filterDialog.returnValue === "apply") {
       updateFilters({
         focusArea: document.querySelector("#mobile-focus").value,
-        activityFilter: document.querySelector("#mobile-activity").value,
         sort: document.querySelector("#mobile-sort").value
       });
     }

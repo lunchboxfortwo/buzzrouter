@@ -18,7 +18,7 @@ describe("assertDiscoveryDatabaseReady", () => {
             claim_challenges: "claim_challenges",
             community_claims: "community_claims",
             nostr_auth_events: "nostr_auth_events",
-            community_activity_metrics: "community_activity_metrics",
+            community_reliability_metrics: "community_reliability_metrics",
             migrations: "buzzrouter_schema_migrations",
           },
         ],
@@ -39,7 +39,7 @@ describe("assertDiscoveryDatabaseReady", () => {
         "claim_challenges",
         "community_claims",
         "nostr_auth_events",
-        "community_activity_metrics",
+        "community_reliability_metrics",
       ],
     });
   });
@@ -57,6 +57,7 @@ describe("assertDiscoveryDatabaseReady", () => {
             claim_challenges: null,
             community_claims: null,
             nostr_auth_events: null,
+            community_reliability_metrics: null,
             migrations: null,
           },
         ],

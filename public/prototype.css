@@ -440,7 +440,7 @@ p {
 .command-bar {
   display: grid;
   min-height: 58px;
-  grid-template-columns: repeat(3, minmax(150px, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(150px, 1fr)) auto;
   align-items: center;
   gap: var(--space-3);
   padding: 6px 12px;
@@ -1648,10 +1648,6 @@ dialog[open]::backdrop {
 
   .command-bar {
     grid-template-columns: repeat(2, minmax(140px, 1fr)) auto;
-  }
-
-  .activity-command-filter {
-    display: none;
   }
 
   .inspector-header {

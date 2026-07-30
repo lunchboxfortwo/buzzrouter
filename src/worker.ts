@@ -5,9 +5,9 @@ import {
   getDatabasePool,
 } from "./db/pool";
 import { assertDiscoveryDatabaseReady } from "./db/readiness";
-import { registerActivityRollupWorker } from "./jobs/activity-rollup";
 import { registerProbeCandidateWorker } from "./jobs/probe-candidate";
 import { configureQueues } from "./jobs/queues";
+import { registerReliabilityRollupWorker } from "./jobs/reliability-rollup";
 import { registerDueProbeScheduler } from "./jobs/schedule-due-probes";
 import { registerSourceWorkers } from "./jobs/source-workers";
 
@@ -29,7 +29,7 @@ try {
   await registerProbeCandidateWorker(boss, pool);
   await registerDueProbeScheduler(boss, pool);
   await registerSourceWorkers(boss, pool);
-  await registerActivityRollupWorker(boss, pool);
+  await registerReliabilityRollupWorker(boss, pool);
 } catch (error) {
   if (bossStarted) {
     await boss.stop();

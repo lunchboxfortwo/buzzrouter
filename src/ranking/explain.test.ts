@@ -2,69 +2,109 @@ import { describe, expect, it } from "vitest";
 
 import {
   aboutText,
-  activityLabel,
   currentWork,
-  explainRecommendation,
-  type ActivityFacts,
+  explainChecks,
+  reliabilityLabel,
+  type ReliabilityFacts,
 } from "./explain";
 
-const facts = (overrides: Partial<ActivityFacts> = {}): ActivityFacts => ({
-  activityScore: 80,
-  adoptionPubkeys: 41,
+const facts = (overrides: Partial<ReliabilityFacts> = {}): ReliabilityFacts => ({
+  adoptionPubkeys: 0,
   adoptionRepos: 2,
   evidenceSufficient: true,
   lastVerifiedAt: "2026-07-30T00:00:00Z",
   metadataChangedAt: null,
+  monitorCount: 3,
   probesSuccessful: 30,
   probesTotal: 30,
+  reliabilityScore: 80,
   ...overrides,
 });
 
-describe("activityLabel", () => {
-  it("says limited evidence below the floor, whatever the score", () => {
+describe("reliabilityLabel", () => {
+  const now = new Date("2026-07-30T00:00:00Z");
+
+  it("says New below the evidence floor, whatever else is true", () => {
     expect(
-      activityLabel(facts({ activityScore: 95, evidenceSufficient: false })),
-    ).toBe("Limited evidence");
+      reliabilityLabel(
+        facts({ evidenceSufficient: false, probesSuccessful: 30, probesTotal: 30 }),
+        now,
+      ),
+    ).toBe("New");
   });
 
-  it("maps scores to plain-language bands", () => {
-    expect(activityLabel(facts({ activityScore: 80 }))).toBe("Very active");
-    expect(activityLabel(facts({ activityScore: 55 }))).toBe("Active");
-    expect(activityLabel(facts({ activityScore: 12 }))).toBe("Quiet");
+  it("says Stale once the last successful probe is older than 48 hours", () => {
+    expect(
+      reliabilityLabel(facts({ lastVerifiedAt: "2026-07-27T00:00:00Z" }), now),
+    ).toBe("Stale");
+  });
+
+  it("says Live within 48 hours of the last successful probe", () => {
+    expect(
+      reliabilityLabel(facts({ lastVerifiedAt: "2026-07-29T12:00:00Z" }), now),
+    ).toBe("Live");
+  });
+
+  it("says Stale when there is no last-verified timestamp at all", () => {
+    expect(reliabilityLabel(facts({ lastVerifiedAt: null }), now)).toBe("Stale");
+  });
+
+  it("says Live at or above 90% uptime within the freshness window", () => {
+    expect(
+      reliabilityLabel(facts({ probesSuccessful: 30, probesTotal: 30 }), now),
+    ).toBe("Live");
+    expect(
+      reliabilityLabel(facts({ probesSuccessful: 27, probesTotal: 30 }), now),
+    ).toBe("Live");
+  });
+
+  it("says Intermittent below 90% uptime within the freshness window", () => {
+    expect(
+      reliabilityLabel(facts({ probesSuccessful: 20, probesTotal: 30 }), now),
+    ).toBe("Intermittent");
   });
 });
 
-describe("explainRecommendation", () => {
+describe("explainChecks", () => {
   it("renders the ranking inputs rather than authored copy", () => {
-    const reasons = explainRecommendation(facts());
+    const reasons = explainChecks(facts());
 
-    expect(reasons[0]).toBe("Named in 41 people's public relay list");
+    expect(reasons[0]).toBe("Reachable on 100% of checks over 30 days");
     expect(reasons).toContain("Referenced in 2 public code files");
-    expect(reasons).toContain("Reachable on 100% of checks over 30 days");
+    expect(reasons).toContain("Seen by 3 independent monitors");
   });
 
   it("uses singular wording for a single observation", () => {
-    const reasons = explainRecommendation(
-      facts({ adoptionPubkeys: 1, adoptionRepos: 1 }),
+    const reasons = explainChecks(
+      facts({ adoptionRepos: 1, monitorCount: 1 }),
     );
 
-    expect(reasons[0]).toBe("Named in 1 person's public relay list");
     expect(reasons).toContain("Referenced in 1 public code file");
+    expect(reasons).toContain("Seen by 1 independent monitor");
   });
 
-  it("admits when there is nothing to explain", () => {
-    const reasons = explainRecommendation(
-      facts({
-        adoptionPubkeys: 0,
-        adoptionRepos: 0,
-        probesSuccessful: 0,
-        probesTotal: 0,
-      }),
+  it("omits any line whose count is zero", () => {
+    const reasons = explainChecks(
+      facts({ adoptionRepos: 0, monitorCount: 0, probesTotal: 0, probesSuccessful: 0 }),
     );
 
-    expect(reasons).toEqual([
-      "Not enough observations yet to explain a ranking",
-    ]);
+    expect(reasons).toEqual(["Not enough checks yet to describe this relay"]);
+  });
+
+  it("includes the metadata-tended line only when metadata has changed", () => {
+    const withChange = explainChecks(
+      facts({ metadataChangedAt: new Date().toISOString() }),
+    );
+    const withoutChange = explainChecks(facts({ metadataChangedAt: null }));
+
+    expect(withChange.some((reason) => reason.startsWith("Relay details updated"))).toBe(true);
+    expect(withoutChange.some((reason) => reason.startsWith("Relay details updated"))).toBe(false);
+  });
+
+  it("keeps the adoption line dark even with adoption pubkeys, because ADOPTION_ENABLED is false", () => {
+    const reasons = explainChecks(facts({ adoptionPubkeys: 41 }));
+
+    expect(reasons.some((reason) => reason.includes("public relay list"))).toBe(false);
   });
 });
 

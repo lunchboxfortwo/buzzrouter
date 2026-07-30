@@ -158,9 +158,13 @@ export async function runGitHubSource(
   }
 }
 
-export function createGitHubSearchClient(token: string): GitHubCodeSearchClient {
+export function createGitHubSearchClient(
+  token: string,
+  baseUrl = "https://api.github.com",
+): GitHubCodeSearchClient {
   const octokit = new Octokit({
     auth: token,
+    baseUrl,
     userAgent: "BuzzRouter-Discovery/0.2",
   });
 

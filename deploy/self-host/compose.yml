@@ -88,6 +88,19 @@ services:
       seed:
         condition: service_completed_successfully
 
+  github-discovery:
+    image: buzzrouter-self-hosted:latest
+    profiles: ["discovery"]
+    restart: "no"
+    environment:
+      <<: *app-environment
+      GITHUB_API_BASE_URL: ${GITHUB_API_BASE_URL:-https://api.github.com}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    command: ["npm", "run", "discovery:github"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   tunnel:
     image: cloudflare/cloudflared:2026.5.0
     restart: unless-stopped

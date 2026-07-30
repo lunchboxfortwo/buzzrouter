@@ -8,8 +8,6 @@ Wants=network-online.target
 Type=oneshot
 User=lunchbox
 Group=lunchbox
-Environment=HOME=/home/lunchbox
-Environment=GH_CONFIG_DIR=/home/lunchbox/.config/gh
 Environment=BUZZROUTER_SOURCE_DIR=/opt/buzzrouter/source
 Environment=BUZZROUTER_ENV_FILE=/etc/buzzrouter/runtime.env
 ExecStart=/opt/buzzrouter/source/deploy/self-host/discover-github.sh
@@ -20,7 +18,7 @@ PrivateDevices=yes
 PrivateTmp=yes
 ProtectClock=yes
 ProtectControlGroups=yes
-ProtectHome=read-only
+ProtectHome=yes
 ProtectHostname=yes
 ProtectKernelLogs=yes
 ProtectKernelModules=yes

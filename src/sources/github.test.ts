@@ -2,10 +2,22 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeRelayUrl } from "../discovery/normalize";
 import {
+  createGitHubSearchClient,
   extractRelayUrls,
   hasReachedGitHubQueryEnd,
   sanitizeGitHubCursor,
 } from "./github";
+
+describe("createGitHubSearchClient", () => {
+  it("accepts a credential proxy base URL", () => {
+    expect(() =>
+      createGitHubSearchClient(
+        "proxy-token",
+        "https://credential-proxy.example/v1/egress/grant",
+      ),
+    ).not.toThrow();
+  });
+});
 
 describe("extractRelayUrls", () => {
   it("extracts a complete URL before ingestion redacts the invite path", () => {

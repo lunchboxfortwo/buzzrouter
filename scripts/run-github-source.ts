@@ -15,6 +15,8 @@ const token = process.env.GITHUB_TOKEN;
 if (!token) {
   throw new Error("GITHUB_TOKEN is required for GitHub discovery.");
 }
+const baseUrl =
+  process.env.GITHUB_API_BASE_URL ?? "https://api.github.com";
 
 const pool = createDatabasePool();
 const boss = new PgBoss(
@@ -31,7 +33,7 @@ try {
   const result = await runGitHubSource(
     pool,
     boss,
-    createGitHubSearchClient(token),
+    createGitHubSearchClient(token, baseUrl),
   );
   console.log(JSON.stringify(result));
 } finally {

@@ -36,7 +36,15 @@ compose=(
 )
 
 "${compose[@]}" build --pull web migrate
-"${compose[@]}" up --detach --remove-orphans --wait --wait-timeout 180
+"${compose[@]}" up \
+  --detach \
+  --remove-orphans \
+  --wait \
+  --wait-timeout 180 \
+  postgres \
+  web \
+  worker \
+  tunnel
 
 health="$(
   curl --fail --silent --show-error --max-time 15 \

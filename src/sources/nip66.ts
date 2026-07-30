@@ -18,7 +18,10 @@ import type { NostrQueryClient } from "./nostr-client";
 const SOURCE_KEY = "nip66";
 const NIP66_KIND = 30_166;
 const INITIAL_LOOKBACK_SECONDS = 7 * 24 * 60 * 60;
-const MAX_EVENTS_PER_RUN = 1_000;
+const QUERY_PAGE_SIZE = 500;
+const MAX_EVENTS_PER_RUN = 10_000;
+const MAX_PAGES_PER_RELAY = 20;
+const MAX_QUERY_ATTEMPTS = 3;
 const MAX_EVENT_TAGS = 100;
 const MAX_NIP11_CONTENT_BYTES = 128 * 1_024;
 
@@ -67,18 +70,12 @@ export async function runNip66Source(
   };
 
   try {
-    const events = await client.query(config.sourceRelays, {
-      authors: config.monitorPubkeys,
-      kinds: [NIP66_KIND],
-      limit: MAX_EVENTS_PER_RUN,
-      since: cursor.since,
-    });
-    if (events.length >= MAX_EVENTS_PER_RUN) {
-      throw new SourceAdapterError(
-        "incomplete_results",
-        "NIP-66 reached its event limit without a complete batch.",
-      );
-    }
+    const events = await queryNip66Events(
+      client,
+      config,
+      cursor.since,
+      nowSeconds,
+    );
     result.eventsRead = events.length;
     let latestTimestamp: number | null = null;
 
@@ -143,6 +140,120 @@ export async function runNip66Source(
       "NIP-66 source reconciliation failed.",
       { cause: error instanceof Error ? error : undefined },
     );
+  }
+}
+
+async function queryNip66Events(
+  client: NostrQueryClient,
+  config: Nip66SourceConfig,
+  since: number,
+  until: number,
+): Promise<Event[]> {
+  const events = new Map<string, Event>();
+
+  for (const sourceRelay of config.sourceRelays) {
+    for (const monitorPubkey of config.monitorPubkeys) {
+      let pageUntil = until;
+      let completed = false;
+
+      for (
+        let page = 0;
+        page < MAX_PAGES_PER_RELAY;
+        page += 1
+      ) {
+        const batch = await queryNip66Page(
+          client,
+          sourceRelay,
+          monitorPubkey,
+          since,
+          pageUntil,
+        );
+        addBoundedEvents(events, batch);
+
+        if (batch.length < QUERY_PAGE_SIZE) {
+          completed = true;
+          break;
+        }
+
+        const oldestTimestamp = Math.min(
+          ...batch.map((event) => event.created_at),
+        );
+        const boundary = await queryNip66Page(
+          client,
+          sourceRelay,
+          monitorPubkey,
+          oldestTimestamp,
+          oldestTimestamp,
+        );
+        if (boundary.length >= QUERY_PAGE_SIZE) {
+          throw new SourceAdapterError(
+            "incomplete_results",
+            "NIP-66 has too many events at one timestamp to paginate safely.",
+          );
+        }
+        addBoundedEvents(events, boundary);
+
+        pageUntil = oldestTimestamp - 1;
+        if (pageUntil < since) {
+          completed = true;
+          break;
+        }
+      }
+
+      if (!completed) {
+        throw new SourceAdapterError(
+          "incomplete_results",
+          "NIP-66 exceeded its bounded pagination window.",
+        );
+      }
+    }
+  }
+
+  return [...events.values()];
+}
+
+async function queryNip66Page(
+  client: NostrQueryClient,
+  sourceRelay: string,
+  monitorPubkey: string,
+  since: number,
+  until: number,
+): Promise<Event[]> {
+  let lastError: unknown;
+
+  for (
+    let attempt = 1;
+    attempt <= MAX_QUERY_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      return await client.query([sourceRelay], {
+        authors: [monitorPubkey],
+        kinds: [NIP66_KIND],
+        limit: QUERY_PAGE_SIZE,
+        since,
+        until,
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("NIP-66 query failed.");
+}
+
+function addBoundedEvents(
+  target: Map<string, Event>,
+  events: Event[],
+): void {
+  for (const event of events) {
+    target.set(event.id, event);
+    if (target.size > MAX_EVENTS_PER_RUN) {
+      throw new SourceAdapterError(
+        "incomplete_results",
+        "NIP-66 exceeded its aggregate event limit.",
+      );
+    }
   }
 }
 

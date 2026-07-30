@@ -1,0 +1,3 @@
+Cmnd_Alias BUZZROUTER_DEPLOY = /usr/bin/systemctl start buzzrouter-deploy.service
+
+buzzrouter-runner ALL=(root) NOPASSWD: BUZZROUTER_DEPLOY

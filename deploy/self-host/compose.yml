@@ -1,0 +1,132 @@
+name: buzzrouter
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: buzzrouter
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_USER: buzzrouter
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buzzrouter -d buzzrouter"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - ${BUZZROUTER_DATA_DIR:-/var/lib/buzzrouter}/postgres:/var/lib/postgresql/data
+    networks:
+      default:
+        aliases:
+          - buzzrouter-db
+
+  migrate:
+    image: buzzrouter-self-hosted:latest
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: "no"
+    environment: &app-environment
+      APP_RELEASE_SHA: ${BUZZROUTER_RELEASE_SHA:-unknown}
+      DATABASE_SSL: "false"
+      DATABASE_URL: postgresql://buzzrouter:${POSTGRES_PASSWORD}@buzzrouter-db:5432/buzzrouter
+      DISCOVERY_GITHUB_ENABLED: "false"
+      DISCOVERY_NIP65_ENABLED: "false"
+      DISCOVERY_NIP66_ENABLED: "false"
+      INTERNAL_REVIEW_PASSWORD: ${INTERNAL_REVIEW_PASSWORD:?INTERNAL_REVIEW_PASSWORD is required}
+      NEXT_TELEMETRY_DISABLED: "1"
+      NODE_ENV: production
+      PUBLIC_APP_ORIGIN: https://buzzrouter.com
+    command: ["npm", "run", "db:migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  seed:
+    image: buzzrouter-self-hosted:latest
+    restart: "no"
+    environment:
+      <<: *app-environment
+      DISCOVERY_SEED_FILE: config/bootstrap-relays.json
+    command: ["npm", "run", "discovery:seed"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    image: buzzrouter-self-hosted:latest
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment: *app-environment
+    command: ["npm", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    ports:
+      - "127.0.0.1:${BUZZROUTER_PORT:-13100}:3000"
+
+  worker:
+    image: buzzrouter-self-hosted:latest
+    restart: unless-stopped
+    environment: *app-environment
+    command: ["npm", "run", "worker"]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  github-discovery:
+    image: buzzrouter-self-hosted:latest
+    profiles: ["discovery"]
+    restart: "no"
+    environment:
+      <<: *app-environment
+      GITHUB_API_BASE_URL: ${GITHUB_API_BASE_URL:-https://api.github.com}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    command: ["npm", "run", "discovery:github"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nip66-discovery:
+    image: buzzrouter-self-hosted:latest
+    profiles: ["discovery"]
+    restart: "no"
+    environment:
+      <<: *app-environment
+      NIP66_MONITOR_PUBKEYS: ${NIP66_MONITOR_PUBKEYS:-}
+      NIP66_SOURCE_RELAYS: ${NIP66_SOURCE_RELAYS:-}
+    command: ["npm", "run", "discovery:nip66"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.5.0
+    restart: unless-stopped
+    command:
+      [
+        "tunnel",
+        "--no-autoupdate",
+        "run",
+        "--token-file",
+        "/run/secrets/cloudflared.token",
+      ]
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - ${BUZZROUTER_CONFIG_DIR:-/etc/buzzrouter}/cloudflared.token:/run/secrets/cloudflared.token:ro

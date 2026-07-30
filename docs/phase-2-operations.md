@@ -67,6 +67,21 @@ npm run discovery:reconcile
 
 The command only enqueues jobs. A worker must be running to process them.
 
+Self-hosted production can instead run NIP-66 as a disposable one-shot
+container:
+
+```bash
+npm run discovery:nip66
+deploy/self-host/discover-nip66.sh
+```
+
+Install and enable
+`deploy/self-host/systemd/buzzrouter-nip66-discovery.{service,timer}` for the
+hourly host schedule. In that topology, leave `DISCOVERY_NIP66_ENABLED=false`
+so the persistent worker does not also schedule the source. Both paths use the
+same validated environment loader and PostgreSQL advisory lock. A concurrent
+one-shot exits successfully with a `source_locked` result.
+
 ## Evidence handling
 
 - GitHub stores a public repository file locator and one current evidence row

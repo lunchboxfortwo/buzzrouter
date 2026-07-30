@@ -4,6 +4,7 @@ import type { Pool } from "pg";
 import {
   claimDueCandidateIds,
   createEvidenceHash,
+  normalizePublicRelayText,
 } from "./candidates";
 
 describe("claimDueCandidateIds", () => {
@@ -76,5 +77,18 @@ describe("createEvidenceHash", () => {
         evidenceId: "2".repeat(64),
       }),
     );
+  });
+});
+
+describe("normalizePublicRelayText", () => {
+  it("collapses whitespace and enforces the public metadata bound", () => {
+    expect(normalizePublicRelayText("  A\n useful   relay  ", 10)).toBe(
+      "A useful r",
+    );
+  });
+
+  it("returns null for missing public metadata", () => {
+    expect(normalizePublicRelayText(" \n ", 20)).toBeNull();
+    expect(normalizePublicRelayText(undefined, 20)).toBeNull();
   });
 });

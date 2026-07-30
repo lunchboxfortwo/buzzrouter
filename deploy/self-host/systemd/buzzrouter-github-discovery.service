@@ -1,0 +1,35 @@
+[Unit]
+Description=Discover public Buzz communities from GitHub
+After=buzzrouter-deploy.service docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=lunchbox
+Group=lunchbox
+Environment=BUZZROUTER_SOURCE_DIR=/opt/buzzrouter/source
+Environment=BUZZROUTER_ENV_FILE=/etc/buzzrouter/runtime.env
+Environment=DOCKER_CONFIG=/tmp/buzzrouter-docker
+ExecStart=/opt/buzzrouter/source/deploy/self-host/discover-github.sh
+UMask=0077
+
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadOnlyPaths=/etc/buzzrouter
+ReadWritePaths=/var/lib/buzzrouter
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,122 @@
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATABASE_SSL: "false"
+  DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/buzzrouter_ci
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  verify:
+    name: Verify release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: buzzrouter_ci
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d buzzrouter_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Apply database migrations
+        run: npm run db:migrate
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    name: Deploy to production
+    needs: verify
+    runs-on: buzzrouter-production
+    timeout-minutes: 12
+    permissions: {}
+    environment:
+      name: production
+      url: https://buzzrouter.com
+
+    steps:
+      - name: Start production deployment
+        run: sudo --non-interactive /usr/bin/systemctl start buzzrouter-deploy.service
+
+      - name: Verify deployed revision
+        shell: bash
+        env:
+          EXPECTED_RELEASE: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 30); do
+            if health="$(
+              curl \
+                --fail \
+                --silent \
+                --show-error \
+                --max-time 10 \
+                https://buzzrouter.com/api/health
+            )" &&
+              python3 -c '
+          import json
+          import sys
+
+          health = json.loads(sys.argv[1])
+          expected = sys.argv[2]
+          valid = (
+              health.get("status") == "ok"
+              and health.get("migration") == "0004_public_directory.sql"
+              and health.get("release") == expected
+          )
+          raise SystemExit(0 if valid else 1)
+          ' "${health}" "${EXPECTED_RELEASE}"; then
+              echo "Production is serving ${EXPECTED_RELEASE}."
+              exit 0
+            fi
+
+            echo "Attempt ${attempt}/30: production has not reached ${EXPECTED_RELEASE}."
+            sleep 10
+          done
+
+          echo "Production did not deploy ${EXPECTED_RELEASE} within 5 minutes."
+          exit 1

@@ -1,0 +1,12 @@
+[Unit]
+Description=Check for BuzzRouter releases
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=2min
+RandomizedDelaySec=15s
+Persistent=true
+Unit=buzzrouter-deploy.service
+
+[Install]
+WantedBy=timers.target

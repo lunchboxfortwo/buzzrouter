@@ -145,6 +145,11 @@ export default async function DiscoveryReviewPage() {
                     <details>
                       <summary>Inspect</summary>
                       <div className={styles.details}>
+                        <p>
+                          <a href={`/claim/${candidate.id}`}>
+                            Open claim workspace
+                          </a>
+                        </p>
                         <DetailSources sources={candidate.sources} />
                         <DetailProbes probes={candidate.recentProbes} />
                       </div>

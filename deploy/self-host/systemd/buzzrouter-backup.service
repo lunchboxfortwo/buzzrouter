@@ -1,0 +1,13 @@
+[Unit]
+Description=Back up the BuzzRouter PostgreSQL database
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=lunchbox
+Group=lunchbox
+Environment=BUZZROUTER_BACKUP_DIR=/var/backups/buzzrouter
+Environment=BUZZROUTER_ENV_FILE=/etc/buzzrouter/runtime.env
+Environment=BUZZROUTER_SOURCE_DIR=/opt/buzzrouter/source
+ExecStart=/opt/buzzrouter/bin/backup

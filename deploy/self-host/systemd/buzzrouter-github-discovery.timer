@@ -1,0 +1,11 @@
+[Unit]
+Description=Run BuzzRouter GitHub discovery every six hours
+
+[Timer]
+OnCalendar=*-*-* 00/6:17:00
+Persistent=true
+RandomizedDelaySec=15m
+Unit=buzzrouter-github-discovery.service
+
+[Install]
+WantedBy=timers.target

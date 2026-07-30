@@ -1,0 +1,11 @@
+[Unit]
+Description=Run BuzzRouter NIP-66 discovery hourly
+
+[Timer]
+OnCalendar=*-*-* *:37:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=buzzrouter-nip66-discovery.service
+
+[Install]
+WantedBy=timers.target

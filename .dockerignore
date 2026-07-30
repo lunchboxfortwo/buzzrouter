@@ -1,0 +1,17 @@
+.git
+.github
+.next
+.npm-cache
+.openai
+.lavish
+.tools
+.env*
+.*
+node_modules
+config/*
+!config/bootstrap-relays.json
+docs
+src/**/*.test.ts
+*.md
+*.log
+fly.toml

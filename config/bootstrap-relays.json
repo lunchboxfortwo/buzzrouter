@@ -1,0 +1,40 @@
+{
+  "relays": [
+    {
+      "url": "wss://ai-integ.communities.buzz.xyz",
+      "sourceLocator": "https://github.com/RajAbey68/buzz-factory/blob/50de30f7b7a8d88ac3e62144a72195d6c82c0a82/scripts/obsidian_sync.py"
+    },
+    {
+      "url": "wss://amethyst.communities.buzz.xyz",
+      "sourceLocator": "https://github.com/vitorpamplona/amethyst/blob/7cece7eafbec691d7478179e104b733b8711421d/quartz/src/commonTest/kotlin/com/vitorpamplona/quartz/buzz/invite/BuzzInviteLinkTest.kt"
+    },
+    {
+      "url": "wss://creatormagic.communities.buzz.xyz",
+      "sourceLocator": "https://github.com/pavlenex/buzz-directory/blob/561fba2afbb1ef5fbc03988b9b7f9eda20ead030/app/communities.ts"
+    },
+    {
+      "url": "wss://flint.communities.buzz.xyz",
+      "sourceLocator": "https://github.com/matbalez/buzz-inside/blob/7c37526ea0121b8c8543add83bb16d3a54551269/README.md"
+    },
+    {
+      "url": "wss://gtmelite.communities.buzz.xyz",
+      "sourceLocator": "https://github.com/pavlenex/buzz-directory/blob/561fba2afbb1ef5fbc03988b9b7f9eda20ead030/app/communities.ts"
+    },
+    {
+      "url": "wss://millers.communities.buzz.xyz",
+      "sourceLocator": "https://github.com/edmundmiller/dotfiles/blob/80abf546b5aeaeff84dc666fb61b1c7898941967/docs/runbooks/deploy-nuc.md"
+    },
+    {
+      "url": "wss://vcmc.communities.buzz.xyz",
+      "sourceLocator": "https://github.com/schappim/wsscope/blob/ce6812cf1d048f744c2b086a6f8184c37575288a/README.md"
+    },
+    {
+      "url": "wss://vim-jp.communities.buzz.xyz",
+      "sourceLocator": "https://github.com/mattn/algia/blob/74609da5bcf4454615bd7db2b8ae79b7cdf1fe9b/README.md"
+    },
+    {
+      "url": "wss://yc2897.communities.buzz.xyz",
+      "sourceLocator": "https://github.com/yc2897/buzz-ai/blob/fcffb9f47e2d267b1450b79df5d24fa809d9475d/README.md"
+    }
+  ]
+}

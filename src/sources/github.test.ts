@@ -2,10 +2,42 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeRelayUrl } from "../discovery/normalize";
 import {
+  createGitHubSearchClient,
   extractRelayUrls,
   hasReachedGitHubQueryEnd,
+  isIgnoredGitHubHost,
+  parseGitHubCodeSearchResponse,
   sanitizeGitHubCursor,
 } from "./github";
+
+describe("createGitHubSearchClient", () => {
+  it("accepts a credential proxy base URL", () => {
+    expect(() =>
+      createGitHubSearchClient(
+        "proxy-token",
+        "https://credential-proxy.example/v1/egress/grant",
+      ),
+    ).not.toThrow();
+  });
+});
+
+describe("parseGitHubCodeSearchResponse", () => {
+  it("parses JSON text returned by a credential proxy", () => {
+    expect(
+      parseGitHubCodeSearchResponse(
+        JSON.stringify({
+          incomplete_results: false,
+          items: [],
+          total_count: 0,
+        }),
+      ),
+    ).toEqual({
+      incomplete_results: false,
+      items: [],
+      total_count: 0,
+    });
+  });
+});
 
 describe("extractRelayUrls", () => {
   it("extracts a complete URL before ingestion redacts the invite path", () => {
@@ -25,17 +57,39 @@ describe("extractRelayUrls", () => {
   it("accepts WebSocket relay configuration and ignores code hosts", () => {
     expect(
       extractRelayUrls(
-        "BUZZ_RELAY_URL=wss://relay.example.net docs=https://github.com/block/buzz",
+        "BUZZ_RELAY_URL=wss://relay.service.net docs=https://github.com/block/buzz",
       ),
-    ).toEqual(["wss://relay.example.net"]);
+    ).toEqual(["wss://relay.service.net"]);
   });
 
   it("trims punctuation around source-language literals", () => {
     expect(
       extractRelayUrls(
-        "const relay = new URL('wss://relay.example.net/path');",
+        "const relay = new URL('wss://relay.service.net/path');",
       ),
-    ).toEqual(["wss://relay.example.net/path"]);
+    ).toEqual(["wss://relay.service.net/path"]);
+  });
+
+  it("rejects documentation placeholders before ingestion", () => {
+    expect(
+      extractRelayUrls(
+        [
+          "https://mycommunity.communities.buzz.xyz",
+          "https://beta.communities.buzz.xyz",
+          "https://north-star.communities.buzz.xyz",
+          "wss://buzz.example.com",
+          "wss://real-team.communities.buzz.xyz",
+        ].join(" "),
+      ),
+    ).toEqual(["wss://real-team.communities.buzz.xyz"]);
+  });
+});
+
+describe("isIgnoredGitHubHost", () => {
+  it("does not reject a specific Buzz tenant", () => {
+    expect(
+      isIgnoredGitHubHost("builders.communities.buzz.xyz"),
+    ).toBe(false);
   });
 });
 

@@ -39,6 +39,8 @@ Create local environment and reviewed-relay files, then:
 cp .env.example .env.local
 cp config/reviewed-relays.example.json config/reviewed-relays.json
 npm run db:migrate
+npm run discovery:doctor
+npm run discovery:add
 npm run discovery:seed
 npm run worker
 ```
@@ -47,17 +49,24 @@ Only canonical relay origins should be added to
 `config/reviewed-relays.json`. That file is intentionally ignored by Git.
 Candidate jobs contain database IDs rather than arbitrary URLs.
 
+`npm run discovery:add` accepts relay or invite URLs interactively and rewrites
+them to canonical origins before the ignored file is saved. Once the worker is
+running, `npm run discovery:status` prints aggregate candidate and probe health
+without exposing relay URLs.
+
 ## Phase 1 scope
 
 Implemented:
 
 - Candidate, provenance, and probe snapshot schema
 - PostgreSQL migration runner and `pg-boss` queue
+- UTC due-candidate scheduler with bounded database leases
 - Origin-only URL normalization
 - DNS and SSRF policy with connection pinning
 - Bounded NIP-11 fetch and no-auth WebSocket handshake
 - Strict verified/probable/rejected Buzz classifier
-- Reviewed seed workflow and adversarial unit tests
+- Interactive reviewed intake, database doctor, aggregate status, and seed tools
+- Adversarial unit and PostgreSQL integration verification
 
 Not yet implemented:
 

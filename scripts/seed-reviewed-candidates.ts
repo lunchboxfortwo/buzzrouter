@@ -8,25 +8,25 @@ import {
   createDatabasePool,
   getDatabaseConnectionOptions,
 } from "../src/db/pool";
+import { assertDiscoveryDatabaseReady } from "../src/db/readiness";
 import { normalizeRelayUrl } from "../src/discovery/normalize";
+import { parseReviewedRelaySeed } from "../src/discovery/reviewed-seed";
 import { configureQueues, enqueueCandidateProbe } from "../src/jobs/queues";
-
-interface SeedEntry {
-  url: string;
-  sourceLocator?: string;
-}
 
 const seedFile = path.resolve(
   process.env.DISCOVERY_SEED_FILE ?? "config/reviewed-relays.json",
 );
-const seed = parseSeedFile(await readFile(seedFile, "utf8"));
+const seed = parseReviewedRelaySeed(await readFile(seedFile, "utf8")).relays;
 const pool = createDatabasePool();
 const boss = new PgBoss(
   getDatabaseConnectionOptions("buzzrouter-seed"),
 );
+let bossStarted = false;
 
 try {
+  await assertDiscoveryDatabaseReady(pool);
   await boss.start();
+  bossStarted = true;
   await configureQueues(boss);
 
   for (const entry of seed) {
@@ -40,38 +40,8 @@ try {
 
   console.log(`Queued ${seed.length} reviewed relay candidate(s).`);
 } finally {
-  await boss.stop();
-  await pool.end();
-}
-
-function parseSeedFile(contents: string): SeedEntry[] {
-  const parsed: unknown = JSON.parse(contents);
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    !("relays" in parsed) ||
-    !Array.isArray(parsed.relays)
-  ) {
-    throw new Error("Seed file must contain a relays array.");
+  if (bossStarted) {
+    await boss.stop();
   }
-
-  return parsed.relays.map((entry) => {
-    if (
-      typeof entry !== "object" ||
-      entry === null ||
-      !("url" in entry) ||
-      typeof entry.url !== "string" ||
-      ("sourceLocator" in entry &&
-        entry.sourceLocator !== undefined &&
-        typeof entry.sourceLocator !== "string")
-    ) {
-      throw new Error("Seed entries must contain URL strings.");
-    }
-
-    return {
-      url: entry.url,
-      sourceLocator:
-        "sourceLocator" in entry ? entry.sourceLocator : undefined,
-    };
-  });
+  await pool.end();
 }

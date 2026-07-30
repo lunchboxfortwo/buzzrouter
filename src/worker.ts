@@ -4,6 +4,7 @@ import {
   getDatabaseConnectionOptions,
   getDatabasePool,
 } from "./db/pool";
+import { assertDiscoveryDatabaseReady } from "./db/readiness";
 import { registerProbeCandidateWorker } from "./jobs/probe-candidate";
 import { configureQueues } from "./jobs/queues";
 import { registerDueProbeScheduler } from "./jobs/schedule-due-probes";
@@ -17,10 +18,21 @@ boss.on("error", (error) => {
   console.error("pg-boss error", error);
 });
 
-await boss.start();
-await configureQueues(boss);
-await registerProbeCandidateWorker(boss, pool);
-await registerDueProbeScheduler(boss, pool);
+let bossStarted = false;
+try {
+  await assertDiscoveryDatabaseReady(pool);
+  await boss.start();
+  bossStarted = true;
+  await configureQueues(boss);
+  await registerProbeCandidateWorker(boss, pool);
+  await registerDueProbeScheduler(boss, pool);
+} catch (error) {
+  if (bossStarted) {
+    await boss.stop();
+  }
+  await pool.end();
+  throw error;
+}
 
 async function shutdown(): Promise<void> {
   await boss.stop({ graceful: true, timeout: 30_000 });

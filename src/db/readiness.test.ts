@@ -1,0 +1,53 @@
+import type { Pool } from "pg";
+import { describe, expect, it, vi } from "vitest";
+
+import { assertDiscoveryDatabaseReady } from "./readiness";
+
+describe("assertDiscoveryDatabaseReady", () => {
+  it("returns the current migration when required tables exist", async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            community_candidates: "community_candidates",
+            community_sources: "community_sources",
+            probe_snapshots: "probe_snapshots",
+            migrations: "buzzrouter_schema_migrations",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ name: "0001_discovery.sql" }],
+      });
+    const pool = { query } as unknown as Pool;
+
+    await expect(assertDiscoveryDatabaseReady(pool)).resolves.toEqual({
+      migration: "0001_discovery.sql",
+      tables: [
+        "community_candidates",
+        "community_sources",
+        "probe_snapshots",
+      ],
+    });
+  });
+
+  it("fails before the worker starts against an empty database", async () => {
+    const pool = {
+      query: vi.fn().mockResolvedValue({
+        rows: [
+          {
+            community_candidates: null,
+            community_sources: null,
+            probe_snapshots: null,
+            migrations: null,
+          },
+        ],
+      }),
+    } as unknown as Pool;
+
+    await expect(assertDiscoveryDatabaseReady(pool)).rejects.toThrow(
+      "npm run db:migrate",
+    );
+  });
+});

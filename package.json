@@ -9,9 +9,12 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:migrate": "tsx scripts/migrate.ts",
-    "discovery:seed": "tsx scripts/seed-reviewed-candidates.ts",
-    "worker": "tsx src/worker.ts"
+    "db:migrate": "node --import tsx scripts/migrate.ts",
+    "discovery:add": "node --import tsx scripts/add-reviewed-candidate.ts",
+    "discovery:doctor": "node --import tsx scripts/discovery-doctor.ts",
+    "discovery:seed": "node --import tsx scripts/seed-reviewed-candidates.ts",
+    "discovery:status": "node --import tsx scripts/discovery-status.ts",
+    "worker": "node --import tsx src/worker.ts"
   },
   "dependencies": {
     "ipaddr.js": "^2.2.0",

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   configureQueues,
+  enqueueCandidateProbe,
   PROBE_CANDIDATE_QUEUE,
   SCHEDULE_DUE_PROBES_QUEUE,
 } from "./queues";
@@ -30,6 +31,23 @@ describe("configureQueues", () => {
       {
         key: "phase1-due-probes",
         tz: "UTC",
+      },
+    );
+  });
+
+  it("deduplicates candidate jobs within the scheduler lease window", async () => {
+    const send = vi.fn().mockResolvedValue("job-id");
+    const boss = { send } as unknown as PgBoss;
+
+    await expect(
+      enqueueCandidateProbe(boss, "candidate-id"),
+    ).resolves.toBe("job-id");
+    expect(send).toHaveBeenCalledWith(
+      PROBE_CANDIDATE_QUEUE,
+      { candidateId: "candidate-id" },
+      {
+        singletonKey: "candidate-id",
+        singletonSeconds: 60,
       },
     );
   });

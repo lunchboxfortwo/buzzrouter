@@ -1,6 +1,6 @@
 # Phase 1 Discovery Operations
 
-Status: Implemented, pending deployment database
+Status: Implemented and locally integration-verified
 
 Date: 2026-07-29
 
@@ -45,6 +45,7 @@ trusted by the host.
 
    ```bash
    npm run db:migrate
+   npm run discovery:doctor
    ```
 
 3. Create the ignored local seed file:
@@ -53,7 +54,16 @@ trusted by the host.
    cp config/reviewed-relays.example.json config/reviewed-relays.json
    ```
 
-4. Put reviewed canonical origins in `config/reviewed-relays.json`:
+4. Add candidates interactively:
+
+   ```bash
+   npm run discovery:add
+   ```
+
+   The command accepts a relay or invite URL and an optional public source URL.
+   It stores only the canonical relay origin and redacted source locator.
+
+   The resulting `config/reviewed-relays.json` has this shape:
 
    ```json
    {
@@ -80,6 +90,18 @@ trusted by the host.
 
 Run the web process and worker as separate services in production.
 
+## Observe
+
+Run:
+
+```bash
+npm run discovery:status
+```
+
+The command returns candidate counts by state, the number currently due, probe
+and failure counts for the previous 24 hours, and the latest probe timestamp.
+It does not return relay hosts or source locators.
+
 ## Safety invariants
 
 - Candidate URLs with credentials are rejected.
@@ -94,6 +116,8 @@ Run the web process and worker as separate services in production.
 - WebSocket payloads are limited to 1 MB.
 - Probe jobs contain only candidate UUIDs.
 - The reviewed-relay file is ignored by Git.
+- Worker and seed startup fail before queue registration when the application
+  migration is missing.
 - Stored failures are enumerated result codes, not remote error bodies.
 - Icons are stored as hashes, not copied data URLs.
 
@@ -113,9 +137,12 @@ does not erase a prior verified or probable classification.
   NIP-11 parsing, classifier decisions, safe failures, and pinned lookup forms
 - Live probe against a public Buzz relay, including NIP-11, TLS, WebSocket, and
   strict classification
+- PostgreSQL 16 migration, readiness doctor, reviewed seed, and aggregate
+  status commands
+- `pg-boss` initial probe plus a forced due-candidate scheduler cycle and
+  successful recurring probe
 - Dependency audit with zero known vulnerabilities
 
-The current development host has no running PostgreSQL service and cannot
-access its Docker daemon. The migration and queue lifecycle therefore still
-need one integration run against the deployment database before the worker is
-enabled.
+The integration run used an isolated loopback-only PostgreSQL cluster under
+`/tmp`. Production still needs its own managed PostgreSQL connection and
+service-level worker deployment.

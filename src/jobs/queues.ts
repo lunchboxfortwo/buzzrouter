@@ -46,7 +46,7 @@ export async function enqueueCandidateProbe(
     { candidateId } satisfies ProbeCandidateJob,
     {
       singletonKey: candidateId,
-      singletonSeconds: 5 * 60,
+      singletonSeconds: 60,
     },
   );
 }

@@ -4,6 +4,11 @@
   const communities = [
     {
       id: "agent-commons",
+      adoptionPubkeys: 41,
+      adoptionRepos: 3,
+      probesTotal: 30,
+      probesSuccessful: 30,
+      metadataTended: "4 days ago",
       name: "Agent Commons",
       category: "Development",
       focusArea: "Agent tools",
@@ -30,6 +35,11 @@
     },
     {
       id: "prompt-forge",
+      adoptionPubkeys: 27,
+      adoptionRepos: 2,
+      probesTotal: 30,
+      probesSuccessful: 29,
+      metadataTended: "yesterday",
       name: "Prompt Forge",
       category: "Development",
       focusArea: "Agent tools",
@@ -56,6 +66,11 @@
     },
     {
       id: "open-research",
+      adoptionPubkeys: 12,
+      adoptionRepos: 1,
+      probesTotal: 30,
+      probesSuccessful: 28,
+      metadataTended: "2 weeks ago",
       name: "Open Research Guild",
       category: "Research",
       focusArea: "Open knowledge",
@@ -82,6 +97,11 @@
     },
     {
       id: "growth-operators",
+      adoptionPubkeys: 18,
+      adoptionRepos: 0,
+      probesTotal: 30,
+      probesSuccessful: 30,
+      metadataTended: "6 days ago",
       name: "Growth Operators",
       category: "Growth",
       focusArea: "Community growth",
@@ -108,6 +128,11 @@
     },
     {
       id: "story-lab",
+      adoptionPubkeys: 9,
+      adoptionRepos: 0,
+      probesTotal: 30,
+      probesSuccessful: 27,
+      metadataTended: "3 weeks ago",
       name: "Onchain Story Lab",
       category: "Creative",
       focusArea: "Creative production",
@@ -134,6 +159,11 @@
     },
     {
       id: "vibe-coders-nyc",
+      adoptionPubkeys: 2,
+      adoptionRepos: 0,
+      probesTotal: 6,
+      probesSuccessful: 5,
+      metadataTended: null,
       name: "Vibe Coders NYC",
       category: "Local",
       focusArea: "Local building",
@@ -257,6 +287,62 @@
 
   const rankLabel = (community) => community.verified ? `#${String(exampleRanks.get(community.id)).padStart(2, "0")}` : "—";
 
+  // Mirrors src/ranking/activity.ts. Adoption is the popularity proxy: distinct
+  // people naming this relay in their signed public relay list.
+  const ACTIVITY_WINDOW_DAYS = 30;
+  const ADOPTION_SATURATION = 250;
+  const EVIDENCE_FLOOR = { adoptionPubkeys: 3, probesTotal: 5 };
+
+  const activityScore = (community) => {
+    const weighted = community.adoptionPubkeys + community.adoptionRepos * 0.5;
+    const adoption = weighted <= 0
+      ? 0
+      : Math.min(100, (Math.log1p(weighted) / Math.log1p(ADOPTION_SATURATION)) * 100);
+    const liveness = community.probesTotal <= 0
+      ? 0
+      : (community.probesSuccessful / community.probesTotal) * 100;
+    const tending = community.metadataTended ? 60 : 0;
+    return Math.round(adoption * 0.5 + liveness * 0.3 + tending * 0.2);
+  };
+
+  const hasEnoughEvidence = (community) =>
+    community.adoptionPubkeys >= EVIDENCE_FLOOR.adoptionPubkeys &&
+    community.probesTotal >= EVIDENCE_FLOOR.probesTotal;
+
+  const activityLabel = (community) => {
+    if (!hasEnoughEvidence(community)) return "Limited evidence";
+    const score = activityScore(community);
+    if (score >= 70) return "Very active";
+    if (score >= 40) return "Active";
+    return "Quiet";
+  };
+
+  const plural = (count, singular, pluralForm) =>
+    `${count} ${count === 1 ? singular : pluralForm}`;
+
+  // The recommendation copy is the ranking inputs rendered, so it cannot drift
+  // from the score it explains.
+  const recommendationReasons = (community) => {
+    const reasons = [];
+    if (community.adoptionPubkeys > 0) {
+      reasons.push(`Named in ${plural(community.adoptionPubkeys, "person's", "people's")} public relay list`);
+    }
+    if (community.adoptionRepos > 0) {
+      reasons.push(`Referenced in ${plural(community.adoptionRepos, "public code file", "public code files")}`);
+    }
+    if (community.probesTotal > 0) {
+      const uptime = Math.round((community.probesSuccessful / community.probesTotal) * 100);
+      reasons.push(`Reachable on ${uptime}% of checks over ${ACTIVITY_WINDOW_DAYS} days`);
+    }
+    if (community.metadataTended) {
+      reasons.push(`Relay details updated ${community.metadataTended}`);
+    }
+    if (!reasons.length) {
+      reasons.push("Not enough observations yet to explain a ranking");
+    }
+    return reasons;
+  };
+
   const probeReceipt = (community) =>
     community.verified
       ? `Buzz relay verified · probed ${community.probedAgo} (example)`
@@ -303,9 +389,9 @@
             </span>
           </span>
           <span class="index-focus-cell">${escapeHtml(community.focusArea)}</span>
-          <span class="index-activity-cell${community.activityLabel === "Very active" ? " is-very-active" : ""}">
+          <span class="index-activity-cell${activityLabel(community) === "Very active" ? " is-very-active" : ""}${hasEnoughEvidence(community) ? "" : " is-unproven"}">
             <span class="activity-dot" aria-hidden="true"></span>
-            ${escapeHtml(community.activityLabel)}
+            ${escapeHtml(activityLabel(community))}
           </span>
           <span class="index-freshness-cell">${escapeHtml(freshnessLabel(community))}</span>
           <svg class="index-row-arrow" viewBox="0 0 24 24" aria-hidden="true">
@@ -325,9 +411,9 @@
             <h2 id="inspector-title" tabindex="-1">${escapeHtml(community.name)}</h2>
             <p>${escapeHtml(community.summary)}</p>
             <div class="inspector-status">
-              <span class="activity-label${community.activityLabel === "Very active" ? " is-very-active" : ""}">
+              <span class="activity-label${activityLabel(community) === "Very active" ? " is-very-active" : ""}${hasEnoughEvidence(community) ? "" : " is-unproven"}">
                 <span class="activity-dot" aria-hidden="true"></span>
-                ${escapeHtml(community.activityLabel)}
+                ${escapeHtml(activityLabel(community))}
               </span>
               <span>Updated ${escapeHtml(freshnessLabel(community))}</span>
               ${accessFlag(community)}
@@ -344,7 +430,7 @@
       <dl class="inspector-metrics">
         <div>
           <dt>Activity · 30d</dt>
-          <dd>${community.activity}<small>Illustrative score</small></dd>
+          <dd>${hasEnoughEvidence(community) ? activityScore(community) : "—"}<small>${hasEnoughEvidence(community) ? "Illustrative score" : "Not enough evidence yet"}</small></dd>
         </div>
         <div>
           <dt>Freshness</dt>
@@ -358,18 +444,23 @@
       </div>
 
       <div class="inspector-sections">
+        ${community.claimed ? `
         <section>
           <h3>Current work</h3>
           <p>${escapeHtml(community.currentWork)}</p>
-          <small>Illustrative information.</small>
-        </section>
+          <small>Shared by the community’s operator.</small>
+        </section>` : ""}
         <section>
           <h3>Why it’s recommended</h3>
-          <p>${escapeHtml(community.whyRanked)}</p>
+          <ul class="reason-list">
+            ${recommendationReasons(community).map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
+          </ul>
+          <small>These are the ranking inputs, not a written summary.</small>
         </section>
         <section>
           <h3>About</h3>
           <p>${escapeHtml(community.about)}</p>
+          <small>From the relay’s own published details.</small>
         </section>
       </div>
 
@@ -388,7 +479,7 @@
         .includes(query);
       const matchesAccess = state.access === "Any" || community.access === state.access;
       const matchesFocus = state.focusArea === "Any" || community.focusArea === state.focusArea;
-      const matchesActivity = state.activityFilter === "Any" || community.activityLabel === state.activityFilter;
+      const matchesActivity = state.activityFilter === "Any" || activityLabel(community) === state.activityFilter;
       return matchesQuery && matchesAccess && matchesFocus && matchesActivity;
     });
     return result.sort((a, b) => {
@@ -439,7 +530,7 @@
                 </svg>
               </em>
             </h1>
-            <p>Every listing is checked at the relay itself. <a href="${pageHref("method")}" data-nav-view="method">How ranking works</a></p>
+            <p>Every listing is checked at the relay itself.</p>
           </div>
           <svg class="premise-signal" viewBox="0 0 340 140" aria-hidden="true" focusable="false">
             <path class="route-line" d="M60 74 C 130 28, 214 28, 282 64"/>
@@ -532,9 +623,6 @@
 
         <section class="workspace-actions" aria-label="Directory actions">
           <p>BuzzRouter routes you to the community; joining happens in its own Buzz space.</p>
-          <div>
-            <a href="${pageHref("method")}" data-nav-view="method">How recommendations work</a>
-          </div>
         </section>
       </div>
     `;
@@ -596,7 +684,7 @@
             <p>Signals are separated so popularity cannot stand in for quality.</p>
             <div class="evidence-grid">
               <div class="evidence-item"><strong>Technical identity</strong><p>${probeReceipt(community)}. This is a software identity check, not a quality endorsement.</p></div>
-              <div class="evidence-item"><strong>Activity</strong><p>${escapeHtml(community.activityLabel)} · operator reported · ${escapeHtml(community.activityAsOf)}.</p></div>
+              <div class="evidence-item"><strong>Activity</strong><p>${escapeHtml(activityLabel(community))} · from ${community.adoptionPubkeys} public relay lists and ${community.probesSuccessful}/${community.probesTotal} successful checks.</p></div>
               <div class="evidence-item"><strong>Join intent</strong><p>${community.relayOpens} illustrative relay-link opens in 30 days. Opens do not confirm membership.</p></div>
               <div class="evidence-item"><strong>Listing basis</strong><p>${community.claimed ? "Illustrative operator claim" : "Unclaimed example listing"} · profile details are example data.</p></div>
               <div class="evidence-item"><strong>Privacy boundary</strong><p>BuzzRouter does not read messages, channels, members, or private activity.</p></div>

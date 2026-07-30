@@ -2,6 +2,7 @@ import type { PgBoss } from "pg-boss";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  ACTIVITY_ROLLUP_QUEUE,
   configureQueues,
   enqueueCandidateProbe,
   PROBE_CANDIDATE_QUEUE,
@@ -53,6 +54,16 @@ describe("configureQueues", () => {
       "5 */6 * * *",
       null,
       { key: "phase2-github", tz: "UTC" },
+    );
+    expect(createQueue).toHaveBeenCalledWith(
+      ACTIVITY_ROLLUP_QUEUE,
+      expect.objectContaining({ retryLimit: 2 }),
+    );
+    expect(schedule).toHaveBeenCalledWith(
+      ACTIVITY_ROLLUP_QUEUE,
+      "45 * * * *",
+      null,
+      { key: "phase3-activity-rollup", tz: "UTC" },
     );
   });
 

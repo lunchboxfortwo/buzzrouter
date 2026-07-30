@@ -15,6 +15,10 @@ services:
       retries: 12
     volumes:
       - ${BUZZROUTER_DATA_DIR:-/var/lib/buzzrouter}/postgres:/var/lib/postgresql/data
+    networks:
+      default:
+        aliases:
+          - buzzrouter-db
 
   migrate:
     image: buzzrouter-self-hosted:latest
@@ -24,7 +28,7 @@ services:
     restart: "no"
     environment: &app-environment
       DATABASE_SSL: "false"
-      DATABASE_URL: postgresql://buzzrouter:${POSTGRES_PASSWORD}@postgres:5432/buzzrouter
+      DATABASE_URL: postgresql://buzzrouter:${POSTGRES_PASSWORD}@buzzrouter-db:5432/buzzrouter
       DISCOVERY_GITHUB_ENABLED: "false"
       DISCOVERY_NIP65_ENABLED: "false"
       DISCOVERY_NIP66_ENABLED: "false"

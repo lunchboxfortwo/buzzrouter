@@ -1,9 +1,9 @@
 # BuzzRouter
 
 BuzzRouter is a discovery and ranking directory for Buzz communities. The
-current product surface is a high-fidelity MVP prototype; Phases 1 and 2 add
-the safe technical index, automatic discovery sources, and internal review
-workflow behind it.
+current product surface is a high-fidelity MVP prototype; Phases 1 through 3
+add the safe technical index, automatic discovery sources, internal review,
+community ownership claims, and public listing foundations behind it.
 
 - Live prototype: [buzzrouter.com](https://buzzrouter.com)
 - Product definition: [PRODUCT.md](./PRODUCT.md)
@@ -13,6 +13,8 @@ workflow behind it.
   [docs/phase-1-operations.md](./docs/phase-1-operations.md)
 - Phase 2 operations:
   [docs/phase-2-operations.md](./docs/phase-2-operations.md)
+- Phase 3 operations:
+  [docs/phase-3-operations.md](./docs/phase-3-operations.md)
 
 ## Development
 
@@ -28,7 +30,8 @@ npm run typecheck
 npm run build
 ```
 
-The frontend remains static and does not require PostgreSQL:
+The prototype route remains static. Claim, listing, and internal review routes
+require PostgreSQL and the environment described in the operations guides:
 
 ```bash
 npm run dev
@@ -85,10 +88,15 @@ Implemented:
 - Per-source health state, bounded schedules, and manual reconciliation
 - Independent-source listing eligibility evaluation
 - Basic-auth protected candidate review with evidence and probe history
+- NIP-98 request authentication with one-use replay protection
+- DNS TXT, HTTPS file, and hosted-relay icon ownership proofs
+- Conflict-safe ownership state and public listing metadata
+- NIP-07 claim workspace and database-backed community detail pages
 - Adversarial unit and PostgreSQL integration verification
 
 Not yet implemented:
 
-- Public listing persistence or automatic publication
-- Community claims, ratings, or rankings
-- Database-backed product views
+- Directory integration for database-backed listings
+- Community ratings, popularity signals, or rankings
+- Provider-mediated claims and dispute resolution operations
+- A managed runtime for the dynamic application and discovery worker

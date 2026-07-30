@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.npm-cache/
+.lavish-state/
+.tools/
+.lavish/*.png
+.env*
+!.env.example
+.DS_Store

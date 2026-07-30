@@ -12,7 +12,7 @@ Environment=BUZZROUTER_CONFIG_DIR=/etc/buzzrouter
 Environment=BUZZROUTER_DATA_DIR=/var/lib/buzzrouter
 Environment=BUZZROUTER_ENV_FILE=/etc/buzzrouter/runtime.env
 Environment=BUZZROUTER_SOURCE_DIR=/opt/buzzrouter/source
-ExecStart=/opt/buzzrouter/bin/deploy
+ExecStart=/opt/buzzrouter/source/deploy/self-host/deploy.sh
 
 [Install]
 WantedBy=multi-user.target

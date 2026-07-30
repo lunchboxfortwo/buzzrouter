@@ -6,7 +6,7 @@ discovery worker, and a dedicated Cloudflare Tunnel under Docker Compose.
 Host paths:
 
 - `/opt/buzzrouter/source`: clean checkout of `main`
-- `/opt/buzzrouter/bin`: deployment and backup scripts
+- `/opt/buzzrouter/bin`: deployment bootstrap and backup scripts
 - `/etc/buzzrouter`: root-managed runtime secrets and tunnel token
 - `/var/lib/buzzrouter/postgres`: PostgreSQL data
 - `/var/backups/buzzrouter`: local PostgreSQL dumps

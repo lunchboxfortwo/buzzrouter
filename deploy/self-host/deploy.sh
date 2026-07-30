@@ -35,11 +35,20 @@ compose=(
   --file "${source_dir}/deploy/self-host/compose.yml"
 )
 
-"${compose[@]}" build --pull web migrate
+"${compose[@]}" build --pull web
 "${compose[@]}" up \
   --detach \
+  --wait \
+  --wait-timeout 180 \
+  postgres
+"${compose[@]}" run --rm --no-deps migrate
+"${compose[@]}" run --rm --no-deps seed
+"${compose[@]}" up \
+  --detach \
+  --no-deps \
   --remove-orphans \
-  postgres \
+  --wait \
+  --wait-timeout 180 \
   web \
   worker \
   tunnel

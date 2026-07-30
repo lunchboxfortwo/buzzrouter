@@ -57,6 +57,12 @@ export function classifyBuzzRelay(
   return classification("rejected", "insufficient_buzz_evidence");
 }
 
+export function hasCanonicalBuzzSoftware(
+  software: string | undefined,
+): boolean {
+  return normalizeSoftwareUrl(software) === BUZZ_SOFTWARE_URL;
+}
+
 function normalizeSoftwareUrl(software: string | undefined): string | null {
   if (!software) {
     return null;

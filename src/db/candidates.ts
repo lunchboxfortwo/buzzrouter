@@ -21,6 +21,8 @@ export interface CandidateSource {
   type: SourceType;
   locator?: string;
   actorPubkey?: string;
+  evidenceId?: string;
+  observedAt?: Date;
 }
 
 export interface CandidateRecord {
@@ -35,9 +37,11 @@ export async function upsertCandidate(
   source: CandidateSource,
 ): Promise<CandidateRecord> {
   const locator = sanitizeSourceLocator(source.locator);
-  const evidenceHash = createHash("sha256")
-    .update(`${source.type}:${locator ?? relay.canonicalRelayUrl}`)
-    .digest("hex");
+  const evidenceHash = createEvidenceHash(
+    relay.canonicalRelayUrl,
+    source,
+    locator,
+  );
   const client = await pool.connect();
 
   try {
@@ -72,17 +76,23 @@ export async function upsertCandidate(
           source_type,
           source_locator,
           source_actor_pubkey,
+          source_observed_at,
           evidence_hash
         )
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (candidate_id, source_type, evidence_hash) DO UPDATE
-          SET last_seen_at = now()
+          SET last_seen_at = now(),
+              source_observed_at = GREATEST(
+                community_sources.source_observed_at,
+                EXCLUDED.source_observed_at
+              )
       `,
       [
         row.id,
         source.type,
         locator,
         source.actorPubkey ?? null,
+        source.observedAt ?? new Date(),
         evidenceHash,
       ],
     );
@@ -99,6 +109,21 @@ export async function upsertCandidate(
   } finally {
     client.release();
   }
+}
+
+export function createEvidenceHash(
+  canonicalRelayUrl: string,
+  source: CandidateSource,
+  sanitizedLocator = sanitizeSourceLocator(source.locator),
+): string {
+  const evidenceIdentity =
+    source.actorPubkey ??
+    source.evidenceId ??
+    sanitizedLocator ??
+    canonicalRelayUrl;
+  const identity = [source.type, evidenceIdentity].join(":");
+
+  return createHash("sha256").update(identity).digest("hex");
 }
 
 export async function getCandidate(

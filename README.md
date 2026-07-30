@@ -1,8 +1,9 @@
 # BuzzRouter
 
 BuzzRouter is a discovery and ranking directory for Buzz communities. The
-current product surface is a high-fidelity MVP prototype; Phase 1 adds the safe
-technical indexing foundation behind it.
+current product surface is a high-fidelity MVP prototype; Phases 1 and 2 add
+the safe technical index, automatic discovery sources, and internal review
+workflow behind it.
 
 - Live prototype: [buzzrouter.com](https://buzzrouter.com)
 - Product definition: [PRODUCT.md](./PRODUCT.md)
@@ -10,6 +11,8 @@ technical indexing foundation behind it.
   [docs/auto-discovery-design.md](./docs/auto-discovery-design.md)
 - Phase 1 operations:
   [docs/phase-1-operations.md](./docs/phase-1-operations.md)
+- Phase 2 operations:
+  [docs/phase-2-operations.md](./docs/phase-2-operations.md)
 
 ## Development
 
@@ -54,7 +57,18 @@ them to canonical origins before the ignored file is saved. Once the worker is
 running, `npm run discovery:status` prints aggregate candidate and probe health
 without exposing relay URLs.
 
-## Phase 1 scope
+Automatic sources are opt-in. Configure the Phase 2 environment variables,
+start the worker, then enqueue an immediate run with:
+
+```bash
+npm run discovery:reconcile
+```
+
+The worker also schedules GitHub every six hours, NIP-66 hourly, and NIP-65
+daily. The protected review console is available at `/internal/discovery` when
+`INTERNAL_REVIEW_PASSWORD` is set.
+
+## Implemented discovery scope
 
 Implemented:
 
@@ -66,10 +80,15 @@ Implemented:
 - Bounded NIP-11 fetch and no-auth WebSocket handshake
 - Strict verified/probable/rejected Buzz classifier
 - Interactive reviewed intake, database doctor, aggregate status, and seed tools
+- Cursor-backed GitHub code search with immediate invite-path redaction
+- Signed NIP-66 monitor ingestion and signed NIP-65 relay-list hints
+- Per-source health state, bounded schedules, and manual reconciliation
+- Independent-source listing eligibility evaluation
+- Basic-auth protected candidate review with evidence and probe history
 - Adversarial unit and PostgreSQL integration verification
 
 Not yet implemented:
 
-- GitHub, NIP-65, or NIP-66 automatic source adapters
-- Public listing decisions, claims, ratings, or rankings
+- Public listing persistence or automatic publication
+- Community claims, ratings, or rankings
 - Database-backed product views

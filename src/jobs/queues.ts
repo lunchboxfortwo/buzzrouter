@@ -2,6 +2,9 @@ import type { PgBoss } from "pg-boss";
 
 export const PROBE_CANDIDATE_QUEUE = "discovery.probe-candidate";
 export const SCHEDULE_DUE_PROBES_QUEUE = "discovery.schedule-due-probes";
+export const SOURCE_GITHUB_QUEUE = "discovery.source-github";
+export const SOURCE_NIP66_QUEUE = "discovery.source-nip66";
+export const SOURCE_NIP65_QUEUE = "discovery.source-nip65";
 
 export interface ProbeCandidateJob {
   candidateId: string;
@@ -26,6 +29,21 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
     retryBackoff: true,
   });
 
+  for (const sourceQueue of [
+    SOURCE_GITHUB_QUEUE,
+    SOURCE_NIP66_QUEUE,
+    SOURCE_NIP65_QUEUE,
+  ]) {
+    await boss.createQueue(sourceQueue, {
+      deleteAfterSeconds: 7 * 24 * 60 * 60,
+      expireInSeconds: 15 * 60,
+      retryBackoff: true,
+      retryDelay: 5 * 60,
+      retryDelayMax: 60 * 60,
+      retryLimit: 2,
+    });
+  }
+
   await boss.schedule(
     SCHEDULE_DUE_PROBES_QUEUE,
     "*/15 * * * *",
@@ -35,6 +53,19 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
       tz: "UTC",
     },
   );
+
+  await boss.schedule(SOURCE_GITHUB_QUEUE, "5 */6 * * *", null, {
+    key: "phase2-github",
+    tz: "UTC",
+  });
+  await boss.schedule(SOURCE_NIP66_QUEUE, "15 * * * *", null, {
+    key: "phase2-nip66",
+    tz: "UTC",
+  });
+  await boss.schedule(SOURCE_NIP65_QUEUE, "30 2 * * *", null, {
+    key: "phase2-nip65",
+    tz: "UTC",
+  });
 }
 
 export async function enqueueCandidateProbe(
@@ -49,4 +80,19 @@ export async function enqueueCandidateProbe(
       singletonSeconds: 60,
     },
   );
+}
+
+export async function enqueueSourceReconciliation(
+  boss: PgBoss,
+): Promise<void> {
+  for (const queue of [
+    SOURCE_GITHUB_QUEUE,
+    SOURCE_NIP66_QUEUE,
+    SOURCE_NIP65_QUEUE,
+  ]) {
+    await boss.send(queue, null, {
+      singletonKey: "manual-reconciliation",
+      singletonSeconds: 60,
+    });
+  }
 }

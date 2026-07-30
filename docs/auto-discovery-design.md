@@ -1,6 +1,6 @@
 # BuzzRouter Community Auto-Discovery
 
-Status: Proposed
+Status: Phase 1 and Phase 2 implemented; Phase 3 proposed
 
 Date: 2026-07-29
 
@@ -123,6 +123,12 @@ A validated relay may be published automatically when:
 - A trusted hosting provider marks it public/listable; or
 - An administrator claims it and opts into listing.
 
+A source only counts while it is fresh: NIP-66 evidence for 7 days and GitHub
+or provider evidence for 30 days. Automatic eligibility also requires the
+latest direct probe to have completed strict Buzz verification within 48 hours.
+A failed or stale latest probe removes eligibility even when an older
+classification remains in technical history.
+
 A relay found only through generic monitoring stays in the internal candidate
 index. This avoids turning a private relay's existence into a promoted listing
 solely because a monitor observed it.
@@ -171,7 +177,7 @@ retries, leases, deduplication, and observable failure states.
 
 | Source | Role | Trust | MVP behavior |
 | --- | --- | --- | --- |
-| NIP-66 monitor events | Broad relay discovery and health hints | Medium; require multiple monitors or direct probe | Ingest normalized `d` relay origins and source signatures |
+| NIP-66 monitor events | Broad relay discovery and health hints | Medium; require multiple monitors and direct probe | Ingest normalized `d` relay origins and monitor identity |
 | GitHub code/issues | Find publicly referenced Buzz hosts | Medium; public provenance but noisy | Search allowlisted queries, redact paths immediately |
 | NIP-65 relay lists | Find user-endorsed relay origins | Low to medium; signed but not Buzz-specific | Candidate hint only, never sufficient to publish |
 | Hosting-provider feed | Obtain public/listable tenants directly | High when authenticated and contractually scoped | Publish after direct probe |
@@ -273,12 +279,17 @@ auditable.
 - `source_type`
 - `source_locator`
 - `source_actor_pubkey` nullable
+- `source_observed_at` from signed event time or crawler observation time
 - `first_seen_at`
 - `last_seen_at`
 - `evidence_hash`
 
-`source_locator` identifies the public page or signed event. It never stores an
-extracted invite URL.
+`source_locator` identifies the public page. It never stores an extracted
+invite URL. Evidence rows use stable source identity: repository path for
+GitHub and actor pubkey for Nostr, with `last_seen_at` updated on repeat
+observations. Nostr freshness uses the signed event's `created_at` persisted as
+`source_observed_at`, so replaying an old report cannot renew it. This bounds
+evidence growth while retaining freshness.
 
 ### `probe_snapshots`
 
@@ -409,9 +420,19 @@ be measured externally.
 Every job payload should contain canonical IDs, never arbitrary URLs received
 directly from a browser.
 
+Each source reconciliation holds a source-specific PostgreSQL advisory lock.
+Nostr runs succeed and advance their cursor only after every configured source
+relay explicitly completes the query with EOSE; relay failure or timeout fails
+the run without checkpointing partial results. Event counts, message bytes,
+individual event bytes, and aggregate bytes are bounded. A saturated result
+fails closed as incomplete rather than adding a general-purpose relay
+pagination engine to the MVP.
+
 ## Moderation and abuse controls
 
 - Global and per-domain crawl budgets.
+- Cloudflare Access in front of the internal review console, with application
+  Basic authentication retained as defense in depth.
 - Public opt-out page plus authenticated suppression workflow.
 - Immediate suppression for legal, safety, or privacy requests while ownership
   is reviewed.

@@ -6,6 +6,9 @@ import {
   enqueueCandidateProbe,
   PROBE_CANDIDATE_QUEUE,
   SCHEDULE_DUE_PROBES_QUEUE,
+  SOURCE_GITHUB_QUEUE,
+  SOURCE_NIP65_QUEUE,
+  SOURCE_NIP66_QUEUE,
 } from "./queues";
 
 describe("configureQueues", () => {
@@ -32,6 +35,24 @@ describe("configureQueues", () => {
         key: "phase1-due-probes",
         tz: "UTC",
       },
+    );
+    expect(createQueue).toHaveBeenCalledWith(
+      SOURCE_GITHUB_QUEUE,
+      expect.objectContaining({ retryLimit: 2 }),
+    );
+    expect(createQueue).toHaveBeenCalledWith(
+      SOURCE_NIP66_QUEUE,
+      expect.objectContaining({ retryLimit: 2 }),
+    );
+    expect(createQueue).toHaveBeenCalledWith(
+      SOURCE_NIP65_QUEUE,
+      expect.objectContaining({ retryLimit: 2 }),
+    );
+    expect(schedule).toHaveBeenCalledWith(
+      SOURCE_GITHUB_QUEUE,
+      "5 */6 * * *",
+      null,
+      { key: "phase2-github", tz: "UTC" },
     );
   });
 

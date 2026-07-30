@@ -8,6 +8,7 @@ import { assertDiscoveryDatabaseReady } from "./db/readiness";
 import { registerProbeCandidateWorker } from "./jobs/probe-candidate";
 import { configureQueues } from "./jobs/queues";
 import { registerDueProbeScheduler } from "./jobs/schedule-due-probes";
+import { registerSourceWorkers } from "./jobs/source-workers";
 
 const pool = getDatabasePool();
 const boss = new PgBoss(
@@ -26,6 +27,7 @@ try {
   await configureQueues(boss);
   await registerProbeCandidateWorker(boss, pool);
   await registerDueProbeScheduler(boss, pool);
+  await registerSourceWorkers(boss, pool);
 } catch (error) {
   if (bossStarted) {
     await boss.stop();

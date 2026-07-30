@@ -4,6 +4,7 @@ const REQUIRED_TABLES = [
   "community_candidates",
   "community_sources",
   "probe_snapshots",
+  "discovery_source_state",
 ] as const;
 
 export interface DiscoveryDatabaseReadiness {
@@ -18,6 +19,7 @@ export async function assertDiscoveryDatabaseReady(
     community_candidates: string | null;
     community_sources: string | null;
     probe_snapshots: string | null;
+    discovery_source_state: string | null;
     migrations: string | null;
   }>(`
     SELECT
@@ -27,6 +29,8 @@ export async function assertDiscoveryDatabaseReady(
         AS community_sources,
       to_regclass('public.probe_snapshots')::text
         AS probe_snapshots,
+      to_regclass('public.discovery_source_state')::text
+        AS discovery_source_state,
       to_regclass('public.buzzrouter_schema_migrations')::text
         AS migrations
   `);

@@ -13,6 +13,7 @@ describe("assertDiscoveryDatabaseReady", () => {
             community_candidates: "community_candidates",
             community_sources: "community_sources",
             probe_snapshots: "probe_snapshots",
+            discovery_source_state: "discovery_source_state",
             migrations: "buzzrouter_schema_migrations",
           },
         ],
@@ -28,6 +29,7 @@ describe("assertDiscoveryDatabaseReady", () => {
         "community_candidates",
         "community_sources",
         "probe_snapshots",
+        "discovery_source_state",
       ],
     });
   });
@@ -40,6 +42,7 @@ describe("assertDiscoveryDatabaseReady", () => {
             community_candidates: null,
             community_sources: null,
             probe_snapshots: null,
+            discovery_source_state: null,
             migrations: null,
           },
         ],

@@ -66,3 +66,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Package Pages artifact
+        run: bash scripts/package-pages.sh /tmp/buzzrouter-pages

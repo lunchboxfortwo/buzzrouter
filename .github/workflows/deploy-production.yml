@@ -90,9 +90,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -s public/prototype.html
-          install -D -m 0644 public/prototype.html _site/index.html
-          test "$(find _site -type f | wc -l)" -eq 1
+          bash scripts/package-pages.sh _site
           echo "sha256=$(sha256sum _site/index.html | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"
 
       - name: Upload Pages artifact

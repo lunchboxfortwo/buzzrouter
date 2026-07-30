@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BuzzRouter Auto-Discovery Plan</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      securityLevel: "loose",
+      flowchart: { curve: "basis", htmlLabels: true },
+      themeVariables: {
+        background: "#f4f6f8",
+        primaryColor: "#ffffff",
+        primaryTextColor: "#252932",
+        primaryBorderColor: "#cdd3da",
+        lineColor: "#78828e",
+        secondaryColor: "#edf6f0",
+        tertiaryColor: "#f7f1e8",
+        fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Inter, system-ui, sans-serif",
+        fontSize: "14px"
+      }
+    });
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: oklch(0.965 0.006 250);
+      --surface: oklch(0.992 0.004 250);
+      --surface-raised: oklch(0.999 0.002 250);
+      --surface-muted: oklch(0.955 0.008 250);
+      --ink: oklch(0.225 0.014 255);
+      --ink-secondary: oklch(0.465 0.018 255);
+      --ink-tertiary: oklch(0.61 0.016 255);
+      --line: oklch(0.885 0.012 250);
+      --line-strong: oklch(0.79 0.014 250);
+      --accent: oklch(0.54 0.145 151);
+      --accent-soft: oklch(0.95 0.035 151);
+      --link: oklch(0.51 0.14 250);
+      --link-soft: oklch(0.95 0.025 250);
+      --warning: oklch(0.62 0.14 63);
+      --warning-soft: oklch(0.96 0.04 75);
+      --danger: oklch(0.53 0.17 25);
+      --danger-soft: oklch(0.96 0.032 25);
+      --shadow: 0 18px 48px oklch(0.22 0.02 255 / 0.08);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      min-width: 0;
+    }
+
+    html {
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: var(--font);
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+    }
+
+    a {
+      color: var(--link);
+      text-underline-offset: 3px;
+    }
+
+    code {
+      background: var(--surface-muted);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.86em;
+      overflow-wrap: anywhere;
+      padding: 1px 5px;
+    }
+
+    .topbar {
+      align-items: center;
+      background: var(--ink);
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      min-height: 54px;
+      padding: 8px clamp(16px, 4vw, 44px);
+    }
+
+    .brand {
+      align-items: center;
+      display: flex;
+      gap: 10px;
+    }
+
+    .brand-mark {
+      align-items: center;
+      background: white;
+      border-radius: 5px;
+      color: var(--ink);
+      display: flex;
+      font-size: 0.78rem;
+      font-weight: 800;
+      height: 28px;
+      justify-content: center;
+      width: 28px;
+    }
+
+    .brand strong {
+      font-size: 0.87rem;
+      font-weight: 680;
+    }
+
+    .topbar-meta {
+      color: oklch(0.76 0.012 250);
+      font-size: 0.76rem;
+    }
+
+    .page {
+      margin: 0 auto;
+      max-width: 1220px;
+      padding: clamp(28px, 5vw, 64px) clamp(18px, 4vw, 42px) 80px;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.75rem;
+      font-weight: 750;
+      margin: 0 0 12px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 4.1rem);
+      font-weight: 680;
+      letter-spacing: 0;
+      line-height: 0.98;
+      margin: 0;
+      max-width: 15ch;
+    }
+
+    .lede {
+      color: var(--ink-secondary);
+      font-size: clamp(1rem, 1.7vw, 1.25rem);
+      line-height: 1.55;
+      margin: 22px 0 0;
+      max-width: 760px;
+    }
+
+    .recommendation {
+      align-items: start;
+      background: var(--accent-soft);
+      border: 1px solid oklch(0.84 0.06 151);
+      border-radius: 6px;
+      display: grid;
+      gap: 8px;
+      grid-template-columns: auto minmax(0, 1fr);
+      margin-top: 28px;
+      padding: 16px 18px;
+    }
+
+    .recommendation strong {
+      color: oklch(0.39 0.11 151);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+    }
+
+    .recommendation p {
+      font-size: 0.92rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .stats {
+      display: grid;
+      gap: 1px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin: 42px 0 0;
+      overflow: hidden;
+    }
+
+    .stat {
+      background: var(--surface-raised);
+      border: 1px solid var(--line);
+      padding: 20px;
+    }
+
+    .stat:first-child {
+      border-radius: 6px 0 0 6px;
+    }
+
+    .stat:last-child {
+      border-radius: 0 6px 6px 0;
+    }
+
+    .stat-value {
+      display: block;
+      font-size: 1.7rem;
+      font-weight: 720;
+      line-height: 1;
+    }
+
+    .stat-label {
+      color: var(--ink-secondary);
+      display: block;
+      font-size: 0.78rem;
+      line-height: 1.4;
+      margin-top: 9px;
+    }
+
+    section {
+      margin-top: 64px;
+    }
+
+    .section-head {
+      align-items: end;
+      display: flex;
+      gap: 24px;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    h2 {
+      font-size: clamp(1.35rem, 2.2vw, 1.85rem);
+      font-weight: 680;
+      margin: 0;
+    }
+
+    .section-head p {
+      color: var(--ink-secondary);
+      font-size: 0.83rem;
+      line-height: 1.45;
+      margin: 0;
+      max-width: 520px;
+      text-align: right;
+    }
+
+    .findings {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .finding {
+      background: var(--surface-raised);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 20px;
+    }
+
+    .finding-index {
+      color: var(--ink-tertiary);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    .finding h3 {
+      font-size: 1rem;
+      margin: 14px 0 8px;
+    }
+
+    .finding p {
+      color: var(--ink-secondary);
+      font-size: 0.86rem;
+      line-height: 1.55;
+      margin: 0;
+    }
+
+    .diagram-shell {
+      background: var(--surface-raised);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: auto;
+      padding: clamp(14px, 3vw, 28px);
+    }
+
+    .mermaid {
+      min-width: 760px;
+    }
+
+    .table-shell {
+      background: var(--surface-raised);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+
+    table {
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      min-width: 820px;
+      width: 100%;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      line-height: 1.45;
+      padding: 14px 16px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--surface-muted);
+      color: var(--ink-secondary);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .status {
+      border-radius: 999px;
+      display: inline-flex;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 3px 7px;
+      white-space: nowrap;
+    }
+
+    .status.high {
+      background: var(--accent-soft);
+      color: oklch(0.39 0.11 151);
+    }
+
+    .status.medium {
+      background: var(--warning-soft);
+      color: oklch(0.45 0.1 63);
+    }
+
+    .status.low {
+      background: var(--surface-muted);
+      color: var(--ink-secondary);
+    }
+
+    .boundary {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .boundary-panel {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 20px;
+    }
+
+    .boundary-panel.allowed {
+      background: var(--accent-soft);
+      border-color: oklch(0.84 0.06 151);
+    }
+
+    .boundary-panel.blocked {
+      background: var(--danger-soft);
+      border-color: oklch(0.85 0.07 25);
+    }
+
+    .boundary-panel h3 {
+      font-size: 0.92rem;
+      margin: 0 0 14px;
+    }
+
+    .boundary-panel ul {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .boundary-panel li {
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .claims {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .claim {
+      background: var(--surface-raised);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 20px;
+    }
+
+    .claim strong {
+      display: block;
+      font-size: 0.87rem;
+      margin-bottom: 9px;
+    }
+
+    .claim p {
+      color: var(--ink-secondary);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .formula {
+      background: var(--ink);
+      border-radius: 6px;
+      color: white;
+      display: grid;
+      gap: 20px;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+      padding: clamp(22px, 4vw, 38px);
+    }
+
+    .formula h3 {
+      font-size: 1.25rem;
+      margin: 0 0 10px;
+    }
+
+    .formula p {
+      color: oklch(0.8 0.012 250);
+      font-size: 0.84rem;
+      line-height: 1.55;
+      margin: 0;
+    }
+
+    .formula code {
+      background: oklch(0.3 0.014 255);
+      border-color: oklch(0.4 0.016 255);
+      color: white;
+      display: block;
+      font-size: clamp(0.76rem, 1.5vw, 0.92rem);
+      line-height: 1.6;
+      padding: 14px;
+      white-space: normal;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .phase {
+      background: var(--surface-raised);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 18px;
+    }
+
+    .phase-time {
+      color: var(--accent);
+      font-size: 0.7rem;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .phase h3 {
+      font-size: 0.9rem;
+      margin: 10px 0 8px;
+    }
+
+    .phase p {
+      color: var(--ink-secondary);
+      font-size: 0.77rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .sources {
+      border-top: 1px solid var(--line);
+      color: var(--ink-secondary);
+      font-size: 0.78rem;
+      line-height: 1.7;
+      padding-top: 24px;
+    }
+
+    .sources strong {
+      color: var(--ink);
+    }
+
+    @media (max-width: 860px) {
+      .stats,
+      .timeline {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .stat:first-child,
+      .stat:last-child {
+        border-radius: 0;
+      }
+
+      .claims {
+        grid-template-columns: 1fr;
+      }
+
+      .formula {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .topbar-meta,
+      .section-head p {
+        display: none;
+      }
+
+      .stats,
+      .findings,
+      .boundary,
+      .timeline {
+        grid-template-columns: 1fr;
+      }
+
+      .recommendation {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">BR</span>
+      <strong>BuzzRouter</strong>
+    </div>
+    <div class="topbar-meta">Auto-discovery design review · 29 Jul 2026</div>
+  </header>
+
+  <main class="page">
+    <p class="eyebrow">Grounded research plan</p>
+    <h1>Public evidence in. Safe listings out.</h1>
+    <p class="lede">
+      Auto-discovery should identify and verify Buzz relay hosts without probing private workspaces.
+      Technical indexing is automatic; public descriptions and join behavior become administrator-controlled.
+    </p>
+
+    <div class="recommendation">
+      <strong>Recommendation</strong>
+      <p>
+        Build a provenance-driven relay index using NIP-66, public GitHub references, NIP-65 hints,
+        and direct NIP-11 probes. Never enumerate hosted subdomains, query private events, or retain invite codes.
+      </p>
+    </div>
+
+    <div class="stats" aria-label="Research summary">
+      <div class="stat">
+        <span class="stat-value">107</span>
+        <span class="stat-label">Public GitHub code references to the hosted suffix</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">0</span>
+        <span class="stat-label">Native public global community-list endpoints</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">4</span>
+        <span class="stat-label">Safe public probe surfaces: NIP-11, WS, TLS, health</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">14d</span>
+        <span class="stat-label">Target for a database-backed discovery MVP</span>
+      </div>
+    </div>
+
+    <section>
+      <div class="section-head">
+        <h2>What the protocol actually allows</h2>
+        <p>The product has to respect the difference between a relay being reachable and a community wanting to be promoted.</p>
+      </div>
+      <div class="findings">
+        <article class="finding">
+          <span class="finding-index">01 · IDENTITY</span>
+          <h3>The URL is the community</h3>
+          <p>Buzz binds a workspace to the relay host. A normalized origin is the durable candidate key; public keys identify people and agents, not the workspace.</p>
+        </article>
+        <article class="finding">
+          <span class="finding-index">02 · METADATA</span>
+          <h3>NIP-11 proves software, not purpose</h3>
+          <p>Buzz publishes an exact software URL, version, NIPs, relay identity, limits, and a public icon. Its name and description are currently generic.</p>
+        </article>
+        <article class="finding">
+          <span class="finding-index">03 · ACCESS</span>
+          <h3>Hosted communities are invite-only</h3>
+          <p>Knowing the relay URL does not grant membership. BuzzRouter must not redeem invites or query events to infer channels, members, or activity.</p>
+        </article>
+        <article class="finding">
+          <span class="finding-index">04 · DISCOVERY</span>
+          <h3>Nostr already has relay monitors</h3>
+          <p>NIP-66 is the broad discovery feed. NIP-65 and public source references add candidate hints. Direct probes remain the final authority.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>The indexing pipeline</h2>
+        <p>Every transition retains evidence and a reason. Raw URLs are redacted before they can enter durable storage.</p>
+      </div>
+      <div class="diagram-shell">
+        <pre class="mermaid">
+flowchart TD
+    A["Public sources<br/>GitHub · NIP-66 · NIP-65 · partners"] --> B["Candidate intake"]
+    B --> C["Normalize origin<br/>strip path, query, fragment"]
+    C --> D{"SSRF and DNS gate"}
+    D -->|reject| X["Discard with reason"]
+    D -->|public address| E["NIP-11 fetch<br/>bounded body and timeout"]
+    E --> F["WebSocket open<br/>no authentication or REQ"]
+    F --> G{"Buzz classifier"}
+    G -->|exact software match| H["Verified Buzz candidate"]
+    G -->|probable signals| I["Manual review queue"]
+    G -->|other software| X
+    H --> J{"Public listing evidence?"}
+    J -->|monitor only| K["Internal index"]
+    J -->|2 public sources, partner, or claim| L["Public listing"]
+    L --> M["Claim · enrich · rate · rank"]
+        </pre>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Source strategy</h2>
+        <p>Broad discovery is useful only when each source is treated as a hint, not a verdict.</p>
+      </div>
+      <div class="table-shell">
+        <table>
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>What it contributes</th>
+              <th>Trust</th>
+              <th>MVP rule</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>NIP-66 monitors</td>
+              <td>Normalized relay origins, liveness, NIP-11 snapshots</td>
+              <td><span class="status medium">Medium</span></td>
+              <td>Require direct probe; prefer two independent monitors</td>
+            </tr>
+            <tr>
+              <td>GitHub code and issues</td>
+              <td>Public references to hosted and self-hosted relays</td>
+              <td><span class="status medium">Medium</span></td>
+              <td>Strip invite paths before logs, queues, or storage</td>
+            </tr>
+            <tr>
+              <td>NIP-65 relay lists</td>
+              <td>Signed user relay preferences</td>
+              <td><span class="status low">Hint only</span></td>
+              <td>Never enough to publish or classify by itself</td>
+            </tr>
+            <tr>
+              <td>Provider public feed</td>
+              <td>Explicitly listable hosted communities</td>
+              <td><span class="status high">High</span></td>
+              <td>Publish after direct technical verification</td>
+            </tr>
+            <tr>
+              <td>Owner-submitted URL</td>
+              <td>Recovery path and metadata control</td>
+              <td><span class="status high">High after claim</span></td>
+              <td>Keep available, but do not depend on it for coverage</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>The privacy boundary</h2>
+        <p>This is the line that keeps a directory from becoming a private-workspace scanner.</p>
+      </div>
+      <div class="boundary">
+        <div class="boundary-panel allowed">
+          <h3>Allowed public observations</h3>
+          <ul>
+            <li>NIP-11 relay information and public workspace icon</li>
+            <li>TLS validity, DNS answers, latency, and HTTP status</li>
+            <li>A WebSocket open and initial protocol behavior</li>
+            <li>Signed NIP-65 and NIP-66 events from configured relays</li>
+            <li>Public source provenance and administrator claims</li>
+          </ul>
+        </div>
+        <div class="boundary-panel blocked">
+          <h3>Explicitly blocked</h3>
+          <ul>
+            <li>Messages, channels, members, agents, repos, or workflows</li>
+            <li>Invite redemption, retention, screenshots, or analytics</li>
+            <li>Certificate-transparency or dictionary subdomain enumeration</li>
+            <li>Builderlab account APIs or operator APIs without partnership</li>
+            <li>Private, loopback, link-local, or cloud metadata addresses</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>How listings become trustworthy</h2>
+        <p>Auto-discovery handles the host. Administrator control handles public identity and join intent.</p>
+      </div>
+      <div class="claims">
+        <article class="claim">
+          <strong>1. Technical verification</strong>
+          <p>Exact <code>block/buzz</code> software metadata plus NIPs 29 and 42 and a successful WebSocket handshake.</p>
+        </article>
+        <article class="claim">
+          <strong>2. Control proof</strong>
+          <p>Custom domains use DNS TXT or <code>.well-known</code>. Hosted subdomains use a temporary admin-controlled NIP-11 icon challenge.</p>
+        </article>
+        <article class="claim">
+          <strong>3. Public enrichment</strong>
+          <p>The verified administrator supplies the actual name, description, categories, and public invite policy. Scraping cannot infer these safely.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Ranking without pretending to see inside</h2>
+        <p>Community opinion, operational health, and popularity remain separate signals in the UI and database.</p>
+      </div>
+      <div class="formula">
+        <div>
+          <h3>Bayesian quality, not raw stars</h3>
+          <p>One signed rating per Nostr pubkey. A confidence prior prevents a single five-star rating from outranking an established community.</p>
+        </div>
+        <code>quality = (v / (v + m)) * R + (m / (v + m)) * C<br><br>m = 10 initial confidence prior</code>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Four phases to a real MVP</h2>
+        <p>The current GitHub Pages deployment remains the prototype until PostgreSQL and a continuously running worker exist.</p>
+      </div>
+      <div class="timeline">
+        <article class="phase">
+          <span class="phase-time">Days 1-4</span>
+          <h3>Safe technical index</h3>
+          <p>Postgres, pg-boss, SSRF tests, NIP-11 probes, WebSocket checks, strict classifier.</p>
+        </article>
+        <article class="phase">
+          <span class="phase-time">Days 5-7</span>
+          <h3>Automatic sources</h3>
+          <p>NIP-66, GitHub adapter, NIP-65 hints, evidence review, publication rules.</p>
+        </article>
+        <article class="phase">
+          <span class="phase-time">Days 8-10</span>
+          <h3>Claims and metadata</h3>
+          <p>Nostr auth, DNS and HTTP proofs, hosted icon challenge, listing controls.</p>
+        </article>
+        <article class="phase">
+          <span class="phase-time">Days 11-14</span>
+          <h3>Ratings and ranking</h3>
+          <p>Bayesian quality, trending rollups, fraud caps, database-backed product views.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="sources">
+      <strong>Primary sources:</strong>
+      <a href="https://github.com/block/buzz">Block Buzz</a> ·
+      <a href="https://block.github.io/buzz/support.html">Buzz Support</a> ·
+      <a href="https://github.com/nostr-protocol/nips/blob/master/11.md">NIP-11</a> ·
+      <a href="https://github.com/nostr-protocol/nips/blob/master/29.md">NIP-29</a> ·
+      <a href="https://github.com/nostr-protocol/nips/blob/master/65.md">NIP-65</a> ·
+      <a href="https://github.com/nostr-protocol/nips/blob/master/66.md">NIP-66</a> ·
+      <a href="https://bigbrotr.com/">BigBrotr</a>
+    </section>
+  </main>
+</body>
+</html>

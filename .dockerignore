@@ -8,7 +8,8 @@
 .env*
 .*
 node_modules
-config
+config/*
+!config/bootstrap-relays.json
 docs
 src/**/*.test.ts
 *.md

@@ -216,6 +216,8 @@ export async function recordProbeResult(
             http_status,
             ws_open_ms,
             tls_valid,
+            relay_name,
+            relay_description,
             software,
             software_version,
             supported_nips,
@@ -226,7 +228,8 @@ export async function recordProbeResult(
             result_code
           )
           VALUES (
-            $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12
+            $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
+            $13, $14
           )
         `,
         [
@@ -234,6 +237,8 @@ export async function recordProbeResult(
           result.httpStatus,
           result.websocketOpenMs,
           result.tlsValid,
+          normalizePublicRelayText(result.nip11.name, 120),
+          normalizePublicRelayText(result.nip11.description, 1_000),
           result.nip11.software ?? null,
           result.nip11.version ?? null,
           JSON.stringify(result.nip11.supportedNips),
@@ -270,6 +275,22 @@ export async function recordProbeResult(
   } finally {
     client.release();
   }
+}
+
+export function normalizePublicRelayText(
+  value: string | undefined,
+  maximumLength: number,
+): string | null {
+  if (!Number.isInteger(maximumLength) || maximumLength < 1) {
+    throw new Error("Public relay text limit must be a positive integer.");
+  }
+
+  const normalized = value?.replace(/\s+/gu, " ").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return Array.from(normalized).slice(0, maximumLength).join("");
 }
 
 export async function claimDueCandidateIds(

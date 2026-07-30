@@ -42,6 +42,17 @@ services:
       postgres:
         condition: service_healthy
 
+  seed:
+    image: buzzrouter-self-hosted:latest
+    restart: "no"
+    environment:
+      <<: *app-environment
+      DISCOVERY_SEED_FILE: config/bootstrap-relays.json
+    command: ["npm", "run", "discovery:seed"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   web:
     image: buzzrouter-self-hosted:latest
     build:
@@ -67,6 +78,15 @@ services:
       start_period: 20s
     ports:
       - "127.0.0.1:${BUZZROUTER_PORT:-13100}:3000"
+
+  worker:
+    image: buzzrouter-self-hosted:latest
+    restart: unless-stopped
+    environment: *app-environment
+    command: ["npm", "run", "worker"]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
 
   tunnel:
     image: cloudflare/cloudflared:2026.5.0

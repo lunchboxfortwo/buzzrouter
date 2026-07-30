@@ -21,10 +21,27 @@ const DEFAULT_QUERIES = [
 const URL_PATTERN = /\b(?:https?|wss?):\/\/[^\s<>"'`]+/giu;
 const URL_TRAILING_PUNCTUATION = /[),.;:\]}>]+$/u;
 const IGNORED_HOSTS = new Set([
+  "127.0.0.1",
   "github.com",
+  "localhost",
   "raw.githubusercontent.com",
   "example.com",
 ]);
+const IGNORED_BUZZ_TENANTS = new Set([
+  "acme",
+  "example",
+  "mycommunity",
+  "pending-seed",
+  "you",
+  "your-community",
+  "yourteam",
+]);
+const IGNORED_HOST_SUFFIXES = [
+  ".example.com",
+  ".example.net",
+  ".example.org",
+  ".local",
+];
 
 export interface GitHubCursor extends SourceCursor {
   queryIndex: number;
@@ -41,6 +58,19 @@ export interface GitHubCodeSearchPage {
   incomplete: boolean;
   items: GitHubCodeSearchItem[];
   totalCount: number;
+}
+
+interface GitHubCodeSearchResponse {
+  incomplete_results: boolean;
+  items: Array<{
+    html_url: string;
+    path: string;
+    repository: {
+      full_name: string;
+    };
+    text_matches?: Array<{ fragment?: string }>;
+  }>;
+  total_count: number;
 }
 
 export interface GitHubCodeSearchClient {
@@ -163,7 +193,6 @@ export function createGitHubSearchClient(
   baseUrl = "https://api.github.com",
 ): GitHubCodeSearchClient {
   const octokit = new Octokit({
-    auth: token,
     baseUrl,
     userAgent: "BuzzRouter-Discovery/0.2",
   });
@@ -173,27 +202,23 @@ export function createGitHubSearchClient(
       const response = await octokit.rest.search.code({
         headers: {
           accept: "application/vnd.github.text-match+json",
+          authorization: `Bearer ${token}`,
         },
         page,
         per_page: perPage,
         q: query,
       });
+      const data = parseGitHubCodeSearchResponse(response.data);
 
       return {
-        incomplete: response.data.incomplete_results,
-        totalCount: response.data.total_count,
-        items: response.data.items.map((item) => {
-          const textMatches = (
-            item as typeof item & {
-              text_matches?: Array<{ fragment?: string }>;
-            }
-          ).text_matches;
-
+        incomplete: data.incomplete_results,
+        totalCount: data.total_count,
+        items: data.items.map((item) => {
           return {
             evidenceId: `${item.repository.full_name}:${item.path}`,
             htmlUrl: item.html_url,
             fragments:
-              textMatches
+              item.text_matches
                 ?.map((match) => match.fragment)
                 .filter((fragment): fragment is string => Boolean(fragment)) ??
               [],
@@ -204,23 +229,61 @@ export function createGitHubSearchClient(
   };
 }
 
+export function parseGitHubCodeSearchResponse(
+  input: unknown,
+): GitHubCodeSearchResponse {
+  const parsed = typeof input === "string" ? JSON.parse(input) : input;
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    !("incomplete_results" in parsed) ||
+    typeof parsed.incomplete_results !== "boolean" ||
+    !("total_count" in parsed) ||
+    typeof parsed.total_count !== "number" ||
+    !("items" in parsed) ||
+    !Array.isArray(parsed.items)
+  ) {
+    throw new Error("GitHub code search response is invalid.");
+  }
+
+  return parsed as GitHubCodeSearchResponse;
+}
+
 export function extractRelayUrls(fragment: string): string[] {
   return [...fragment.matchAll(URL_PATTERN)]
     .map((match) => match[0].replace(URL_TRAILING_PUNCTUATION, ""))
     .filter((candidate) => {
       try {
         const parsed = new URL(candidate);
-        if (IGNORED_HOSTS.has(parsed.hostname.toLowerCase())) {
+        const hostname = parsed.hostname.toLowerCase();
+        if (isIgnoredGitHubHost(hostname)) {
           return false;
         }
 
         return parsed.protocol === "ws:" ||
           parsed.protocol === "wss:" ||
-          parsed.hostname.endsWith(".communities.buzz.xyz");
+          hostname.endsWith(".communities.buzz.xyz");
       } catch {
         return false;
       }
     });
+}
+
+export function isIgnoredGitHubHost(hostname: string): boolean {
+  if (
+    IGNORED_HOSTS.has(hostname) ||
+    IGNORED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix)) ||
+    hostname.includes(".x.")
+  ) {
+    return true;
+  }
+
+  const buzzSuffix = ".communities.buzz.xyz";
+  if (!hostname.endsWith(buzzSuffix)) {
+    return false;
+  }
+
+  return IGNORED_BUZZ_TENANTS.has(hostname.slice(0, -buzzSuffix.length));
 }
 
 function validateQueries(queries: string[]): void {

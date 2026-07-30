@@ -10,6 +10,7 @@ User=lunchbox
 Group=lunchbox
 Environment=BUZZROUTER_SOURCE_DIR=/opt/buzzrouter/source
 Environment=BUZZROUTER_ENV_FILE=/etc/buzzrouter/runtime.env
+Environment=DOCKER_CONFIG=/tmp/buzzrouter-docker
 ExecStart=/opt/buzzrouter/source/deploy/self-host/discover-github.sh
 UMask=0077
 

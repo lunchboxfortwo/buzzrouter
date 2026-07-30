@@ -26,14 +26,10 @@ request URLs must match this configured origin exactly, regardless of proxy or
 host headers.
 
 The claim and public listing routes require a Node.js runtime with PostgreSQL.
-Production runs the Next.js web process on Fly.io and scales it to zero during
-idle periods. A release command applies migrations before a rolling web
-deployment.
-
-The continuously running discovery worker is intentionally disabled while all
-automatic discovery sources are disabled. Re-enable the `worker` process group
-before turning on a discovery source or seeding candidates that need recurring
-probes.
+Production runs on the dedicated host behind Cloudflare Tunnel. Docker Compose
+runs PostgreSQL, the Next.js web process, and the discovery worker. The
+bootstrap relay catalog is seeded idempotently during each deployment, and the
+worker performs recurring strict probes.
 
 ## Claim flow
 
@@ -98,14 +94,16 @@ strict probe becomes stale.
 
 ## Verification performed
 
-- 135 unit tests, TypeScript compilation, and dependency audit
-- Three migrations applied to a clean PostgreSQL database and rerun idempotently
+- 141 unit tests, TypeScript compilation, and dependency audit
+- Four migrations applied to a clean PostgreSQL database and rerun idempotently
 - Database-backed claim, publication, replay, and dispute transitions
 - Production Next.js build covering all dynamic routes
 - Unauthenticated API, invalid icon token, and protected review route checks
 - Desktop and mobile browser QA for claim and public detail pages
 - No browser console errors on tested pages
 
-The Fly.io release workflow runs the complete verification suite, applies
-migrations, deploys the configured process groups, and verifies the
+The production workflow runs the complete verification suite on a
+GitHub-hosted runner. After verification succeeds, a restricted self-hosted
+runner starts `buzzrouter-deploy.service`. The deploy service applies
+migrations, seeds candidates, starts the production processes, and verifies the
 database-backed health endpoint before declaring the release successful.

@@ -11,6 +11,7 @@ import {
 } from "../src/ranking/explain";
 import { focusLabel } from "../src/ranking/focus";
 
+import { AutoSubmitSelect } from "./AutoSubmitSelect";
 import { CopyRelayButton } from "./CopyRelayButton";
 import styles from "./directory.module.css";
 
@@ -195,26 +196,28 @@ export default async function DirectoryPage({
               {hasFocusData ? (
                 <label className={styles.commandFilter}>
                   <span>Focus</span>
-                  <select defaultValue={focusFilter} name="focus">
+                  <AutoSubmitSelect defaultValue={focusFilter} name="focus">
                     <option value="">Any focus</option>
                     {focusOptions.map((focus) => (
                       <option key={focus} value={focus}>
                         {focusLabel(focus)}
                       </option>
                     ))}
-                  </select>
+                  </AutoSubmitSelect>
                 </label>
               ) : null}
               <label className={styles.commandFilter}>
                 <span>Sort</span>
-                <select defaultValue={sort} name="sort">
+                <AutoSubmitSelect defaultValue={sort} name="sort">
                   <option value="reliable">Most reliable</option>
                   <option value="new">Recently discovered</option>
-                </select>
+                </AutoSubmitSelect>
               </label>
-              <button className={styles.applyButton} type="submit">
-                Apply
-              </button>
+              <noscript>
+                <button className={styles.applyButton} type="submit">
+                  Apply
+                </button>
+              </noscript>
               <span className={styles.resultCount}>
                 <strong>{communities.length}</strong>{" "}
                 {communities.length === 1 ? "result" : "results"}

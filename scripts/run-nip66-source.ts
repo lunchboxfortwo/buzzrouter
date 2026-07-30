@@ -32,7 +32,7 @@ try {
     result = await runNip66Source(
       pool,
       boss,
-      createNostrQueryClient(),
+      createNostrQueryClient(20_000),
       config,
     );
   });

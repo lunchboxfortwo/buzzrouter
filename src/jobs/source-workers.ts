@@ -68,7 +68,7 @@ export async function registerSourceWorkers(
           await runNip66Source(
             pool,
             boss,
-            createNostrQueryClient(),
+            createNostrQueryClient(20_000),
             await loadNip66SourceConfig(),
           );
         });

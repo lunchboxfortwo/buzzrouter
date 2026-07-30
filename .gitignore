@@ -6,4 +6,5 @@ node_modules/
 .lavish/*.png
 .env*
 !.env.example
+*.tsbuildinfo
 .DS_Store

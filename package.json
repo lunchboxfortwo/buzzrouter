@@ -2,21 +2,35 @@
   "name": "buzzrouter",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "discovery:seed": "tsx scripts/seed-reviewed-candidates.ts",
+    "worker": "tsx src/worker.ts"
   },
   "dependencies": {
+    "ipaddr.js": "^2.2.0",
     "next": "16.2.12",
+    "pg": "^8.22.0",
+    "pg-boss": "^12.26.3",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
+    "@types/pg": "^8.15.5",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
-    "typescript": "5.9.3"
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.20.6",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.10"
   },
   "overrides": {
     "postcss": "8.5.25",

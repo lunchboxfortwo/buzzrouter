@@ -1,0 +1,64 @@
+# BuzzRouter
+
+BuzzRouter is a discovery and ranking directory for Buzz communities. The
+current product surface is a high-fidelity MVP prototype; Phase 1 adds the safe
+technical indexing foundation behind it.
+
+- Live prototype: [buzzrouter.com](https://buzzrouter.com)
+- Product definition: [PRODUCT.md](./PRODUCT.md)
+- Discovery design:
+  [docs/auto-discovery-design.md](./docs/auto-discovery-design.md)
+- Phase 1 operations:
+  [docs/phase-1-operations.md](./docs/phase-1-operations.md)
+
+## Development
+
+Requirements:
+
+- Node.js 22.12 or newer
+- PostgreSQL 14 or newer for discovery jobs
+
+```bash
+npm install
+npm test
+npm run typecheck
+npm run build
+```
+
+The frontend remains static and does not require PostgreSQL:
+
+```bash
+npm run dev
+```
+
+## Discovery worker
+
+Create a local environment file from `.env.example`, then:
+
+```bash
+npm run db:migrate
+npm run discovery:seed
+npm run worker
+```
+
+Only canonical relay origins should be added to
+`config/reviewed-relays.json`. Candidate jobs contain database IDs rather than
+arbitrary URLs.
+
+## Phase 1 scope
+
+Implemented:
+
+- Candidate, provenance, and probe snapshot schema
+- PostgreSQL migration runner and `pg-boss` queue
+- Origin-only URL normalization
+- DNS and SSRF policy with connection pinning
+- Bounded NIP-11 fetch and no-auth WebSocket handshake
+- Strict verified/probable/rejected Buzz classifier
+- Reviewed seed workflow and adversarial unit tests
+
+Not yet implemented:
+
+- GitHub, NIP-65, or NIP-66 automatic source adapters
+- Public listing decisions, claims, ratings, or rankings
+- Database-backed product views

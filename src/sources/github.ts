@@ -29,8 +29,10 @@ const IGNORED_HOSTS = new Set([
 ]);
 const IGNORED_BUZZ_TENANTS = new Set([
   "acme",
+  "beta",
   "example",
   "mycommunity",
+  "north-star",
   "pending-seed",
   "you",
   "your-community",

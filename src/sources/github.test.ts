@@ -75,6 +75,8 @@ describe("extractRelayUrls", () => {
       extractRelayUrls(
         [
           "https://mycommunity.communities.buzz.xyz",
+          "https://beta.communities.buzz.xyz",
+          "https://north-star.communities.buzz.xyz",
           "wss://buzz.example.com",
           "wss://real-team.communities.buzz.xyz",
         ].join(" "),

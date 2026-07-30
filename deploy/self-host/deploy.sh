@@ -39,8 +39,6 @@ compose=(
 "${compose[@]}" up \
   --detach \
   --remove-orphans \
-  --wait \
-  --wait-timeout 180 \
   postgres \
   web \
   worker \

@@ -50,9 +50,21 @@ describe("configureQueues", () => {
     );
     expect(schedule).toHaveBeenCalledWith(
       SOURCE_GITHUB_QUEUE,
-      "5 */6 * * *",
+      "5 0 * * *",
       null,
       { key: "phase2-github", tz: "UTC" },
+    );
+    expect(schedule).toHaveBeenCalledWith(
+      SOURCE_NIP66_QUEUE,
+      "15 1 * * *",
+      null,
+      { key: "phase2-nip66", tz: "UTC" },
+    );
+    expect(schedule).toHaveBeenCalledWith(
+      SOURCE_NIP65_QUEUE,
+      "30 2 * * *",
+      null,
+      { key: "phase2-nip65", tz: "UTC" },
     );
   });
 

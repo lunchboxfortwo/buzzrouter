@@ -1,8 +1,8 @@
 [Unit]
-Description=Refresh BuzzRouter's Buzzdir catalog source every six hours
+Description=Refresh BuzzRouter's Buzzdir catalog source daily
 
 [Timer]
-OnCalendar=*-*-* 00/6:17:00
+OnCalendar=*-*-* 00:17:00 UTC
 Persistent=true
 RandomizedDelaySec=10m
 Unit=buzzrouter-buzzdir-discovery.service

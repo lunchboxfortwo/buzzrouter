@@ -77,7 +77,7 @@ deploy/self-host/discover-nip66.sh
 
 Install and enable
 `deploy/self-host/systemd/buzzrouter-nip66-discovery.{service,timer}` for the
-hourly host schedule. In that topology, leave `DISCOVERY_NIP66_ENABLED=false`
+daily host schedule. In that topology, leave `DISCOVERY_NIP66_ENABLED=false`
 so the persistent worker does not also schedule the source. Both paths use the
 same validated environment loader and PostgreSQL advisory lock. A concurrent
 one-shot exits successfully with a `source_locked` result.

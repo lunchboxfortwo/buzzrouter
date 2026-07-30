@@ -58,8 +58,8 @@ joining happens in the community's own Buzz space, not in BuzzRouter.
 Behind it runs a discovery pipeline: a PostgreSQL-backed candidate index with a
 `pg-boss` queue, a UTC due-candidate scheduler with bounded database leases, and a
 worker (`npm run worker`) that probes candidates under a DNS and SSRF policy with
-connection pinning. Automatic sources are opt-in and scheduled — GitHub every six
-hours, NIP-66 hourly, NIP-65 daily — with manual reconciliation available. Operators
+connection pinning. Automatic sources are opt-in and scheduled once daily, with
+manual reconciliation available. Operators
 work through a basic-auth protected review console at `/internal/discovery`, plus
 CLI tools for intake, doctor checks, aggregate status, and seeding.
 

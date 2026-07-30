@@ -17,18 +17,18 @@ migrated before Compose replaces the running web container. The web origin is
 exposed only on `127.0.0.1:13100`; public traffic arrives through the dedicated
 Cloudflare Tunnel.
 
-`buzzrouter-github-discovery.timer` runs a bounded GitHub code search every six
-hours. A rate-limited Trusty Squire egress grant gives a disposable one-shot
+`buzzrouter-github-discovery.timer` runs a bounded GitHub code search daily. A
+rate-limited Trusty Squire egress grant gives a disposable one-shot
 container access to the GitHub API without exposing the underlying read-only
 GitHub credential. Candidate URLs remain private until the normal strict Buzz
 relay probe succeeds.
 
 `buzzrouter-buzzdir-discovery.timer` imports the public, MIT-licensed Buzzdir
-catalog every six hours as an attributed candidate source. The adapter reads
+catalog daily as an attributed candidate source. The adapter reads
 only bounded literal fields and never executes upstream code. Imported records
 remain private until the normal strict Buzz relay probe succeeds.
 
-`buzzrouter-nip66-discovery.timer` runs hourly in a disposable one-shot
+`buzzrouter-nip66-discovery.timer` runs daily in a disposable one-shot
 container. It remains fail-closed until `NIP66_SOURCE_RELAYS` contains 1-10
 operator-reviewed public WSS relays and `NIP66_MONITOR_PUBKEYS` contains 2-100
 distinct, independently operated 64-character hex monitor pubkeys. Keep

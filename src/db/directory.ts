@@ -12,6 +12,7 @@ export interface DirectoryCommunity {
   description: string | null;
   displayName: string;
   evidenceCount: number;
+  iconUrl: string | null;
   joinMode: string | null;
   joinUrl: string | null;
   lastVerifiedAt: string;
@@ -59,6 +60,7 @@ export async function listDirectoryCommunities(
     description: string | null;
     display_name: string;
     evidence_count: string;
+    has_icon: boolean;
     join_mode: string | null;
     join_url: string | null;
     last_verified_at: Date;
@@ -139,7 +141,8 @@ export async function listDirectoryCommunities(
           latest.supported_nips,
           latest.auth_required,
           COALESCE(evidence.evidence_count, 0)::text AS evidence_count,
-          COALESCE(evidence.source_types, '{}'::text[]) AS source_types
+          COALESCE(evidence.source_types, '{}'::text[]) AS source_types,
+          icons.candidate_id IS NOT NULL AS has_icon
         FROM community_candidates AS candidates
         JOIN LATERAL (
           SELECT
@@ -181,6 +184,8 @@ export async function listDirectoryCommunities(
           FROM community_sources
           WHERE candidate_id = candidates.id
         ) AS evidence ON true
+        LEFT JOIN community_icons AS icons
+          ON icons.candidate_id = candidates.id
         WHERE candidates.state = 'verified_buzz'
           AND latest.probed_at >= now() - interval '48 hours'
       )
@@ -189,8 +194,12 @@ export async function listDirectoryCommunities(
       WHERE (
         $1 = ''
         OR display_name ILIKE '%' || $1 || '%'
-        OR relay_host ILIKE '%' || $1 || '%'
         OR COALESCE(description, '') ILIKE '%' || $1 || '%'
+        OR EXISTS (
+          SELECT 1
+          FROM unnest(categories) AS category_tag
+          WHERE category_tag ILIKE '%' || $1 || '%'
+        )
       )
       AND ($2 = '' OR $2 = ANY(categories))
       ORDER BY ${orderBy}
@@ -208,6 +217,9 @@ export async function listDirectoryCommunities(
     description: row.description,
     displayName: row.display_name,
     evidenceCount: Number(row.evidence_count),
+    iconUrl: row.has_icon
+      ? `/api/community-icons/${row.candidate_id}`
+      : null,
     joinMode: row.join_mode,
     joinUrl: row.join_url,
     lastVerifiedAt: row.last_verified_at.toISOString(),

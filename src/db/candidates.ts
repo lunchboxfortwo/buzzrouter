@@ -5,6 +5,7 @@ import type { Pool } from "pg";
 import { sanitizeSourceLocator } from "../discovery/source-locator";
 import type { RelayProbeResult } from "../discovery/probe";
 import type { NormalizedRelay } from "../discovery/normalize";
+import { parsePublicIconDataUri } from "../discovery/nip11";
 
 export const SOURCE_TYPES = [
   "reviewed_seed",
@@ -270,6 +271,7 @@ export async function recordProbeResult(
         [candidateId, result.resultCode],
       );
     } else {
+      const publicIcon = parsePublicIconDataUri(result.nip11.icon);
       await client.query(
         `
           INSERT INTO probe_snapshots (
@@ -310,6 +312,35 @@ export async function recordProbeResult(
           result.classification.reason,
         ],
       );
+      if (publicIcon) {
+        await client.query(
+          `
+            INSERT INTO community_icons (
+              candidate_id,
+              content_type,
+              image_bytes,
+              content_hash
+            )
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (candidate_id) DO UPDATE
+              SET content_type = EXCLUDED.content_type,
+                  image_bytes = EXCLUDED.image_bytes,
+                  content_hash = EXCLUDED.content_hash,
+                  updated_at = now()
+          `,
+          [
+            candidateId,
+            publicIcon.contentType,
+            publicIcon.bytes,
+            publicIcon.contentHash,
+          ],
+        );
+      } else {
+        await client.query(
+          "DELETE FROM community_icons WHERE candidate_id = $1",
+          [candidateId],
+        );
+      }
       await client.query(
         `
           UPDATE community_candidates

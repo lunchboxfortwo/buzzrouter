@@ -44,7 +44,9 @@ export default async function DirectoryPage({
     communities.find(
       (community) => community.candidateId === selectedId,
     ) ?? communities[0];
-  const claimed = communities.filter((community) => community.claimed).length;
+  const categoryCount = new Set(
+    communities.flatMap((community) => community.categories),
+  ).size;
 
   return (
     <div className={styles.page}>
@@ -70,7 +72,6 @@ export default async function DirectoryPage({
               Discover
             </a>
             <a href="/submit">Submit</a>
-            <a href="#verification">Verification</a>
           </nav>
           <span className={styles.liveStatus}>
             <span aria-hidden="true" />
@@ -82,25 +83,20 @@ export default async function DirectoryPage({
       <main id="directory">
         <section className={styles.intro}>
           <div>
-            <p className={styles.eyebrow}>Public Buzz relay index</p>
-            <h1>Verified Buzz communities</h1>
+            <h1>Find your Buzz community</h1>
             <p className={styles.introCopy}>
-              Public relay metadata backed by direct protocol checks and
-              traceable discovery evidence.
+              Browse communities by what they do, then open the one that fits
+              in Buzz.
             </p>
           </div>
           <dl className={styles.metrics} aria-label="Directory status">
             <div>
-              <dt>Verified</dt>
+              <dt>Communities</dt>
               <dd>{communities.length}</dd>
             </div>
             <div>
-              <dt>Claimed</dt>
-              <dd>{claimed}</dd>
-            </div>
-            <div>
-              <dt>Probe window</dt>
-              <dd>48h</dd>
+              <dt>Categories</dt>
+              <dd>{categoryCount}</dd>
             </div>
           </dl>
         </section>
@@ -112,7 +108,7 @@ export default async function DirectoryPage({
               defaultValue={search}
               id="directory-search"
               name="q"
-              placeholder="Community name or relay host"
+              placeholder="Name, description, or category"
               type="search"
             />
             <label htmlFor="directory-sort">Sort</label>
@@ -161,33 +157,13 @@ export default async function DirectoryPage({
             <h2>{search ? "No matching communities" : "Index warming up"}</h2>
             <p>
               {search
-                ? "Try a relay host or a broader community name."
+                ? "Try a community name, description, or category."
                 : "Candidates appear after a strict Buzz relay verification succeeds."}
             </p>
             {search ? <a href="/">Clear search</a> : null}
           </section>
         )}
 
-        <section className={styles.verification} id="verification">
-          <div>
-            <p className={styles.eyebrow}>Directory standard</p>
-            <h2>Evidence before visibility</h2>
-          </div>
-          <dl>
-            <div>
-              <dt>Software</dt>
-              <dd>Canonical Buzz implementation confirmed by NIP-11.</dd>
-            </div>
-            <div>
-              <dt>Transport</dt>
-              <dd>Valid TLS and a successful WebSocket handshake.</dd>
-            </div>
-            <div>
-              <dt>Freshness</dt>
-              <dd>A successful direct probe from the previous 48 hours.</dd>
-            </div>
-          </dl>
-        </section>
       </main>
 
       <footer className={styles.footer}>
@@ -230,10 +206,29 @@ function CommunityRow({
     >
       <span className={styles.monogram} aria-hidden="true">
         {community.displayName.slice(0, 1).toUpperCase()}
+        {community.iconUrl ? (
+          <Image
+            alt=""
+            className={styles.communityIcon}
+            height={40}
+            src={community.iconUrl}
+            unoptimized
+            width={40}
+          />
+        ) : null}
       </span>
       <span className={styles.resultMain}>
-        <strong>{community.displayName}</strong>
-        <span>{community.relayHost}</span>
+        <span className={styles.resultHeading}>
+          <strong>{community.displayName}</strong>
+          {community.categories[0] ? (
+            <span className={styles.resultCategory}>
+              {categoryLabel(community.categories[0])}
+            </span>
+          ) : null}
+        </span>
+        <span className={styles.resultBlurb}>
+          {community.description ?? "Community description not published yet."}
+        </span>
       </span>
       <span className={styles.resultMeta}>
         <span className={styles.verified}>
@@ -272,6 +267,16 @@ function CommunityDetail({
       <div className={styles.detailHeader}>
         <span className={styles.detailMonogram} aria-hidden="true">
           {community.displayName.slice(0, 1).toUpperCase()}
+          {community.iconUrl ? (
+            <Image
+              alt=""
+              className={styles.communityIcon}
+              height={54}
+              src={community.iconUrl}
+              unoptimized
+              width={54}
+            />
+          ) : null}
         </span>
         <div>
           <div className={styles.detailTitle}>

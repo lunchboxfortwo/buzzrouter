@@ -1,8 +1,8 @@
 [Unit]
-Description=Run BuzzRouter NIP-66 discovery hourly
+Description=Run BuzzRouter NIP-66 discovery daily
 
 [Timer]
-OnCalendar=*-*-* *:37:00
+OnCalendar=*-*-* 02:37:00 UTC
 Persistent=true
 RandomizedDelaySec=10m
 Unit=buzzrouter-nip66-discovery.service

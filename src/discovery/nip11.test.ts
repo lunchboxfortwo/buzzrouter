@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { hashPublicIcon, parseNip11Document } from "./nip11";
+import {
+  hashPublicIcon,
+  parseNip11Document,
+  parsePublicIconDataUri,
+} from "./nip11";
 
 describe("parseNip11Document", () => {
   it("extracts only bounded classifier metadata", () => {
@@ -44,5 +48,43 @@ describe("parseNip11Document", () => {
     expect(hashPublicIcon("data:image/png;base64,private")).toMatch(
       /^[a-f0-9]{64}$/,
     );
+  });
+
+  it("accepts bounded raster data URLs for first-party icon serving", () => {
+    const bytes = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from("test"),
+    ]);
+
+    expect(
+      parsePublicIconDataUri(
+        `data:image/png;base64,${bytes.toString("base64")}`,
+      ),
+    ).toEqual({
+      bytes,
+      contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      contentType: "image/png",
+    });
+  });
+
+  it("rejects active, remote, spoofed, and oversized icon content", () => {
+    expect(
+      parsePublicIconDataUri(
+        "data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+",
+      ),
+    ).toBeNull();
+    expect(
+      parsePublicIconDataUri("https://tracker.example/icon.png"),
+    ).toBeNull();
+    expect(
+      parsePublicIconDataUri(
+        `data:image/png;base64,${Buffer.from("not a png").toString("base64")}`,
+      ),
+    ).toBeNull();
+    expect(
+      parsePublicIconDataUri(
+        `data:image/png;base64,${Buffer.alloc(256 * 1024 + 1).toString("base64")}`,
+      ),
+    ).toBeNull();
   });
 });

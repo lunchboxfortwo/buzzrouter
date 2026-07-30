@@ -67,8 +67,8 @@ start the worker, then enqueue an immediate run with:
 npm run discovery:reconcile
 ```
 
-The worker also schedules GitHub every six hours, NIP-66 hourly, and NIP-65
-daily. The protected review console is available at `/internal/discovery` when
+The worker schedules each automatic discovery source once daily. The protected
+review console is available at `/internal/discovery` when
 `INTERNAL_REVIEW_PASSWORD` is set.
 
 ## Implemented discovery scope

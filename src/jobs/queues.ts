@@ -54,11 +54,11 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
     },
   );
 
-  await boss.schedule(SOURCE_GITHUB_QUEUE, "5 */6 * * *", null, {
+  await boss.schedule(SOURCE_GITHUB_QUEUE, "5 0 * * *", null, {
     key: "phase2-github",
     tz: "UTC",
   });
-  await boss.schedule(SOURCE_NIP66_QUEUE, "15 * * * *", null, {
+  await boss.schedule(SOURCE_NIP66_QUEUE, "15 1 * * *", null, {
     key: "phase2-nip66",
     tz: "UTC",
   });

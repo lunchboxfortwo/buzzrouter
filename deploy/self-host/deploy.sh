@@ -60,7 +60,7 @@ health="$(
 
 node -e '
   const health = JSON.parse(process.argv[1]);
-  if (health.status !== "ok" || health.migration !== "0005_catalog_discovery.sql") {
+  if (health.status !== "ok" || health.migration !== "0006_community_icons.sql") {
     process.exit(1);
   }
 ' "${health}"

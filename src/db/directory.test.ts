@@ -16,6 +16,7 @@ describe("listDirectoryCommunities", () => {
           description: "A public relay description.",
           display_name: "Builders",
           evidence_count: "2",
+          has_icon: true,
           join_mode: null,
           join_url: null,
           last_verified_at: new Date("2026-07-30T12:00:00Z"),
@@ -47,6 +48,7 @@ describe("listDirectoryCommunities", () => {
         description: "A public relay description.",
         displayName: "Builders",
         evidenceCount: 2,
+        iconUrl: "/api/community-icons/candidate-1",
         joinMode: null,
         joinUrl: null,
         lastVerifiedAt: "2026-07-30T12:00:00.000Z",
@@ -62,6 +64,10 @@ describe("listDirectoryCommunities", () => {
       expect.stringContaining("last_verified_at DESC"),
       ["builders", "builders", 20],
     );
+    expect(query.mock.calls[0]?.[0]).not.toContain(
+      "relay_host ILIKE",
+    );
+    expect(query.mock.calls[0]?.[0]).toContain("unnest(categories)");
   });
 
   it.each([0, 201, 1.5])("rejects unsafe limit %s", async (limit) => {

@@ -3,6 +3,7 @@ import {
   generateSecretKey,
   getPublicKey,
 } from "nostr-tools/pure";
+import type { Event } from "nostr-tools/core";
 import type { PgBoss } from "pg-boss";
 import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
@@ -144,17 +145,69 @@ describe("parseNip66Candidate", () => {
     );
   });
 
-  it("fails closed without checkpointing a saturated batch", async () => {
-    const event = finalizeEvent(
-      {
-        content: JSON.stringify({
-          software: "https://github.com/block/buzz",
-        }),
-        created_at: now,
-        kind: 30_166,
-        tags: [["d", "wss://relay.example.net"]],
-      },
-      monitorSecret,
+  it("paginates saturated relay batches without skipping a timestamp", async () => {
+    const firstPage = Array.from({ length: 500 }, (_, index) =>
+      unsignedEvent(
+        index < 5 ? now - 10 : now - (index % 10),
+        index,
+      ),
+    );
+    const boundary = firstPage.filter(
+      (event) => event.created_at === now - 10,
+    );
+    const finalPage = [
+      unsignedEvent(now - 11, 501),
+      unsignedEvent(now - 12, 502),
+    ];
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ cursor: { since: now - 20 } }] })
+      .mockResolvedValueOnce({ rows: [] });
+    const pool = { query } as unknown as Pool;
+    const sourceQuery = vi
+      .fn()
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce(boundary)
+      .mockResolvedValueOnce(finalPage);
+
+    await expect(
+      runNip66Source(
+        pool,
+        {} as PgBoss,
+        { query: sourceQuery },
+        {
+          monitorPubkeys: [monitorPubkey, otherMonitor],
+          sourceRelays: ["wss://source.example"],
+        },
+        now,
+      ),
+    ).resolves.toMatchObject({
+      candidatesAccepted: 0,
+      candidatesIgnored: 502,
+      eventsRead: 502,
+    });
+    expect(sourceQuery).toHaveBeenNthCalledWith(
+      2,
+      ["wss://source.example"],
+      expect.objectContaining({
+        since: now - 10,
+        until: now - 10,
+      }),
+    );
+    expect(sourceQuery).toHaveBeenNthCalledWith(
+      3,
+      ["wss://source.example"],
+      expect.objectContaining({
+        since: now - 20,
+        until: now - 11,
+      }),
+    );
+  });
+
+  it("fails closed when one timestamp cannot be paginated", async () => {
+    const saturatedTimestamp = Array.from(
+      { length: 500 },
+      (_, index) => unsignedEvent(now, index),
     );
     const query = vi
       .fn()
@@ -166,7 +219,12 @@ describe("parseNip66Candidate", () => {
       runNip66Source(
         pool,
         {} as PgBoss,
-        { query: vi.fn().mockResolvedValue(Array(1_000).fill(event)) },
+        {
+          query: vi
+            .fn()
+            .mockResolvedValueOnce(saturatedTimestamp)
+            .mockResolvedValueOnce(saturatedTimestamp),
+        },
         {
           monitorPubkeys: [monitorPubkey, otherMonitor],
           sourceRelays: ["wss://source.example"],
@@ -180,6 +238,21 @@ describe("parseNip66Candidate", () => {
     );
   });
 });
+
+function unsignedEvent(
+  createdAt: number,
+  sequence: number,
+): Event {
+  return {
+    content: "",
+    created_at: createdAt,
+    id: sequence.toString(16).padStart(64, "0"),
+    kind: 30_166,
+    pubkey: monitorPubkey,
+    sig: "0".repeat(128),
+    tags: [["d", `wss://relay-${sequence}.example`]],
+  };
+}
 
 describe("sanitizeTimestampCursor", () => {
   it("keeps a current cursor and resets invalid timestamps", () => {

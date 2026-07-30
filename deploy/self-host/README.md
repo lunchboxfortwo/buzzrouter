@@ -23,6 +23,11 @@ container access to the GitHub API without exposing the underlying read-only
 GitHub credential. Candidate URLs remain private until the normal strict Buzz
 relay probe succeeds.
 
+`buzzrouter-buzzdir-discovery.timer` imports the public, MIT-licensed Buzzdir
+catalog every six hours as an attributed candidate source. The adapter reads
+only bounded literal fields and never executes upstream code. Imported records
+remain private until the normal strict Buzz relay probe succeeds.
+
 `buzzrouter-nip66-discovery.timer` runs hourly in a disposable one-shot
 container. It remains fail-closed until `NIP66_SOURCE_RELAYS` contains 1-10
 operator-reviewed public WSS relays and `NIP66_MONITOR_PUBKEYS` contains 2-100

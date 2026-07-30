@@ -212,7 +212,9 @@
   display: grid;
   flex: 1;
   gap: 8px;
-  grid-template-columns: auto minmax(220px, 1fr) auto 190px auto;
+  grid-template-columns:
+    auto minmax(180px, 1fr) auto minmax(150px, 190px)
+    auto minmax(140px, 170px) auto;
   min-width: 0;
 }
 
@@ -495,6 +497,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.detail > .tags {
+  margin-top: 12px;
 }
 
 .tags span {

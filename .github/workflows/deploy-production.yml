@@ -105,7 +105,7 @@ jobs:
           expected = sys.argv[2]
           valid = (
               health.get("status") == "ok"
-              and health.get("migration") == "0004_public_directory.sql"
+              and health.get("migration") == "0005_catalog_discovery.sql"
               and health.get("release") == expected
           )
           raise SystemExit(0 if valid else 1)

@@ -13,6 +13,8 @@ export const SOURCE_TYPES = [
   "nip66",
   "provider",
   "manual",
+  "buzzdir",
+  "submission",
 ] as const;
 
 export type SourceType = (typeof SOURCE_TYPES)[number];
@@ -23,6 +25,13 @@ export interface CandidateSource {
   actorPubkey?: string;
   evidenceId?: string;
   observedAt?: Date;
+  listing?: CandidateSourceListing;
+}
+
+export interface CandidateSourceListing {
+  categories?: string[];
+  description?: string;
+  displayName?: string;
 }
 
 export interface CandidateRecord {
@@ -42,6 +51,7 @@ export async function upsertCandidate(
     source,
     locator,
   );
+  const listing = normalizeCandidateSourceListing(source.listing);
   const client = await pool.connect();
 
   try {
@@ -59,13 +69,19 @@ export async function upsertCandidate(
         VALUES ($1, $2)
         ON CONFLICT (canonical_relay_url) DO UPDATE
           SET last_seen_at = now(),
-              next_probe_at = LEAST(
-                community_candidates.next_probe_at,
-                now()
-              )
+              next_probe_at = CASE
+                WHEN $3 = 'submission'
+                  AND community_candidates.last_seen_at >=
+                    now() - interval '1 hour'
+                  THEN community_candidates.next_probe_at
+                ELSE LEAST(
+                  community_candidates.next_probe_at,
+                  now()
+                )
+              END
         RETURNING id, canonical_relay_url, state
       `,
-      [relay.canonicalRelayUrl, relay.host],
+      [relay.canonicalRelayUrl, relay.host, source.type],
     );
 
     const row = candidate.rows[0];
@@ -77,15 +93,21 @@ export async function upsertCandidate(
           source_locator,
           source_actor_pubkey,
           source_observed_at,
-          evidence_hash
+          evidence_hash,
+          source_display_name,
+          source_description,
+          source_categories
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (candidate_id, source_type, evidence_hash) DO UPDATE
           SET last_seen_at = now(),
               source_observed_at = GREATEST(
                 community_sources.source_observed_at,
                 EXCLUDED.source_observed_at
-              )
+              ),
+              source_display_name = EXCLUDED.source_display_name,
+              source_description = EXCLUDED.source_description,
+              source_categories = EXCLUDED.source_categories
       `,
       [
         row.id,
@@ -94,6 +116,9 @@ export async function upsertCandidate(
         source.actorPubkey ?? null,
         source.observedAt ?? new Date(),
         evidenceHash,
+        listing.displayName,
+        listing.description,
+        listing.categories,
       ],
     );
     await client.query("COMMIT");
@@ -109,6 +134,42 @@ export async function upsertCandidate(
   } finally {
     client.release();
   }
+}
+
+export function normalizeCandidateSourceListing(
+  listing: CandidateSourceListing | undefined,
+): {
+  categories: string[];
+  description: string | null;
+  displayName: string | null;
+} {
+  const displayName = normalizePublicRelayText(listing?.displayName, 80);
+  const description = normalizePublicRelayText(listing?.description, 500);
+  const categories = [
+    ...new Set(
+      (listing?.categories ?? [])
+        .map((category) => category.trim().toLowerCase())
+        .filter((category) =>
+          [
+            "bitcoin",
+            "builders",
+            "culture",
+            "gtm",
+            "labs",
+            "privacy",
+          ].includes(category),
+        ),
+    ),
+  ].slice(0, 5);
+
+  return {
+    categories,
+    description,
+    displayName:
+      displayName && Array.from(displayName).length >= 2
+        ? displayName
+        : null,
+  };
 }
 
 export function createEvidenceHash(

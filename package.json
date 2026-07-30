@@ -11,6 +11,7 @@
     "test": "vitest run",
     "db:migrate": "node --import tsx scripts/migrate.ts",
     "discovery:add": "node --import tsx scripts/add-reviewed-candidate.ts",
+    "discovery:buzzdir": "node --import tsx scripts/run-buzzdir-source.ts",
     "discovery:doctor": "node --import tsx scripts/discovery-doctor.ts",
     "discovery:github": "node --import tsx scripts/run-github-source.ts",
     "discovery:nip66": "node --import tsx scripts/run-nip66-source.ts",

@@ -24,6 +24,7 @@ export interface DirectoryCommunity {
 }
 
 export interface DirectoryQuery {
+  category?: string;
   limit?: number;
   search?: string;
   sort?: DirectorySort;
@@ -39,6 +40,7 @@ export async function listDirectoryCommunities(
   }
 
   const search = (query.search ?? "").trim().slice(0, 100);
+  const category = normalizeCategory(query.category);
   const sort = query.sort ?? "evidence";
   if (!DIRECTORY_SORTS.includes(sort)) {
     throw new Error("Directory sort is invalid.");
@@ -78,6 +80,7 @@ export async function listDirectoryCommunities(
               WHEN communities.visibility = 'public'
                 THEN communities.display_name
             END,
+            catalog.source_display_name,
             CASE
               WHEN lower(COALESCE(latest.relay_name, '')) NOT IN (
                 'buzz',
@@ -98,6 +101,7 @@ export async function listDirectoryCommunities(
               WHEN communities.visibility = 'public'
                 THEN communities.description
             END,
+            catalog.source_description,
             latest.relay_description
           ) AS description,
           COALESCE(
@@ -105,6 +109,7 @@ export async function listDirectoryCommunities(
               WHEN communities.visibility = 'public'
                 THEN communities.categories
             END,
+            catalog.source_categories,
             '{}'::text[]
           ) AS categories,
           CASE
@@ -156,6 +161,18 @@ export async function listDirectoryCommunities(
           ON communities.candidate_id = candidates.id
         LEFT JOIN LATERAL (
           SELECT
+            source_display_name,
+            source_description,
+            source_categories
+          FROM community_sources
+          WHERE candidate_id = candidates.id
+            AND source_type = 'buzzdir'
+            AND source_display_name IS NOT NULL
+          ORDER BY source_observed_at DESC
+          LIMIT 1
+        ) AS catalog ON true
+        LEFT JOIN LATERAL (
+          SELECT
             count(*) AS evidence_count,
             array_agg(
               DISTINCT source_type
@@ -169,14 +186,17 @@ export async function listDirectoryCommunities(
       )
       SELECT *
       FROM directory
-      WHERE $1 = ''
+      WHERE (
+        $1 = ''
         OR display_name ILIKE '%' || $1 || '%'
         OR relay_host ILIKE '%' || $1 || '%'
         OR COALESCE(description, '') ILIKE '%' || $1 || '%'
+      )
+      AND ($2 = '' OR $2 = ANY(categories))
       ORDER BY ${orderBy}
-      LIMIT $2
+      LIMIT $3
     `,
-    [search, limit],
+    [search, category, limit],
   );
 
   return result.rows.map((row) => ({
@@ -198,4 +218,9 @@ export async function listDirectoryCommunities(
     supportedNips: row.supported_nips,
     websocketOpenMs: row.ws_open_ms,
   }));
+}
+
+function normalizeCategory(category: string | undefined): string {
+  const normalized = (category ?? "").trim().toLowerCase();
+  return /^[a-z0-9-]{0,50}$/.test(normalized) ? normalized : "";
 }

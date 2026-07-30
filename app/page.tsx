@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface PageSearchParams {
+  category?: string | string[];
   q?: string | string[];
   selected?: string | string[];
   sort?: string | string[];
@@ -25,6 +26,7 @@ export default async function DirectoryPage({
   searchParams: Promise<PageSearchParams>;
 }) {
   const params = await searchParams;
+  const category = firstValue(params.category).trim().toLowerCase();
   const search = firstValue(params.q).trim().slice(0, 100);
   const requestedSort = firstValue(params.sort);
   const sort: DirectorySort = DIRECTORY_SORTS.includes(
@@ -33,6 +35,7 @@ export default async function DirectoryPage({
     ? (requestedSort as DirectorySort)
     : "evidence";
   const communities = await listDirectoryCommunities(getDatabasePool(), {
+    category,
     search,
     sort,
   });
@@ -66,6 +69,7 @@ export default async function DirectoryPage({
             <a aria-current="page" href="/">
               Discover
             </a>
+            <a href="/submit">Submit</a>
             <a href="#verification">Verification</a>
           </nav>
           <span className={styles.liveStatus}>
@@ -116,6 +120,20 @@ export default async function DirectoryPage({
               <option value="evidence">Strongest evidence</option>
               <option value="recent">Recently verified</option>
             </select>
+            <label htmlFor="directory-category">Category</label>
+            <select
+              defaultValue={category}
+              id="directory-category"
+              name="category"
+            >
+              <option value="">All categories</option>
+              <option value="builders">Builders</option>
+              <option value="bitcoin">Bitcoin</option>
+              <option value="privacy">Privacy</option>
+              <option value="culture">Culture</option>
+              <option value="gtm">GTM</option>
+              <option value="labs">Labs</option>
+            </select>
             <button type="submit">Apply</button>
           </form>
           <span>{communities.length} results</span>
@@ -127,6 +145,7 @@ export default async function DirectoryPage({
               {communities.map((community) => (
                 <CommunityRow
                   community={community}
+                  category={category}
                   key={community.candidateId}
                   search={search}
                   selected={community.candidateId === selected.candidateId}
@@ -180,11 +199,13 @@ export default async function DirectoryPage({
 }
 
 function CommunityRow({
+  category,
   community,
   search,
   selected,
   sort,
 }: {
+  category: string;
   community: DirectoryCommunity;
   search: string;
   selected: boolean;
@@ -196,6 +217,9 @@ function CommunityRow({
   });
   if (search) {
     params.set("q", search);
+  }
+  if (category) {
+    params.set("category", category);
   }
 
   return (
@@ -234,14 +258,14 @@ function CommunityDetail({
     community.joinUrl ??
     (community.slug
       ? `/communities/${community.slug}`
-      : community.canonicalRelayUrl);
+      : buzzJoinUrl(community));
   const primaryLabel = community.joinUrl
     ? community.joinMode === "public_link"
       ? "Join community"
       : "Request invite"
     : community.slug
       ? "View community"
-      : "Open relay";
+      : "Open in Buzz";
 
   return (
     <aside className={styles.detail} aria-label={community.displayName}>
@@ -264,6 +288,14 @@ function CommunityDetail({
         {community.description ??
           `A verified Buzz community at ${community.relayHost}.`}
       </p>
+
+      {community.categories.length > 0 ? (
+        <div className={styles.tags} aria-label="Categories">
+          {community.categories.map((category) => (
+            <span key={category}>{categoryLabel(category)}</span>
+          ))}
+        </div>
+      ) : null}
 
       <div className={styles.actions}>
         <a className={styles.primaryAction} href={primaryUrl}>
@@ -335,13 +367,29 @@ function formatDate(value: string): string {
 
 function sourceLabel(source: string): string {
   const labels: Record<string, string> = {
+    buzzdir: "Buzzdir catalog",
     github: "GitHub reference",
     manual: "Manual review",
     nip65: "NIP-65 relay list",
     nip66: "NIP-66 monitor",
     provider: "Provider intent",
     reviewed_seed: "Reviewed source",
+    submission: "Community submission",
   };
 
   return labels[source] ?? source;
+}
+
+function buzzJoinUrl(community: DirectoryCommunity): string {
+  const params = new URLSearchParams({
+    name: community.displayName,
+    relay: community.canonicalRelayUrl,
+  });
+  return `buzz://add-community?${params.toString()}`;
+}
+
+function categoryLabel(category: string): string {
+  return category === "gtm"
+    ? "GTM"
+    : category.slice(0, 1).toUpperCase() + category.slice(1);
 }

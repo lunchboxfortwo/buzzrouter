@@ -33,6 +33,7 @@ describe("listDirectoryCommunities", () => {
     await expect(
       listDirectoryCommunities(pool, {
         limit: 20,
+        category: "builders",
         search: "builders",
         sort: "recent",
       }),
@@ -59,7 +60,7 @@ describe("listDirectoryCommunities", () => {
     ]);
     expect(query).toHaveBeenCalledWith(
       expect.stringContaining("last_verified_at DESC"),
-      ["builders", 20],
+      ["builders", "builders", 20],
     );
   });
 

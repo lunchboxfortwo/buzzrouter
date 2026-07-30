@@ -4,6 +4,7 @@ import type { Pool } from "pg";
 import {
   claimDueCandidateIds,
   createEvidenceHash,
+  normalizeCandidateSourceListing,
   normalizePublicRelayText,
 } from "./candidates";
 
@@ -29,6 +30,22 @@ describe("claimDueCandidateIds", () => {
     await expect(claimDueCandidateIds(pool, limit)).rejects.toThrow(
       "between 1 and 1000",
     );
+  });
+});
+
+describe("normalizeCandidateSourceListing", () => {
+  it("bounds and normalizes imported catalog metadata", () => {
+    expect(
+      normalizeCandidateSourceListing({
+        categories: [" Builders ", "unknown", "BUILDERS", "Privacy"],
+        description: "  People\n building together. ",
+        displayName: "  Buzz Builders ",
+      }),
+    ).toEqual({
+      categories: ["builders", "privacy"],
+      description: "People building together.",
+      displayName: "Buzz Builders",
+    });
   });
 });
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh BuzzRouter's Buzzdir catalog source every six hours
+
+[Timer]
+OnCalendar=*-*-* 00/6:17:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=buzzrouter-buzzdir-discovery.service
+
+[Install]
+WantedBy=timers.target

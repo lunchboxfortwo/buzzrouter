@@ -101,6 +101,16 @@ services:
       postgres:
         condition: service_healthy
 
+  buzzdir-discovery:
+    image: buzzrouter-self-hosted:latest
+    profiles: ["discovery"]
+    restart: "no"
+    environment: *app-environment
+    command: ["npm", "run", "discovery:buzzdir"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   nip66-discovery:
     image: buzzrouter-self-hosted:latest
     profiles: ["discovery"]

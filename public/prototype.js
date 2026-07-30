@@ -359,7 +359,9 @@
       : "Relay check pending";
 
   const accessFlag = (community) =>
-    community.access === "invite" ? `<span class="access-flag is-invite">Invite-only</span>` : "";
+    community.access === "invite"
+      ? `<span class="access-flag is-invite">Invite-only</span>`
+      : `<span class="access-flag is-open">Open to join</span>`;
 
   const identityMarkup = (community) => `
     <div class="identity-line${community.verified ? "" : " pending"}">
@@ -568,7 +570,7 @@
         </section>
 
         <div class="category-rail" role="group" aria-label="Filter by access">
-          ${[["Any", "All"], ["invite", "Invite-only"]].map(([value, label]) => `
+          ${[["Any", "All"], ["public", "Open to join"], ["invite", "Invite-only"]].map(([value, label]) => `
             <button class="category-chip" type="button" data-access-chip="${value}" aria-pressed="${state.access === value}">${label}</button>
           `).join("")}
         </div>

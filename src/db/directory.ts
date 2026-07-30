@@ -25,6 +25,7 @@ export interface DirectoryCommunity {
   probesTotal: number;
   relayHost: string;
   reliabilityScore: number;
+  focus: string | null;
   slug: string | null;
   softwareVersion: string | null;
   sourceTypes: string[];
@@ -85,6 +86,8 @@ export async function listDirectoryCommunities(
     join_url: string | null;
     last_verified_at: Date;
     relay_host: string;
+    display_name_override: string | null;
+    focus: string | null;
     slug: string | null;
     software_version: string | null;
     source_types: string[];
@@ -99,6 +102,7 @@ export async function listDirectoryCommunities(
           candidates.canonical_relay_url,
           candidates.first_seen_at,
           COALESCE(
+            communities.display_name_override,
             CASE
               WHEN communities.visibility = 'public'
                 THEN communities.display_name
@@ -145,6 +149,8 @@ export async function listDirectoryCommunities(
             WHEN communities.visibility = 'public'
               THEN communities.slug
           END AS slug,
+          communities.focus,
+          communities.display_name_override,
           CASE
             WHEN communities.visibility = 'public'
               THEN communities.public_join_mode
@@ -200,7 +206,7 @@ export async function listDirectoryCommunities(
         LEFT JOIN community_reliability_metrics AS metrics
           ON metrics.candidate_id = candidates.id
         WHERE candidates.state = 'verified_buzz'
-          AND latest.probed_at >= now() - interval '48 hours'
+          AND latest.probed_at >= now() - interval '7 days'
       )
       SELECT *
       FROM directory
@@ -238,6 +244,7 @@ export async function listDirectoryCommunities(
     joinUrl: row.join_url,
     lastVerifiedAt: row.last_verified_at.toISOString(),
     relayHost: row.relay_host,
+    focus: row.focus,
     slug: row.slug,
     softwareVersion: row.software_version,
     sourceTypes: row.source_types,

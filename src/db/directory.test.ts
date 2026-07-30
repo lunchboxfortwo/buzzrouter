@@ -9,6 +9,8 @@ describe("listDirectoryCommunities", () => {
       rows: [
         {
           adoption_pubkeys: 0,
+          display_name_override: null,
+          focus: "ai-agents",
           adoption_repos: 2,
           auth_required: true,
           corroboration_sources: 3,
@@ -48,6 +50,7 @@ describe("listDirectoryCommunities", () => {
     ).resolves.toEqual([
       {
         adoptionPubkeys: 0,
+        focus: "ai-agents",
         adoptionRepos: 2,
         authRequired: true,
         corroborationSources: 3,
@@ -110,6 +113,8 @@ describe("listDirectoryCommunities", () => {
       rows: [
         {
           adoption_pubkeys: null,
+          display_name_override: null,
+          focus: null,
           adoption_repos: null,
           auth_required: null,
           candidate_id: "candidate-2",

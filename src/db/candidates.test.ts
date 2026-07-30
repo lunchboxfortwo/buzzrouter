@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { Pool } from "pg";
 
-import { sanitizeSourceLocator } from "./candidates";
+import { claimDueCandidateIds, sanitizeSourceLocator } from "./candidates";
 
 describe("sanitizeSourceLocator", () => {
   it("removes invite paths, query strings, and fragments", () => {
@@ -26,5 +27,30 @@ describe("sanitizeSourceLocator", () => {
     expect(() =>
       sanitizeSourceLocator("http://example.com/source"),
     ).toThrow("public HTTPS URL");
+  });
+});
+
+describe("claimDueCandidateIds", () => {
+  it("returns the leased candidate IDs from the bounded query", async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [{ id: "candidate-1" }, { id: "candidate-2" }],
+    });
+    const pool = { query } as unknown as Pool;
+
+    await expect(claimDueCandidateIds(pool, 25)).resolves.toEqual([
+      "candidate-1",
+      "candidate-2",
+    ]);
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("FOR UPDATE SKIP LOCKED"),
+      [25],
+    );
+  });
+
+  it.each([0, -1, 1001, 1.5])("rejects unsafe batch limit %s", async (limit) => {
+    const pool = { query: vi.fn() } as unknown as Pool;
+    await expect(claimDueCandidateIds(pool, limit)).rejects.toThrow(
+      "between 1 and 1000",
+    );
   });
 });

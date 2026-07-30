@@ -50,6 +50,9 @@ describe("network policy", () => {
     "service.internal",
     "node.home.arpa",
     "hidden.onion",
+    "reserved.example",
+    "reserved.invalid",
+    "reserved.test",
   ])("rejects blocked hostname %s before DNS", (host) => {
     expect(() => assertPublicHostname(host)).toThrowError(
       expect.objectContaining<Partial<DiscoveryError>>({

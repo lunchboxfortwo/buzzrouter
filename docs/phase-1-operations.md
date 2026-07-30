@@ -47,7 +47,13 @@ trusted by the host.
    npm run db:migrate
    ```
 
-3. Put reviewed canonical origins in `config/reviewed-relays.json`:
+3. Create the ignored local seed file:
+
+   ```bash
+   cp config/reviewed-relays.example.json config/reviewed-relays.json
+   ```
+
+4. Put reviewed canonical origins in `config/reviewed-relays.json`:
 
    ```json
    {
@@ -60,13 +66,13 @@ trusted by the host.
    }
    ```
 
-4. Seed candidates and enqueue probes:
+5. Seed candidates and enqueue probes:
 
    ```bash
    npm run discovery:seed
    ```
 
-5. Run the continuously available worker:
+6. Run the continuously available worker:
 
    ```bash
    npm run worker
@@ -87,14 +93,17 @@ Run the web process and worker as separate services in production.
 - NIP-11 responses are limited to 256 KB and requested without compression.
 - WebSocket payloads are limited to 1 MB.
 - Probe jobs contain only candidate UUIDs.
+- The reviewed-relay file is ignored by Git.
 - Stored failures are enumerated result codes, not remote error bodies.
 - Icons are stored as hashes, not copied data URLs.
 
 ## Retry behavior
 
 The probe queue allows three total attempts. Failed jobs use exponential delay
-starting at two hours and cap at 24 hours. Candidates are scheduled for a daily
-reprobe after a stored result.
+starting at two hours and cap at 24 hours. A UTC scheduler runs every 15
+minutes, leases due candidates, and queues UUID-only jobs. Candidates are
+scheduled for a daily reprobe after a stored result. A transient network failure
+does not erase a prior verified or probable classification.
 
 ## Verification performed
 

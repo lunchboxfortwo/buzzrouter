@@ -64,14 +64,16 @@ function normalizeSoftwareUrl(software: string | undefined): string | null {
 
   try {
     const parsed = new URL(software);
-    if (parsed.protocol !== "https:") {
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash
+    ) {
       return software;
     }
 
-    parsed.hash = "";
-    parsed.search = "";
-    parsed.username = "";
-    parsed.password = "";
     parsed.hostname = parsed.hostname.toLowerCase();
     parsed.pathname = parsed.pathname.replace(/\/+$/, "");
 

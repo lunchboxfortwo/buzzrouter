@@ -135,7 +135,10 @@ export async function markCandidateProbing(
   await pool.query(
     `
       UPDATE community_candidates
-      SET state = 'probing',
+      SET state = CASE
+            WHEN state = 'discovered' THEN 'probing'
+            ELSE state
+          END,
           last_seen_at = now()
       WHERE id = $1
         AND state <> 'suppressed'
@@ -168,7 +171,10 @@ export async function recordProbeResult(
       await client.query(
         `
           UPDATE community_candidates
-          SET state = 'discovered',
+          SET state = CASE
+                WHEN classifier_version IS NULL THEN 'discovered'
+                ELSE state
+              END,
               classifier_reason = $2,
               next_probe_at = now() + interval '24 hours'
           WHERE id = $1
@@ -238,6 +244,37 @@ export async function recordProbeResult(
   } finally {
     client.release();
   }
+}
+
+export async function claimDueCandidateIds(
+  pool: Pool,
+  limit = 100,
+): Promise<string[]> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1_000) {
+    throw new Error("Due candidate limit must be between 1 and 1000.");
+  }
+
+  const result = await pool.query<{ id: string }>(
+    `
+      WITH due AS (
+        SELECT id
+        FROM community_candidates
+        WHERE next_probe_at <= now()
+          AND state <> 'suppressed'
+        ORDER BY next_probe_at, id
+        FOR UPDATE SKIP LOCKED
+        LIMIT $1
+      )
+      UPDATE community_candidates AS candidates
+      SET next_probe_at = now() + interval '15 minutes'
+      FROM due
+      WHERE candidates.id = due.id
+      RETURNING candidates.id
+    `,
+    [limit],
+  );
+
+  return result.rows.map((row) => row.id);
 }
 
 export function sanitizeSourceLocator(locator: string | undefined):

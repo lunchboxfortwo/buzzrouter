@@ -154,7 +154,6 @@ export async function openWebsocket(
 
     const cleanup = () => {
       clearTimeout(totalTimer);
-      socket.removeAllListeners();
     };
 
     const fail = (error: DiscoveryError) => {

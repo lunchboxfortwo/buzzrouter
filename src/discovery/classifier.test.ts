@@ -59,6 +59,20 @@ describe("classifyBuzzRelay", () => {
     });
   });
 
+  it.each([
+    "https://user:secret@github.com/block/buzz",
+    "https://github.com/block/buzz?variant=other",
+    "https://github.com/block/buzz#fork",
+    "http://github.com/block/buzz",
+  ])("rejects noncanonical software metadata %s", (software) => {
+    expect(
+      classifyBuzzRelay({ ...baseDocument, software }, true),
+    ).toMatchObject({
+      state: "rejected",
+      reason: "different_software",
+    });
+  });
+
   it("rejects missing protocol support", () => {
     expect(
       classifyBuzzRelay({ ...baseDocument, supportedNips: [29] }, true),

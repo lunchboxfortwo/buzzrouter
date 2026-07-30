@@ -1,19 +1,17 @@
 import { PgBoss } from "pg-boss";
 
-import { getDatabasePool } from "./db/pool";
+import {
+  getDatabaseConnectionOptions,
+  getDatabasePool,
+} from "./db/pool";
 import { registerProbeCandidateWorker } from "./jobs/probe-candidate";
 import { configureQueues } from "./jobs/queues";
-
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error("DATABASE_URL is required.");
-}
+import { registerDueProbeScheduler } from "./jobs/schedule-due-probes";
 
 const pool = getDatabasePool();
-const boss = new PgBoss({
-  application_name: "buzzrouter-worker",
-  connectionString,
-});
+const boss = new PgBoss(
+  getDatabaseConnectionOptions("buzzrouter-worker"),
+);
 
 boss.on("error", (error) => {
   console.error("pg-boss error", error);
@@ -22,6 +20,7 @@ boss.on("error", (error) => {
 await boss.start();
 await configureQueues(boss);
 await registerProbeCandidateWorker(boss, pool);
+await registerDueProbeScheduler(boss, pool);
 
 async function shutdown(): Promise<void> {
   await boss.stop({ graceful: true, timeout: 30_000 });

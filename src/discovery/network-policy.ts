@@ -17,6 +17,9 @@ const BLOCKED_SUFFIXES = [
   ".internal",
   ".home.arpa",
   ".onion",
+  ".example",
+  ".invalid",
+  ".test",
 ];
 
 export interface PublicAddress {

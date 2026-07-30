@@ -1,8 +1,3 @@
 {
-  "relays": [
-    {
-      "url": "wss://relay.example.com",
-      "sourceLocator": "https://github.com/example/project"
-    }
-  ]
+  "relays": []
 }

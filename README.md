@@ -33,17 +33,19 @@ npm run dev
 
 ## Discovery worker
 
-Create a local environment file from `.env.example`, then:
+Create local environment and reviewed-relay files, then:
 
 ```bash
+cp .env.example .env.local
+cp config/reviewed-relays.example.json config/reviewed-relays.json
 npm run db:migrate
 npm run discovery:seed
 npm run worker
 ```
 
 Only canonical relay origins should be added to
-`config/reviewed-relays.json`. Candidate jobs contain database IDs rather than
-arbitrary URLs.
+`config/reviewed-relays.json`. That file is intentionally ignored by Git.
+Candidate jobs contain database IDs rather than arbitrary URLs.
 
 ## Phase 1 scope
 

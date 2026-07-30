@@ -66,10 +66,12 @@ function normalizeHost(urlHostname: string): string {
 
   const labels = ascii.split(".");
   if (
+    labels.length < 2 ||
     labels.some(
       (label) =>
         label.length === 0 ||
         label.length > MAX_LABEL_LENGTH ||
+        !/^[a-z0-9-]+$/.test(label) ||
         label.startsWith("-") ||
         label.endsWith("-"),
     )

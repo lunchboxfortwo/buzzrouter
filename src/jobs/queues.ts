@@ -1,6 +1,7 @@
 import type { PgBoss } from "pg-boss";
 
 export const PROBE_CANDIDATE_QUEUE = "discovery.probe-candidate";
+export const SCHEDULE_DUE_PROBES_QUEUE = "discovery.schedule-due-probes";
 
 export interface ProbeCandidateJob {
   candidateId: string;
@@ -16,6 +17,24 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
     retryDelayMax: 24 * 60 * 60,
     retryLimit: 2,
   });
+
+  await boss.createQueue(SCHEDULE_DUE_PROBES_QUEUE, {
+    deleteAfterSeconds: 24 * 60 * 60,
+    expireInSeconds: 60,
+    retryLimit: 2,
+    retryDelay: 60,
+    retryBackoff: true,
+  });
+
+  await boss.schedule(
+    SCHEDULE_DUE_PROBES_QUEUE,
+    "*/15 * * * *",
+    null,
+    {
+      key: "phase1-due-probes",
+      tz: "UTC",
+    },
+  );
 }
 
 export async function enqueueCandidateProbe(

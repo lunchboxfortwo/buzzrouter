@@ -58,4 +58,17 @@ describe("normalizeRelayUrl", () => {
       }),
     );
   });
+
+  it.each([
+    "wss://singlelabel",
+    "wss://under_score.example.com",
+    "wss://-leading.example.com",
+    "wss://trailing-.example.com",
+  ])("rejects unsafe DNS hostname %s", (candidate) => {
+    expect(() => normalizeRelayUrl(candidate)).toThrowError(
+      expect.objectContaining<Partial<DiscoveryError>>({
+        code: "invalid_host",
+      }),
+    );
+  });
 });

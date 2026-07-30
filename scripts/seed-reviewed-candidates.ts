@@ -4,7 +4,10 @@ import path from "node:path";
 import { PgBoss } from "pg-boss";
 
 import { upsertCandidate } from "../src/db/candidates";
-import { createDatabasePool } from "../src/db/pool";
+import {
+  createDatabasePool,
+  getDatabaseConnectionOptions,
+} from "../src/db/pool";
 import { normalizeRelayUrl } from "../src/discovery/normalize";
 import { configureQueues, enqueueCandidateProbe } from "../src/jobs/queues";
 
@@ -13,20 +16,14 @@ interface SeedEntry {
   sourceLocator?: string;
 }
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error("DATABASE_URL is required.");
-}
-
 const seedFile = path.resolve(
   process.env.DISCOVERY_SEED_FILE ?? "config/reviewed-relays.json",
 );
 const seed = parseSeedFile(await readFile(seedFile, "utf8"));
 const pool = createDatabasePool();
-const boss = new PgBoss({
-  application_name: "buzzrouter-seed",
-  connectionString,
-});
+const boss = new PgBoss(
+  getDatabaseConnectionOptions("buzzrouter-seed"),
+);
 
 try {
   await boss.start();

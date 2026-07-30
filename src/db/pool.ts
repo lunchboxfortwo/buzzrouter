@@ -2,6 +2,14 @@ import { Pool } from "pg";
 
 let sharedPool: Pool | undefined;
 
+export interface DatabaseConnectionOptions {
+  application_name: string;
+  connectionString: string;
+  ssl?: {
+    rejectUnauthorized: true;
+  };
+}
+
 export function getDatabasePool(): Pool {
   if (!sharedPool) {
     sharedPool = createDatabasePool();
@@ -11,20 +19,30 @@ export function getDatabasePool(): Pool {
 }
 
 export function createDatabasePool(): Pool {
+  const options = getDatabaseConnectionOptions("buzzrouter");
+
+  return new Pool({
+    ...options,
+    max: 10,
+  });
+}
+
+export function getDatabaseConnectionOptions(
+  applicationName: string,
+): DatabaseConnectionOptions {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error("DATABASE_URL is required.");
   }
 
-  const ssl =
+  const ssl: DatabaseConnectionOptions["ssl"] =
     process.env.DATABASE_SSL === "true"
       ? { rejectUnauthorized: true }
       : undefined;
 
-  return new Pool({
-    application_name: "buzzrouter",
+  return {
+    application_name: applicationName,
     connectionString,
-    max: 10,
     ssl,
-  });
+  };
 }

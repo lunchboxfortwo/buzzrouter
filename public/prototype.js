@@ -10,8 +10,7 @@
       probesSuccessful: 30,
       metadataTended: "4 days ago",
       name: "Agent Commons",
-      category: "Development",
-      focusArea: "Agent tools",
+      focusArea: "AI & agents",
       summary: "Open agent infrastructure, evaluation methods, and shared tooling.",
       about: "A working group for people building public agent infrastructure. Members share experiments, review tools, and maintain reusable evaluation datasets.",
       tags: ["Agents", "Open source", "Evaluation"],
@@ -41,8 +40,7 @@
       probesSuccessful: 29,
       metadataTended: "yesterday",
       name: "Prompt Forge",
-      category: "Development",
-      focusArea: "Agent tools",
+      focusArea: "AI & agents",
       summary: "A practical workshop for testing prompts, tools, and agent behavior.",
       about: "A workshop community for builders who want repeatable prompt and tool evaluation. The group publishes test cases and hosts weekly critique sessions.",
       tags: ["Prompting", "Tool use", "Testing"],
@@ -72,8 +70,7 @@
       probesSuccessful: 28,
       metadataTended: "2 weeks ago",
       name: "Open Research Guild",
-      category: "Research",
-      focusArea: "Open knowledge",
+      focusArea: "Research & knowledge",
       summary: "Collaborative literature reviews and open replication projects.",
       about: "Open Research Guild coordinates collaborative reviews, replication projects, and public research notes across technical and social science topics.",
       tags: ["Research", "Replication", "Datasets"],
@@ -103,8 +100,7 @@
       probesSuccessful: 30,
       metadataTended: "6 days ago",
       name: "Growth Operators",
-      category: "Growth",
-      focusArea: "Community growth",
+      focusArea: "Building",
       summary: "Human-agent campaign experiments with public results and critiques.",
       about: "Growth Operators runs campaign experiments for community projects and publishes both the output and the evaluation process behind it.",
       tags: ["Campaigns", "Distribution", "Analytics"],
@@ -134,8 +130,7 @@
       probesSuccessful: 27,
       metadataTended: "3 weeks ago",
       name: "Onchain Story Lab",
-      category: "Creative",
-      focusArea: "Creative production",
+      focusArea: "Design & creative",
       summary: "Writers and agents building participatory stories and digital artifacts.",
       about: "Onchain Story Lab brings writers, artists, and agents together to create serialized stories and participatory digital artifacts.",
       tags: ["Writing", "Art", "Story worlds"],
@@ -165,8 +160,7 @@
       probesSuccessful: 5,
       metadataTended: null,
       name: "Vibe Coders NYC",
-      category: "Local",
-      focusArea: "Local building",
+      focusArea: "Local & regional",
       summary: "New York builders shipping small projects and finding first users.",
       about: "A local group for builders shipping small products. Members pair on implementation, test each other's work, and help find first users.",
       tags: ["New York", "Vibe coding", "Launches"],
@@ -196,7 +190,7 @@
   const previewDialog = document.querySelector("#preview-dialog");
   const joinDialog = document.querySelector("#join-dialog");
   const headerSearch = document.querySelector("#community-search");
-  const categories = [...new Set(communities.map((item) => item.category))].sort();
+  const FOCUS_AREAS = ["Building", "AI & agents", "Bitcoin & money", "Design & creative", "Research & knowledge", "Local & regional", "Team & private", "Uncategorized"];
   const exampleRanks = new Map(
     communities
       .filter((community) => community.verified)
@@ -227,7 +221,7 @@
       directoryStatus: ["loading", "error"].includes(params.get("status")) ? params.get("status") : "ready",
       q: params.get("q") || "",
       access: ["public", "invite"].includes(params.get("access")) ? params.get("access") : "Any",
-      focusArea: ["Agent tools", "Open knowledge", "Community growth", "Creative production", "Local building"].includes(params.get("focus"))
+      focusArea: FOCUS_AREAS.includes(params.get("focus"))
         ? params.get("focus")
         : "Any",
       activityFilter: ["Very active", "Active"].includes(params.get("activity")) ? params.get("activity") : "Any",
@@ -473,7 +467,7 @@
   const filteredCommunities = () => {
     const query = state.q.trim().toLowerCase();
     const result = communities.filter((community) => {
-      const matchesQuery = !query || [community.name, community.summary, community.category, ...community.tags]
+      const matchesQuery = !query || [community.name, community.summary, community.focusArea, ...community.tags]
         .join(" ")
         .toLowerCase()
         .includes(query);
@@ -549,7 +543,7 @@
         <section class="command-bar" aria-label="Filter and sort communities">
           <label class="command-filter">
             <span>Focus</span>
-            <select id="focus-filter">${optionMarkup(["Any", "Agent tools", "Open knowledge", "Community growth", "Creative production", "Local building"], state.focusArea)}</select>
+            <select id="focus-filter">${optionMarkup(["Any", ...FOCUS_AREAS], state.focusArea)}</select>
           </label>
           <label class="command-filter activity-command-filter">
             <span>Activity</span>
@@ -751,11 +745,12 @@
                   <small>Used for review questions; not shown publicly.</small>
                 </label>
                 <label class="field">
-                  <span>Category</span>
-                  <select name="category" required>
-                    <option value="">Choose a category</option>
-                    ${categories.map((category) => `<option>${escapeHtml(category)}</option>`).join("")}
+                  <span>Focus</span>
+                  <select name="focus" required>
+                    <option value="">Choose a focus</option>
+                    ${FOCUS_AREAS.filter((focus) => focus !== "Uncategorized").map((focus) => `<option>${escapeHtml(focus)}</option>`).join("")}
                   </select>
+                  <small>Pick the closest fit; BuzzRouter reviews it before listing.</small>
                 </label>
               </div>
               <label class="field">

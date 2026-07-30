@@ -204,7 +204,7 @@
       .map((community, index) => [community.id, index + 1])
   );
   const allowedViews = new Set(["directory", "community", "method", "submit"]);
-  const allowedSorts = new Set(["rank", "activity", "new"]);
+  const allowedSorts = new Set(["activity", "new"]);
   let searchTimer;
   let shouldFocusHeading = false;
   let lastRenderedView = null;
@@ -231,7 +231,7 @@
         ? params.get("focus")
         : "Any",
       activityFilter: ["Very active", "Active"].includes(params.get("activity")) ? params.get("activity") : "Any",
-      sort: allowedSorts.has(params.get("sort")) ? params.get("sort") : "rank"
+      sort: allowedSorts.has(params.get("sort")) ? params.get("sort") : "activity"
     };
   };
 
@@ -246,7 +246,7 @@
     if (state.access !== "Any") params.set("access", state.access);
     if (state.focusArea !== "Any") params.set("focus", state.focusArea);
     if (state.activityFilter !== "Any") params.set("activity", state.activityFilter);
-    if (state.sort !== "rank") params.set("sort", state.sort);
+    if (state.sort !== "activity") params.set("sort", state.sort);
     const nextUrl = `${window.location.pathname}${params.size ? `?${params}` : ""}`;
     window.history[push ? "pushState" : "replaceState"]({}, "", nextUrl);
   };
@@ -483,9 +483,10 @@
       return matchesQuery && matchesAccess && matchesFocus && matchesActivity;
     });
     return result.sort((a, b) => {
-      if (state.sort === "activity") return b.activity - a.activity;
       if (state.sort === "new") return new Date(b.listedAt) - new Date(a.listedAt);
-      return b.score - a.score;
+      const evidenceGap = Number(hasEnoughEvidence(b)) - Number(hasEnoughEvidence(a));
+      if (evidenceGap !== 0) return evidenceGap;
+      return activityScore(b) - activityScore(a);
     });
   };
 
@@ -557,7 +558,6 @@
           <label class="command-filter sort-command-filter">
             <span>Sort</span>
             <select id="sort-control">
-              <option value="rank"${state.sort === "rank" ? " selected" : ""}>Example rank</option>
               <option value="activity"${state.sort === "activity" ? " selected" : ""}>Most active</option>
               <option value="new"${state.sort === "new" ? " selected" : ""}>Newest listing</option>
             </select>
@@ -847,7 +847,7 @@
       return;
     }
     if (event.target.closest("[data-clear-filters]")) {
-      updateFilters({ access: "Any", focusArea: "Any", activityFilter: "Any", sort: "rank", q: "" });
+      updateFilters({ access: "Any", focusArea: "Any", activityFilter: "Any", sort: "activity", q: "" });
       if (filterDialog.open) filterDialog.close();
       announce("All directory filters cleared.");
       return;

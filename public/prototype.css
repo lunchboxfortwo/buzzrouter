@@ -164,7 +164,7 @@ p {
 .site-header__inner {
   display: grid;
   min-height: 62px;
-  grid-template-columns: auto auto minmax(280px, 1fr) auto;
+  grid-template-columns: auto auto minmax(280px, 1fr);
   align-items: center;
   gap: var(--space-5);
 }
@@ -231,35 +231,6 @@ p {
   transform: scaleX(1);
 }
 
-.preview-stamp {
-  display: inline-flex;
-  min-height: 40px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink-soft);
-  cursor: pointer;
-  font-size: .8rem;
-  font-weight: 590;
-}
-
-.preview-stamp:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-
-.preview-stamp__icon {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-width: 1.8;
-}
-
 .status-dot,
 .activity-dot {
   width: 7px;
@@ -267,10 +238,6 @@ p {
   flex: 0 0 7px;
   border-radius: 50%;
   background: currentColor;
-}
-
-.preview-stamp .status-dot {
-  color: var(--caution);
 }
 
 .header-search {
@@ -1693,7 +1660,7 @@ dialog[open]::backdrop {
 
 @media (max-width: 920px) {
   .site-header__inner {
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto 1fr;
     gap: var(--space-3);
   }
 
@@ -1779,7 +1746,7 @@ dialog[open]::backdrop {
   .site-header__inner {
     width: min(100% - 20px, 640px);
     min-height: 58px;
-    grid-template-columns: auto auto;
+    grid-template-columns: 1fr;
     gap: 4px 12px;
   }
 
@@ -1799,10 +1766,6 @@ dialog[open]::backdrop {
     justify-content: flex-start;
     margin-inline: -4px;
     overflow-x: auto;
-  }
-
-  .preview-stamp {
-    justify-self: end;
   }
 
   .header-search {

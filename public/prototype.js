@@ -22,8 +22,10 @@
       momentum: 98,
       verified: true,
       claimed: true,
+      access: "public",
+      probedAgo: "2h ago",
       currentWork: "Maintaining an open evaluation dataset for interoperable agents.",
-      whyRanked: "Ranks highly because the example combines strong member ratings, a substantial evidence count, and recent listing activity.",
+      whyRanked: "Ranks highly because the example combines sustained recent activity, frequent updates, and strong join interest.",
       evidenceLimit: "Activity is illustrative and operator-reported; no private relay content was inspected."
     },
     {
@@ -46,9 +48,11 @@
       momentum: 91,
       verified: true,
       claimed: true,
+      access: "invite",
+      probedAgo: "4h ago",
       currentWork: "Publishing a shared prompt regression suite and weekly critique notes.",
-      whyRanked: "The example score reflects consistent ratings, fresh operator updates, and sustained relay-link interest.",
-      evidenceLimit: "Ratings and activity are illustrative; the public ranking pipeline is not connected."
+      whyRanked: "The example score reflects fresh operator updates and sustained relay-link interest.",
+      evidenceLimit: "Activity is illustrative; public rankings are not live yet."
     },
     {
       id: "open-research",
@@ -70,8 +74,10 @@
       momentum: 78,
       verified: true,
       claimed: false,
+      access: "public",
+      probedAgo: "9h ago",
       currentWork: "Coordinating an open replication sprint across three public datasets.",
-      whyRanked: "A high example rating is tempered by a smaller evidence sample and lower recent momentum.",
+      whyRanked: "Steady example activity is tempered by a smaller evidence sample and lower recent momentum.",
       evidenceLimit: "Listing claim and activity signals are illustrative; confidence would be limited at this sample size."
     },
     {
@@ -94,8 +100,10 @@
       momentum: 89,
       verified: true,
       claimed: true,
+      access: "invite",
+      probedAgo: "3h ago",
       currentWork: "Testing transparent distribution playbooks for community-led launches.",
-      whyRanked: "Recent example activity and relay-link opens raise momentum while ratings remain well supported.",
+      whyRanked: "Recent example activity and relay-link opens keep momentum high.",
       evidenceLimit: "Relay opens measure intent, not confirmed membership."
     },
     {
@@ -118,8 +126,10 @@
       momentum: 75,
       verified: true,
       claimed: true,
+      access: "public",
+      probedAgo: "16h ago",
       currentWork: "Producing a community-authored serial with reusable agent characters.",
-      whyRanked: "The example has encouraging quality signals, with confidence limited by a smaller rating count.",
+      whyRanked: "The example shows encouraging activity, with confidence limited by a shorter track record.",
       evidenceLimit: "No private creative work or community conversations were inspected."
     },
     {
@@ -142,6 +152,8 @@
       momentum: 72,
       verified: false,
       claimed: false,
+      access: "public",
+      probedAgo: null,
       currentWork: "Organizing a small-project demo night for New York builders.",
       whyRanked: "Not ranked because the example relay identity check is still pending.",
       evidenceLimit: "Technical identity is pending, so the listing would be excluded from public rankings."
@@ -149,7 +161,6 @@
   ];
 
   const viewRoot = document.querySelector("#view-root");
-  const tray = document.querySelector("#compare-tray");
   const announcer = document.querySelector("#announcer");
   const filterDialog = document.querySelector("#filter-dialog");
   const previewDialog = document.querySelector("#preview-dialog");
@@ -162,10 +173,12 @@
       .sort((a, b) => b.score - a.score)
       .map((community, index) => [community.id, index + 1])
   );
-  const allowedViews = new Set(["directory", "community", "compare", "method", "submit"]);
-  const allowedSorts = new Set(["rank", "quality", "activity", "new"]);
+  const allowedViews = new Set(["directory", "community", "method", "submit"]);
+  const allowedSorts = new Set(["rank", "activity", "new"]);
   let searchTimer;
   let shouldFocusHeading = false;
+  let lastRenderedView = null;
+  let lastInspectedId = "";
 
   const escapeHtml = (value) =>
     String(value)
@@ -178,24 +191,17 @@
   const stateFromUrl = () => {
     const params = new URLSearchParams(window.location.search);
     const view = allowedViews.has(params.get("view")) ? params.get("view") : "directory";
-    const compare = [...new Set((params.get("compare") || "").split(",").filter(Boolean))]
-      .filter((id) => communities.some((community) => community.id === id))
-      .slice(0, 3);
     return {
       view,
       id: params.get("id") || "",
       directoryStatus: ["loading", "error"].includes(params.get("status")) ? params.get("status") : "ready",
       q: params.get("q") || "",
-      category: categories.includes(params.get("category")) ? params.get("category") : "All",
+      access: ["public", "invite"].includes(params.get("access")) ? params.get("access") : "Any",
       focusArea: ["Agent tools", "Open knowledge", "Community growth", "Creative production", "Local building"].includes(params.get("focus"))
         ? params.get("focus")
         : "Any",
-      verification: ["Verified", "Pending"].includes(params.get("verification"))
-        ? params.get("verification")
-        : params.get("verified") === "1" ? "Verified" : "Any",
       activityFilter: ["Very active", "Active"].includes(params.get("activity")) ? params.get("activity") : "Any",
-      sort: allowedSorts.has(params.get("sort")) ? params.get("sort") : "rank",
-      compare
+      sort: allowedSorts.has(params.get("sort")) ? params.get("sort") : "rank"
     };
   };
 
@@ -207,12 +213,10 @@
     if (state.id) params.set("id", state.id);
     if (state.directoryStatus !== "ready") params.set("status", state.directoryStatus);
     if (state.q) params.set("q", state.q);
-    if (state.category !== "All") params.set("category", state.category);
+    if (state.access !== "Any") params.set("access", state.access);
     if (state.focusArea !== "Any") params.set("focus", state.focusArea);
-    if (state.verification !== "Any") params.set("verification", state.verification);
     if (state.activityFilter !== "Any") params.set("activity", state.activityFilter);
     if (state.sort !== "rank") params.set("sort", state.sort);
-    if (state.compare.length) params.set("compare", state.compare.join(","));
     const nextUrl = `${window.location.pathname}${params.size ? `?${params}` : ""}`;
     window.history[push ? "pushState" : "replaceState"]({}, "", nextUrl);
   };
@@ -244,7 +248,7 @@
   const setActiveNavigation = () => {
     document.querySelectorAll("[data-nav-view]").forEach((link) => {
       const target = link.dataset.navView;
-      const active = target === state.view || (target === "directory" && ["community", "compare"].includes(state.view));
+      const active = target === state.view || (target === "directory" && state.view === "community");
       if (active) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
       link.setAttribute("href", pageHref(target));
@@ -253,11 +257,14 @@
 
   const rankLabel = (community) => community.verified ? `#${String(exampleRanks.get(community.id)).padStart(2, "0")}` : "—";
 
-  const confidenceLabel = (community) => {
-    if (!community.verified) return "Pending check";
-    if (community.ratings >= 50) return "High confidence";
-    return "Limited evidence";
-  };
+  const probeReceipt = (community) =>
+    community.verified
+      ? `Buzz relay verified · probed ${community.probedAgo} (example)`
+      : "Relay check pending";
+
+  const accessFlag = (community) => `
+    <span class="access-flag${community.access === "invite" ? " is-invite" : ""}">${community.access === "invite" ? "Private" : "Public"}</span>
+  `;
 
   const identityMarkup = (community) => `
     <div class="identity-line${community.verified ? "" : " pending"}">
@@ -269,33 +276,16 @@
     </div>
   `;
 
-  const compareButton = (community, profile = false) => {
-    const selected = state.compare.includes(community.id);
-    const full = state.compare.length >= 3 && !selected;
-    return `
-      <button
-        class="${profile ? "button button--secondary" : "select-control"}"
-        type="button"
-        data-compare-id="${community.id}"
-        aria-pressed="${selected}"
-        aria-label="${selected ? "Remove" : "Add"} ${escapeHtml(community.name)} ${selected ? "from" : "to"} comparison"
-        ${full ? 'disabled aria-describedby="compare-limit-note"' : ""}
-      >
-        ${profile ? (selected ? "Selected" : "Compare") : '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="select-add" d="M12 7v10M7 12h10"></path><path class="select-check" d="m5 12 4 4 10-10"></path></svg>'}
-      </button>
-    `;
-  };
-
   const freshnessLabel = (community) =>
     community.activityAsOf
       .replace("Example: ", "")
       .replace(" days ago", "d ago")
       .replace(" day ago", "d ago");
 
-  const communityIndexRow = (community, selectedId) => {
+  const communityIndexRow = (community, selectedId, index) => {
     const selected = community.id === selectedId;
     return `
-      <li>
+      <li style="--stagger-i: ${Math.min(index, 8)}">
         <button
           class="community-index-row${selected ? " is-selected" : ""}"
           type="button"
@@ -305,7 +295,10 @@
           <span class="index-community-cell">
             <img class="index-insignia" src="/assets/communities/${community.id}.png" alt="" width="48" height="48">
             <span class="index-community-copy">
-              <strong>${escapeHtml(community.name)}</strong>
+              <span class="index-name-line">
+                <strong>${escapeHtml(community.name)}</strong>
+                ${accessFlag(community)}
+              </span>
               <small>${escapeHtml(community.summary)}</small>
             </span>
           </span>
@@ -315,10 +308,6 @@
             ${escapeHtml(community.activityLabel)}
           </span>
           <span class="index-freshness-cell">${escapeHtml(freshnessLabel(community))}</span>
-          <span class="index-rating-cell">
-            <strong>${community.rating.toFixed(1)}</strong>
-            <small>${community.ratings} ratings</small>
-          </span>
           <svg class="index-row-arrow" viewBox="0 0 24 24" aria-hidden="true">
             <path d="m9 6 6 6-6 6"></path>
           </svg>
@@ -327,8 +316,8 @@
     `;
   };
 
-  const communityInspector = (community) => `
-    <article id="community-inspector" class="community-inspector" aria-labelledby="inspector-title">
+  const communityInspector = (community, arriving = false) => `
+    <article id="community-inspector" class="community-inspector${arriving ? " is-arriving" : ""}" aria-labelledby="inspector-title">
       <header class="inspector-header">
         <div class="inspector-heading">
           <img class="inspector-insignia" src="/assets/communities/${community.id}.png" alt="" width="72" height="72">
@@ -341,6 +330,7 @@
                 ${escapeHtml(community.activityLabel)}
               </span>
               <span>Updated ${escapeHtml(freshnessLabel(community))}</span>
+              ${accessFlag(community)}
               <span class="illustrative-label">Illustrative</span>
             </div>
           </div>
@@ -357,8 +347,8 @@
           <dd>${community.activity}<small>Illustrative score</small></dd>
         </div>
         <div>
-          <dt>Rating</dt>
-          <dd>${community.rating.toFixed(1)}<small>${community.ratings} illustrative ratings</small></dd>
+          <dt>Freshness</dt>
+          <dd>${escapeHtml(freshnessLabel(community))}<small>Last illustrative update</small></dd>
         </div>
       </dl>
 
@@ -371,17 +361,11 @@
         <section>
           <h3>Current work</h3>
           <p>${escapeHtml(community.currentWork)}</p>
-          <small>Illustrative, operator-reported information.</small>
-        </section>
-        <section class="inspector-evidence">
-          <h3>Evidence and limitations</h3>
-          <p>${escapeHtml(community.evidenceLimit)}</p>
-          <p>${community.verified ? "Buzz relay verified" : "Relay identity check pending"}. Technical verification is not an endorsement.</p>
+          <small>Illustrative information.</small>
         </section>
         <section>
           <h3>Why it’s recommended</h3>
           <p>${escapeHtml(community.whyRanked)}</p>
-          <small>${confidenceLabel(community)}.</small>
         </section>
         <section>
           <h3>About</h3>
@@ -389,19 +373,8 @@
         </section>
       </div>
 
-      <section class="inspector-facts">
-        <h3>Activity facts</h3>
-        <dl>
-          <div><dt>Freshness</dt><dd>${escapeHtml(community.activityAsOf)}</dd></div>
-          <div><dt>Relay-link opens</dt><dd>${community.relayOpens} illustrative opens · intent, not membership</dd></div>
-          <div><dt>Technical identity</dt><dd>${community.verified ? "Buzz relay verified" : "Relay check pending"}</dd></div>
-          <div><dt>Listing basis</dt><dd>${community.claimed ? "Illustrative operator claim" : "Unclaimed preview fixture"}</dd></div>
-        </dl>
-      </section>
-
       <footer class="inspector-footer">
-        <a href="${pageHref("community", community.id)}" data-community-id="${community.id}">Open full evidence profile</a>
-        ${compareButton(community, true)}
+        <a href="${pageHref("community", community.id)}" data-community-id="${community.id}">View full profile</a>
       </footer>
     </article>
   `;
@@ -413,17 +386,12 @@
         .join(" ")
         .toLowerCase()
         .includes(query);
-      const matchesCategory = state.category === "All" || community.category === state.category;
+      const matchesAccess = state.access === "Any" || community.access === state.access;
       const matchesFocus = state.focusArea === "Any" || community.focusArea === state.focusArea;
-      const matchesVerification =
-        state.verification === "Any" ||
-        (state.verification === "Verified" && community.verified) ||
-        (state.verification === "Pending" && !community.verified);
       const matchesActivity = state.activityFilter === "Any" || community.activityLabel === state.activityFilter;
-      return matchesQuery && matchesCategory && matchesFocus && matchesVerification && matchesActivity;
+      return matchesQuery && matchesAccess && matchesFocus && matchesActivity;
     });
     return result.sort((a, b) => {
-      if (state.sort === "quality") return b.rating - a.rating || b.ratings - a.ratings;
       if (state.sort === "activity") return b.activity - a.activity;
       if (state.sort === "new") return new Date(b.listedAt) - new Date(a.listedAt);
       return b.score - a.score;
@@ -436,9 +404,7 @@
   const activeFilterMarkup = () => {
     const filters = [];
     if (state.q) filters.push(`Search: “${escapeHtml(state.q)}”`);
-    if (state.category !== "All") filters.push(escapeHtml(state.category));
     if (state.focusArea !== "Any") filters.push(escapeHtml(state.focusArea));
-    if (state.verification !== "Any") filters.push(state.verification === "Verified" ? "Buzz relay verified" : "Relay check pending");
     if (state.activityFilter !== "Any") filters.push(`${escapeHtml(state.activityFilter)} · 30d`);
     if (!filters.length) return "";
     return `
@@ -457,14 +423,38 @@
       state.id = selectedCommunity.id;
       writeUrl();
     }
+    const entering = lastRenderedView !== "directory";
+    const inspectorArriving = Boolean(selectedCommunity) && selectedCommunity.id !== lastInspectedId;
+    lastInspectedId = selectedCommunity ? selectedCommunity.id : "";
+    lastRenderedView = "directory";
     viewRoot.innerHTML = `
       <div class="workspace-shell">
-        <h1 id="page-title" class="visually-hidden" tabindex="-1">Discover Buzz communities</h1>
+        <header class="premise-band${entering ? " is-entering" : ""}">
+          <div class="premise-copy">
+            <h1 id="page-title" tabindex="-1">
+              Find a Buzz community
+              <em class="premise-mark">worth joining.
+                <svg class="premise-underline" viewBox="0 0 220 12" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                  <path pathLength="1" d="M4 9 C 60 3.5, 150 2.5, 216 6.5"/>
+                </svg>
+              </em>
+            </h1>
+            <p>Every listing is checked at the relay itself. <a href="${pageHref("method")}" data-nav-view="method">How ranking works</a></p>
+          </div>
+          <svg class="premise-signal" viewBox="0 0 340 140" aria-hidden="true" focusable="false">
+            <path class="route-line" d="M60 74 C 130 28, 214 28, 282 64"/>
+            <path class="route-pulse" pathLength="100" d="M60 74 C 130 28, 214 28, 282 64"/>
+            <circle class="signal-ring signal-ring--late" cx="60" cy="74" r="15"/>
+            <circle class="signal-ring" cx="60" cy="74" r="15"/>
+            <circle class="signal-origin" cx="60" cy="74" r="7"/>
+            <circle class="signal-relay" cx="282" cy="64" r="15"/>
+            <path class="signal-check" d="m276 64 4.5 4.5 8.5-9.5"/>
+            <text class="signal-label" x="60" y="112" text-anchor="middle">BuzzRouter</text>
+            <text class="signal-label" x="282" y="104" text-anchor="middle">verified</text>
+            <text class="signal-label signal-label--route" x="172" y="18" text-anchor="middle">checked directly</text>
+          </svg>
+        </header>
         <section class="command-bar" aria-label="Filter and sort communities">
-          <label class="command-filter">
-            <span>Category</span>
-            <select id="category-filter">${optionMarkup(["All", ...categories], state.category)}</select>
-          </label>
           <label class="command-filter">
             <span>Focus</span>
             <select id="focus-filter">${optionMarkup(["Any", "Agent tools", "Open knowledge", "Community growth", "Creative production", "Local building"], state.focusArea)}</select>
@@ -477,7 +467,6 @@
             <span>Sort</span>
             <select id="sort-control">
               <option value="rank"${state.sort === "rank" ? " selected" : ""}>Example rank</option>
-              <option value="quality"${state.sort === "quality" ? " selected" : ""}>Highest rated</option>
               <option value="activity"${state.sort === "activity" ? " selected" : ""}>Most active</option>
               <option value="new"${state.sort === "new" ? " selected" : ""}>Newest listing</option>
             </select>
@@ -486,8 +475,13 @@
           <span class="result-count"><strong>${results.length}</strong> ${results.length === 1 ? "result" : "results"}</span>
         </section>
 
+        <div class="category-rail" role="group" aria-label="Filter by access">
+          ${[["Any", "All"], ["public", "Public"], ["invite", "Private"]].map(([value, label]) => `
+            <button class="category-chip" type="button" data-access-chip="${value}" aria-pressed="${state.access === value}">${label}</button>
+          `).join("")}
+        </div>
+
         ${activeFilterMarkup()}
-        <p id="compare-limit-note" class="visually-hidden">Remove a selected community before adding another.</p>
 
         <div class="workspace-grid">
           <section class="community-index" aria-labelledby="directory-results-title">
@@ -496,7 +490,6 @@
               <span>Focus</span>
               <span>Activity</span>
               <span>Freshness</span>
-              <span>Rating</span>
               <span></span>
             </div>
             <h2 id="directory-results-title" class="visually-hidden">Community results</h2>
@@ -513,13 +506,13 @@
                 <button class="button button--primary" type="button" data-retry-directory>Try again</button>
               </div>
             ` : results.length ? `
-              <ul class="community-index-list">
-                ${results.map((community) => communityIndexRow(community, selectedCommunity.id)).join("")}
+              <ul class="community-index-list${entering ? " is-entering" : ""}">
+                ${results.map((community, index) => communityIndexRow(community, selectedCommunity.id, index)).join("")}
               </ul>
             ` : `
               <div class="empty-state">
-                <h2>No communities match</h2>
-                <p>Your comparison selection is unchanged. Clear the filters to see every illustrative listing.</p>
+                <h2>No communities on this route</h2>
+                <p>Nothing matches the current filters. Clear them to see every illustrative listing.</p>
                 <button class="button button--primary" type="button" data-clear-filters>Clear filters</button>
               </div>
             `}
@@ -531,19 +524,16 @@
           </section>
 
           ${selectedCommunity && state.directoryStatus === "ready"
-            ? communityInspector(selectedCommunity)
+            ? communityInspector(selectedCommunity, inspectorArriving)
             : `<aside class="community-inspector inspector-placeholder" aria-label="Community inspector">
-                <p>${state.directoryStatus === "error" ? "The inspector will return when listings load." : "Choose a community to inspect it here."}</p>
+                <p>${state.directoryStatus === "error" ? "The inspector will return when listings load." : "Select a community to inspect its signal here."}</p>
               </aside>`}
         </div>
 
         <section class="workspace-actions" aria-label="Directory actions">
-          <p>Curated discovery with activity and freshness kept separate from quality.</p>
+          <p>BuzzRouter routes you to the community; joining happens in its own Buzz space.</p>
           <div>
             <a href="${pageHref("method")}" data-nav-view="method">How recommendations work</a>
-            <button class="button button--secondary" type="button" data-open-compare ${state.compare.length < 2 ? "disabled" : ""}>
-              Compare selected (${state.compare.length})
-            </button>
           </div>
         </section>
       </div>
@@ -574,12 +564,12 @@
             <h1 id="page-title" tabindex="-1">${escapeHtml(community.name)}</h1>
             <p class="lede">${escapeHtml(community.summary)}</p>
             <div class="profile-meta">
-              <span class="status-label${community.verified ? "" : " pending"}">${community.verified ? "Buzz relay verified" : "Relay check pending"}</span>
+              <span class="status-label${community.verified ? "" : " pending"}">${probeReceipt(community)}</span>
               <span class="status-label${community.claimed ? "" : " pending"}">${community.claimed ? "Operator claimed" : "Unclaimed preview"}</span>
+              <span class="status-label neutral">${community.access === "invite" ? "Private" : "Public"}</span>
             </div>
           </div>
           <div class="profile-actions">
-            ${compareButton(community, true)}
             <button class="button button--primary" type="button" data-open-join="${community.id}">Join ${escapeHtml(community.name)}</button>
           </div>
         </header>
@@ -605,91 +595,12 @@
             <h2>Evidence record</h2>
             <p>Signals are separated so popularity cannot stand in for quality.</p>
             <div class="evidence-grid">
-              <div class="evidence-item"><strong>Technical identity</strong><p>${community.verified ? "Buzz relay verified" : "Relay check pending"}. This is a software identity check, not a quality endorsement.</p></div>
-              <div class="evidence-item"><strong>Member reputation</strong><p>${community.rating.toFixed(1)} from ${community.ratings} illustrative ratings · ${confidenceLabel(community)}.</p></div>
+              <div class="evidence-item"><strong>Technical identity</strong><p>${probeReceipt(community)}. This is a software identity check, not a quality endorsement.</p></div>
               <div class="evidence-item"><strong>Activity</strong><p>${escapeHtml(community.activityLabel)} · operator reported · ${escapeHtml(community.activityAsOf)}.</p></div>
               <div class="evidence-item"><strong>Join intent</strong><p>${community.relayOpens} illustrative relay-link opens in 30 days. Opens do not confirm membership.</p></div>
-              <div class="evidence-item"><strong>Listing basis</strong><p>${community.claimed ? "Illustrative operator claim" : "Unclaimed preview fixture"} · profile source is sample metadata.</p></div>
+              <div class="evidence-item"><strong>Listing basis</strong><p>${community.claimed ? "Illustrative operator claim" : "Unclaimed example listing"} · profile details are example data.</p></div>
               <div class="evidence-item"><strong>Privacy boundary</strong><p>BuzzRouter does not read messages, channels, members, or private activity.</p></div>
             </div>
-          </section>
-        </div>
-      </div>
-    `;
-  };
-
-  const comparisonRows = [
-    ["Purpose", (item) => item.summary],
-    ["Category", (item) => item.category],
-    ["Skills and interests", (item) => item.tags.join(", ")],
-    ["Current work", (item) => item.currentWork],
-    ["Member rating", (item) => `${item.rating.toFixed(1)} / 5 · ${item.ratings} example ratings`],
-    ["Ranking confidence", (item) => confidenceLabel(item)],
-    ["Quality contribution", (item) => `${item.quality} / 100 example score`],
-    ["Activity · 30 days", (item) => `${item.activityLabel} · operator reported`],
-    ["Relay-link opens", (item) => `${item.relayOpens} · measures intent, not membership`],
-    ["Momentum contribution", (item) => `${item.momentum} / 100 example score`],
-    ["Technical identity", (item) => item.verified ? "Buzz relay verified" : "Relay check pending"],
-    ["Listing claim", (item) => item.claimed ? "Illustrative operator claim" : "Unclaimed preview"],
-    ["Why it ranks here", (item) => item.whyRanked],
-    ["Evidence limitation", (item) => item.evidenceLimit]
-  ];
-
-  const renderComparison = () => {
-    const selected = state.compare.map((id) => communities.find((item) => item.id === id)).filter(Boolean);
-    if (selected.length < 2) {
-      state.view = "directory";
-      writeUrl();
-      renderDirectory();
-      announce(selected.length === 1 ? "Choose one more community to compare." : "Choose two or three communities to compare.");
-      return;
-    }
-    viewRoot.innerHTML = `
-      <div class="page-shell content-page">
-        <a class="back-link" href="${pageHref("directory")}" data-nav-view="directory">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6M8 12h11"></path></svg>
-          Edit selection in directory
-        </a>
-        <header class="content-page__header">
-          <h1 id="page-title" tabindex="-1">Compare your shortlist.</h1>
-          <p class="lede">${selected.length} communities selected. Signals stay separate so popularity cannot stand in for quality. Every value on this screen is illustrative.</p>
-        </header>
-        <div class="content-page__body">
-          <section aria-labelledby="comparison-title">
-            <h2 id="comparison-title" class="visually-hidden">Community evidence comparison</h2>
-            <p class="scroll-hint">Swipe or scroll to compare all selected communities.</p>
-            <div class="comparison-scroll" tabindex="0" role="region" aria-label="Scrollable comparison of selected communities">
-              <table class="comparison-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Signal</th>
-                    ${selected.map((item) => `<th scope="col"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.category)}</small></th>`).join("")}
-                  </tr>
-                </thead>
-                <tbody>
-                  ${comparisonRows.map(([label, getValue]) => `
-                    <tr>
-                      <th scope="row">${escapeHtml(label)}</th>
-                      ${selected.map((item) => `<td>${escapeHtml(getValue(item))}</td>`).join("")}
-                    </tr>
-                  `).join("")}
-                  <tr>
-                    <th scope="row">Actions</th>
-                    ${selected.map((item) => `
-                      <td>
-                        <a class="button button--secondary" href="${pageHref("community", item.id)}" data-community-id="${item.id}">View profile</a>
-                        <button class="button button--quiet" type="button" data-remove-compare="${item.id}">Remove</button>
-                      </td>
-                    `).join("")}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-          <section class="section-card">
-            <h2>What these signals do—and do not—mean</h2>
-            <p>Relay verification checks software identity and public connection behavior. It is not an endorsement. Relay-link opens measure interest, not confirmed membership. Activity is operator reported in this preview.</p>
-            <a href="${pageHref("method")}" data-nav-view="method">Read the proposed ranking method</a>
           </section>
         </div>
       </div>
@@ -701,17 +612,16 @@
       <div class="page-shell content-page">
         <header class="content-page__header">
           <h1 id="page-title" tabindex="-1">Ranking should explain itself.</h1>
-          <p class="lede">Proposed method v1 separates quality from momentum, discounts thin evidence, and treats popularity as only one input.</p>
+          <p class="lede">The proposed method rewards real, recent activity, discounts thin evidence, and treats popularity as only one input.</p>
         </header>
         <div class="content-page__body">
           <section class="section-card">
             <h2>Example weighting</h2>
-            <p>This method is proposed, not a live ranking pipeline.</p>
+            <p>This weighting is a proposal; public rankings are not live yet.</p>
             <div class="method-grid">
-              <div class="method-item"><strong>45% · Member quality</strong><p>Bayesian-adjusted ratings from verified identities. A few perfect ratings should not outrank a well-supported strong rating.</p></div>
-              <div class="method-item"><strong>25% · Current activity</strong><p>Fresh, attributable activity signals. Operator-reported information is labeled and private relay content is never read.</p></div>
-              <div class="method-item"><strong>20% · Join intent</strong><p>Unique, bot-filtered opens of native relay links. This measures interest, not confirmed membership.</p></div>
-              <div class="method-item"><strong>10% · Listing quality</strong><p>Technical relay identity, profile completeness, freshness, and listing provenance.</p></div>
+              <div class="method-item"><strong>55% · Current activity</strong><p>Fresh, attributable activity signals observed directly at the relay. Operator-reported information is labeled and private relay content is never read.</p></div>
+              <div class="method-item"><strong>25% · Join intent</strong><p>Unique, bot-filtered opens of native relay links. This measures interest, not confirmed membership.</p></div>
+              <div class="method-item"><strong>20% · Listing quality</strong><p>Technical relay identity, profile completeness, freshness, and listing provenance.</p></div>
             </div>
           </section>
           <section class="section-card">
@@ -720,7 +630,7 @@
           </section>
           <section class="section-card">
             <h2>Cold-start communities</h2>
-            <p>New listings should remain discoverable without receiving false confidence. Until evidence is sufficient, the interface uses “Not yet rated,” “Limited evidence,” or “Not ranked” instead of zeros.</p>
+            <p>New listings should remain discoverable without receiving false confidence. Until evidence is sufficient, the interface uses “Limited evidence” or “Not ranked” instead of zeros.</p>
           </section>
         </div>
       </div>
@@ -731,8 +641,8 @@
     viewRoot.innerHTML = `
       <div class="page-shell content-page">
         <header class="content-page__header">
-          <h1 id="page-title" tabindex="-1">Submit a community for review.</h1>
-          <p class="lede">A submission starts a technical relay check and public-listing review. It does not guarantee publication or ranking.</p>
+          <h1 id="page-title" tabindex="-1">List your community.</h1>
+          <p class="lede">Listing starts with a relay check — BuzzRouter contacts your relay directly before anything is published. Review does not guarantee publication or ranking.</p>
         </header>
         <div class="content-page__body">
           <section class="section-card">
@@ -776,51 +686,11 @@
     `;
   };
 
-  const renderTray = () => {
-    if (!state.compare.length) {
-      tray.hidden = true;
-      tray.innerHTML = "";
-      document.body.classList.remove("has-compare-tray");
-      return;
-    }
-    const selected = state.compare.map((id) => communities.find((item) => item.id === id)).filter(Boolean);
-    tray.hidden = false;
-    document.body.classList.add("has-compare-tray");
-    tray.innerHTML = `
-      <div class="compare-tray__inner">
-        <div class="compare-count">
-          <strong>${selected.length} of 3 selected</strong>
-          <span>${selected.length < 2 ? "Choose one more" : "Ready to compare"}</span>
-        </div>
-        <div class="compare-selections" aria-label="Selected communities">
-          ${selected.map((item) => `
-            <div class="compare-chip">
-              <span>${escapeHtml(item.name)}</span>
-              <button class="remove-button" type="button" data-remove-compare="${item.id}" aria-label="Remove ${escapeHtml(item.name)} from comparison">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
-              </button>
-            </div>
-          `).join("")}
-        </div>
-        <div class="compare-actions">
-          <button class="button button--quiet" type="button" data-clear-compare>Clear</button>
-          <button class="button button--primary" type="button" data-open-compare ${selected.length < 2 ? "disabled" : ""}>
-            Compare ${selected.length}
-          </button>
-        </div>
-      </div>
-    `;
-  };
-
   const syncFilterDialog = () => {
-    const category = document.querySelector("#mobile-category");
     const focus = document.querySelector("#mobile-focus");
-    const verification = document.querySelector("#mobile-verification");
     const activity = document.querySelector("#mobile-activity");
     const sort = document.querySelector("#mobile-sort");
-    if (category) category.innerHTML = optionMarkup(["All", ...categories], state.category);
     if (focus) focus.value = state.focusArea;
-    if (verification) verification.value = state.verification;
     if (activity) activity.value = state.activityFilter;
     if (sort) sort.value = state.sort;
   };
@@ -828,11 +698,10 @@
   const render = () => {
     setActiveNavigation();
     if (state.view === "community") renderCommunity();
-    else if (state.view === "compare") renderComparison();
     else if (state.view === "method") renderMethod();
     else if (state.view === "submit") renderSubmit();
     else renderDirectory();
-    renderTray();
+    lastRenderedView = state.view;
     syncFilterDialog();
     if (shouldFocusHeading) {
       const heading = document.querySelector("#page-title");
@@ -842,10 +711,9 @@
     }
   };
 
-  const updateFilters = ({ category, focusArea, verification, activityFilter, sort, q } = {}) => {
-    if (category !== undefined) state.category = category;
+  const updateFilters = ({ access, focusArea, activityFilter, sort, q } = {}) => {
+    if (access !== undefined) state.access = access;
     if (focusArea !== undefined) state.focusArea = focusArea;
-    if (verification !== undefined) state.verification = verification;
     if (activityFilter !== undefined) state.activityFilter = activityFilter;
     if (sort !== undefined) state.sort = sort;
     if (q !== undefined) state.q = q;
@@ -853,25 +721,7 @@
     state.view = "directory";
     writeUrl();
     renderDirectory();
-    renderTray();
     syncFilterDialog();
-  };
-
-  const toggleCompare = (id) => {
-    const community = communities.find((item) => item.id === id);
-    if (!community) return;
-    if (state.compare.includes(id)) {
-      state.compare = state.compare.filter((item) => item !== id);
-      announce(`${community.name} removed from comparison. ${state.compare.length} of 3 selected.`);
-    } else if (state.compare.length >= 3) {
-      announce("Comparison is full. Remove a community before adding another.");
-      return;
-    } else {
-      state.compare.push(id);
-      announce(`${community.name} added to comparison. ${state.compare.length} of 3 selected.`);
-    }
-    writeUrl();
-    render();
   };
 
   document.addEventListener("click", (event) => {
@@ -893,7 +743,6 @@
       state.id = inspectorChoice.dataset.inspectId;
       writeUrl({ push: true });
       renderDirectory();
-      renderTray();
       syncFilterDialog();
       const selected = communities.find((community) => community.id === state.id);
       announce(`${selected?.name || "Community"} selected.`);
@@ -904,29 +753,13 @@
       }
       return;
     }
-    const compare = event.target.closest("[data-compare-id]");
-    if (compare) {
-      toggleCompare(compare.dataset.compareId);
-      return;
-    }
-    const remove = event.target.closest("[data-remove-compare]");
-    if (remove) {
-      toggleCompare(remove.dataset.removeCompare);
-      return;
-    }
-    if (event.target.closest("[data-open-compare]")) {
-      navigate("compare");
-      return;
-    }
-    if (event.target.closest("[data-clear-compare]")) {
-      state.compare = [];
-      writeUrl();
-      render();
-      announce("Comparison selection cleared.");
+    const accessChip = event.target.closest("[data-access-chip]");
+    if (accessChip) {
+      updateFilters({ access: accessChip.dataset.accessChip });
       return;
     }
     if (event.target.closest("[data-clear-filters]")) {
-      updateFilters({ category: "All", focusArea: "Any", verification: "Any", activityFilter: "Any", sort: "rank", q: "" });
+      updateFilters({ access: "Any", focusArea: "Any", activityFilter: "Any", sort: "rank", q: "" });
       if (filterDialog.open) filterDialog.close();
       announce("All directory filters cleared.");
       return;
@@ -974,9 +807,7 @@
   });
 
   document.addEventListener("change", (event) => {
-    if (event.target.id === "category-filter") updateFilters({ category: event.target.value });
     if (event.target.id === "focus-filter") updateFilters({ focusArea: event.target.value });
-    if (event.target.id === "verification-filter") updateFilters({ verification: event.target.value });
     if (event.target.id === "activity-filter") updateFilters({ activityFilter: event.target.value });
     if (event.target.id === "sort-control") updateFilters({ sort: event.target.value });
   });
@@ -1005,9 +836,7 @@
   filterDialog.addEventListener("close", () => {
     if (filterDialog.returnValue === "apply") {
       updateFilters({
-        category: document.querySelector("#mobile-category").value,
         focusArea: document.querySelector("#mobile-focus").value,
-        verification: document.querySelector("#mobile-verification").value,
         activityFilter: document.querySelector("#mobile-activity").value,
         sort: document.querySelector("#mobile-sort").value
       });

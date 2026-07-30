@@ -23,6 +23,8 @@ export function createDatabasePool(): Pool {
 
   return new Pool({
     ...options,
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 30_000,
     max: 10,
   });
 }

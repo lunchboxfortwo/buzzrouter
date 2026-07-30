@@ -26,8 +26,9 @@ request URLs must match this configured origin exactly, regardless of proxy or
 host headers.
 
 The claim and public listing routes require a Node.js runtime with PostgreSQL.
-The current GitHub Pages deployment serves only `public/prototype.html`; it
-does not publish dynamic API or internal routes.
+Production runs the Next.js web process and the discovery worker as separate
+Fly.io process groups. A release command applies migrations before a rolling
+web deployment.
 
 ## Claim flow
 
@@ -100,6 +101,6 @@ strict probe becomes stale.
 - Desktop and mobile browser QA for claim and public detail pages
 - No browser console errors on tested pages
 
-Production still needs managed PostgreSQL, a continuously running discovery
-worker, and a dynamic Node.js host before claim and listing routes can be
-enabled at `buzzrouter.com`.
+The Fly.io release workflow runs the complete verification suite, applies
+migrations, deploys both process groups, and verifies the database-backed
+health endpoint before declaring the release successful.

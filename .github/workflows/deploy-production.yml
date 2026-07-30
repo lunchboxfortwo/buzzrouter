@@ -67,72 +67,41 @@ jobs:
       - name: Build
         run: npm run build
 
-  package:
-    name: Package static site
+  deploy:
+    name: Deploy Fly.io
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      sha256: ${{ steps.artifact.outputs.sha256 }}
-    permissions:
-      contents: read
-      pages: write
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://buzzrouter.com
 
     steps:
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Set up Fly.io
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1
 
-      - name: Build Pages artifact
-        id: artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s public/prototype.html
-          install -D -m 0644 public/prototype.html _site/index.html
-          test "$(find _site -type f | wc -l)" -eq 1
-          echo "sha256=$(sha256sum _site/index.html | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: _site
-          retention-days: 1
-
-  deploy:
-    name: Deploy GitHub Pages
-    needs: package
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - name: Deploy Pages artifact
-        id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+      - name: Deploy application
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
       - name: Verify deployment
         shell: bash
-        env:
-          DEPLOYMENT_URL: ${{ steps.deployment.outputs.page_url }}
-          EXPECTED_SHA256: ${{ needs.package.outputs.sha256 }}
         run: |
           set -euo pipefail
-          body="$(mktemp)"
-          curl \
+          health="$(curl \
             --fail \
-            --location \
-            --retry 8 \
+            --retry 12 \
             --retry-all-errors \
             --retry-delay 5 \
             --max-time 20 \
-            --output "${body}" \
-            "${DEPLOYMENT_URL}?release=${GITHUB_SHA}"
-          test "$(sha256sum "${body}" | cut -d ' ' -f 1)" = "${EXPECTED_SHA256}"
+            https://buzzrouter.fly.dev/api/health)"
+          node -e '
+            const health = JSON.parse(process.argv[1]);
+            if (health.status !== "ok" || health.migration !== "0003_claims_and_listings.sql") {
+              process.exit(1);
+            }
+          ' "${health}"

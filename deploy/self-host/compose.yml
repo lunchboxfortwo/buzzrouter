@@ -27,6 +27,7 @@ services:
       dockerfile: Dockerfile
     restart: "no"
     environment: &app-environment
+      APP_RELEASE_SHA: ${BUZZROUTER_RELEASE_SHA:-unknown}
       DATABASE_SSL: "false"
       DATABASE_URL: postgresql://buzzrouter:${POSTGRES_PASSWORD}@buzzrouter-db:5432/buzzrouter
       DISCOVERY_GITHUB_ENABLED: "false"

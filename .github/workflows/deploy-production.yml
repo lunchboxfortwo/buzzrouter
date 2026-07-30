@@ -68,40 +68,49 @@ jobs:
         run: npm run build
 
   deploy:
-    name: Deploy Fly.io
+    name: Verify self-hosted deployment
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 12
     environment:
       name: production
       url: https://buzzrouter.com
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-
-      - name: Set up Fly.io
-        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1
-
-      - name: Deploy application
-        run: flyctl deploy --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-
-      - name: Verify deployment
+      - name: Wait for the host to deploy this revision
         shell: bash
+        env:
+          EXPECTED_RELEASE: ${{ github.sha }}
         run: |
-          set -euo pipefail
-          health="$(curl \
-            --fail \
-            --retry 12 \
-            --retry-all-errors \
-            --retry-delay 5 \
-            --max-time 20 \
-            https://buzzrouter.fly.dev/api/health)"
-          node -e '
-            const health = JSON.parse(process.argv[1]);
-            if (health.status !== "ok" || health.migration !== "0003_claims_and_listings.sql") {
-              process.exit(1);
-            }
-          ' "${health}"
+          set -u
+          for attempt in $(seq 1 60); do
+            health="$(
+              curl \
+                --fail \
+                --silent \
+                --show-error \
+                --max-time 20 \
+                https://buzzrouter.com/api/health 2>/dev/null
+            )" || true
+
+            if node -e '
+              const health = JSON.parse(process.argv[1] || "{}");
+              const expected = process.argv[2];
+              if (
+                health.status !== "ok" ||
+                health.migration !== "0003_claims_and_listings.sql" ||
+                health.release !== expected
+              ) {
+                process.exit(1);
+              }
+            ' "${health}" "${EXPECTED_RELEASE}"; then
+              echo "Production is serving ${EXPECTED_RELEASE}."
+              exit 0
+            fi
+
+            echo "Attempt ${attempt}/60: production has not reached ${EXPECTED_RELEASE}."
+            sleep 10
+          done
+
+          echo "Production did not deploy ${EXPECTED_RELEASE} within 10 minutes."
+          exit 1

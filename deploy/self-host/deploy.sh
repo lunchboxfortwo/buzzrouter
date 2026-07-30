@@ -19,6 +19,7 @@ fi
 git -C "${source_dir}" fetch --quiet origin main
 target_revision="$(git -C "${source_dir}" rev-parse origin/main)"
 deployed_revision="$(cat "${state_dir}/deployed-revision" 2>/dev/null || true)"
+export BUZZROUTER_RELEASE_SHA="${target_revision}"
 
 if [[ "${target_revision}" == "${deployed_revision}" ]] &&
   curl --fail --silent --show-error --max-time 10 \

@@ -1,8 +1,7 @@
 # Self-hosted production
 
-The self-hosted stack runs PostgreSQL, the Next.js web process, migrations, and
-a dedicated Cloudflare Tunnel under Docker Compose. The discovery worker stays
-disabled until automatic discovery sources are enabled.
+The self-hosted stack runs PostgreSQL, the Next.js web process, migrations, the
+discovery worker, and a dedicated Cloudflare Tunnel under Docker Compose.
 
 Host paths:
 
@@ -12,10 +11,16 @@ Host paths:
 - `/var/lib/buzzrouter/postgres`: PostgreSQL data
 - `/var/backups/buzzrouter`: local PostgreSQL dumps
 
-The deployment timer polls the public repository every two minutes. A new
-revision is built and migrated before Compose replaces the running web
-container. The web origin is exposed only on `127.0.0.1:13100`; public traffic
-arrives through the dedicated Cloudflare Tunnel.
+Verified pushes to `main` start `buzzrouter-deploy.service` through the
+restricted production GitHub Actions runner. A new revision is built and
+migrated before Compose replaces the running web container. The web origin is
+exposed only on `127.0.0.1:13100`; public traffic arrives through the dedicated
+Cloudflare Tunnel.
+
+`buzzrouter-github-discovery.timer` runs a bounded GitHub code search every six
+hours. The host's GitHub credential is passed only to a disposable one-shot
+container and is not stored in the application runtime environment. Candidate
+URLs remain private until the normal strict Buzz relay probe succeeds.
 
 Local dumps protect against application and operator errors, but not loss of
 the host or its two-device linear LVM volume. Configure encrypted off-host

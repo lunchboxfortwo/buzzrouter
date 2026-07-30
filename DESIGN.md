@@ -82,6 +82,38 @@ typography:
     fontWeight: 620
     lineHeight: 1
     letterSpacing: "normal"
+  scale:
+    "step-660": "0.66rem"
+    "step-680": "0.68rem"
+    "step-720": "0.72rem"
+    "step-730": "0.73rem"
+    "step-740": "0.74rem"
+    "step-760": "0.76rem"
+    "step-770": "0.77rem"
+    "step-780": "0.78rem"
+    "step-790": "0.79rem"
+    "step-800": "0.8rem"
+    "step-820": "0.82rem"
+    "step-840": "0.84rem"
+    "step-850": "0.85rem"
+    "step-860": "0.86rem"
+    "step-870": "0.87rem"
+    "step-880": "0.88rem"
+    "step-900": "0.9rem"
+    "step-910": "0.91rem"
+    "step-920": "0.92rem"
+    "step-930": "0.93rem"
+    "step-980": "0.98rem"
+    "step-100": "1rem"
+    "step-105": "1.05rem"
+    "step-108": "1.08rem"
+    "step-115": "1.15rem"
+    "step-120": "1.2rem"
+    "step-125": "1.25rem"
+    "step-145": "1.45rem"
+    "step-165": "1.65rem"
+    "step-215": "2.15rem"
+    "svg-11": "11px"
 rounded:
   hairline: "2px"
   micro: "4px"
@@ -262,6 +294,8 @@ The palette is light-first and restrained: cool neutrals and graphite carry the 
 - **Micro** (500–660, 0.66–0.68rem): Access flags (0.66rem), keyboard hints, and metric footnotes (0.68rem).
 - **SVG Label** (620, 11px): Diagram captions inside the premise-band probe illustration.
 
+The full enumerated interface ramp — every shipped step from 0.66rem to 2.15rem plus the 11px SVG label — is recorded as `typography.scale` in the frontmatter. The in-between steps (.76–.93rem interface band, 1.15–1.45rem headings, 2.15rem mobile display) are the compact band and mobile display steps of the shipped build, not drift.
+
 ### Named Rules
 
 **The One Grotesk Rule.** Use Instrument Sans for the wordmark, interface, labels, metrics, diagram text, and reading copy; vary scale and weight instead of introducing a second typeface.
@@ -286,7 +320,7 @@ At 1180px the Freshness column and activity filter fall away while the split hol
 
 ## Elevation & Depth
 
-Working planes are flat; the canvas is atmospheric. The body carries an SVG fractal-noise grain (opacity .05, 160px tile) over a 22px dot grid (graphite at 6.5%); the footer and empty/placeholder planes carry fainter 18px dot grids (3.5–4%); the premise zone layers soft indigo (15%) and emerald (9%) radial glows with a 17px indigo dot field, all masked to fade radially. Index rows, the inspector, command bars, fields, and cards remain shadowless white; depth comes from dividers, surface shifts, sticky positioning, and the 1px inset selection rule. The masthead and dialog backdrop use blur, and dialogs alone cast a true shadow.
+Working planes are flat; the canvas is atmospheric. The body carries an SVG fractal-noise grain (opacity .05, 160px tile) over a 22px dot grid (graphite at 6.5%); the footer and empty/placeholder planes carry fainter 18px dot grids (3.5–4%); the premise zone layers soft indigo (15%) and emerald (9%) radial glows with a 17px indigo dot field, all masked to fade radially (the mask's `#000` stop is an alpha stop, not a rendered color). Index rows, the inspector, command bars, fields, and cards remain shadowless white; depth comes from dividers, surface shifts, sticky positioning, and the 1px inset selection rule. The masthead and dialog backdrop use blur, and dialogs alone cast a true shadow.
 
 ### Shadow Vocabulary
 

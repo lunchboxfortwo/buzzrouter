@@ -8,115 +8,287 @@
         "role": "neutral",
         "displayName": "Cool Canvas",
         "canonical": "#f4f5f7",
-        "tonalRamp": ["oklch(15% 0.008 255)", "oklch(26% 0.008 255)", "oklch(38% 0.008 255)", "oklch(50% 0.008 255)", "oklch(62% 0.008 255)", "oklch(74% 0.008 255)", "oklch(86% 0.008 255)", "oklch(95% 0.008 255)"]
+        "tonalRamp": [
+          "oklch(15% 0.008 255)",
+          "oklch(26% 0.008 255)",
+          "oklch(38% 0.008 255)",
+          "oklch(50% 0.008 255)",
+          "oklch(62% 0.008 255)",
+          "oklch(74% 0.008 255)",
+          "oklch(86% 0.008 255)",
+          "oklch(95% 0.008 255)"
+        ]
       },
       "working-surface": {
         "role": "neutral",
         "displayName": "Working Surface",
         "canonical": "#ffffff",
-        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(62% 0 0)", "oklch(74% 0 0)", "oklch(86% 0 0)", "oklch(100% 0 0)"]
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(26% 0 0)",
+          "oklch(38% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(62% 0 0)",
+          "oklch(74% 0 0)",
+          "oklch(86% 0 0)",
+          "oklch(100% 0 0)"
+        ]
       },
       "muted-surface": {
         "role": "neutral",
         "displayName": "Muted Surface",
         "canonical": "#f8f9fb",
-        "tonalRamp": ["oklch(15% 0.007 255)", "oklch(26% 0.007 255)", "oklch(38% 0.007 255)", "oklch(50% 0.007 255)", "oklch(62% 0.007 255)", "oklch(74% 0.007 255)", "oklch(86% 0.007 255)", "oklch(97% 0.007 255)"]
+        "tonalRamp": [
+          "oklch(15% 0.007 255)",
+          "oklch(26% 0.007 255)",
+          "oklch(38% 0.007 255)",
+          "oklch(50% 0.007 255)",
+          "oklch(62% 0.007 255)",
+          "oklch(74% 0.007 255)",
+          "oklch(86% 0.007 255)",
+          "oklch(97% 0.007 255)"
+        ]
       },
       "selected-surface": {
         "role": "primary",
         "displayName": "Selected Lavender Plane",
         "canonical": "#f1f1ff",
-        "tonalRamp": ["oklch(15% 0.025 285)", "oklch(26% 0.03 285)", "oklch(38% 0.035 285)", "oklch(50% 0.04 285)", "oklch(62% 0.04 285)", "oklch(74% 0.035 285)", "oklch(86% 0.03 285)", "oklch(95% 0.025 285)"]
+        "tonalRamp": [
+          "oklch(15% 0.025 285)",
+          "oklch(26% 0.03 285)",
+          "oklch(38% 0.035 285)",
+          "oklch(50% 0.04 285)",
+          "oklch(62% 0.04 285)",
+          "oklch(74% 0.035 285)",
+          "oklch(86% 0.03 285)",
+          "oklch(95% 0.025 285)"
+        ]
       },
       "graphite": {
         "role": "neutral",
         "displayName": "Graphite",
         "canonical": "#111318",
-        "tonalRamp": ["oklch(15% 0.015 255)", "oklch(26% 0.015 255)", "oklch(38% 0.014 255)", "oklch(50% 0.012 255)", "oklch(62% 0.01 255)", "oklch(74% 0.008 255)", "oklch(86% 0.006 255)", "oklch(95% 0.004 255)"]
+        "tonalRamp": [
+          "#000000",
+          "oklch(15% 0.015 255)",
+          "oklch(26% 0.015 255)",
+          "oklch(38% 0.014 255)",
+          "oklch(50% 0.012 255)",
+          "oklch(62% 0.01 255)",
+          "oklch(74% 0.008 255)",
+          "oklch(86% 0.006 255)",
+          "oklch(95% 0.004 255)"
+        ]
       },
       "reading-graphite": {
         "role": "neutral",
         "displayName": "Reading Graphite",
         "canonical": "#414958",
-        "tonalRamp": ["oklch(15% 0.025 255)", "oklch(26% 0.025 255)", "oklch(38% 0.024 255)", "oklch(50% 0.022 255)", "oklch(62% 0.019 255)", "oklch(74% 0.015 255)", "oklch(86% 0.01 255)", "oklch(95% 0.006 255)"]
+        "tonalRamp": [
+          "oklch(15% 0.025 255)",
+          "oklch(26% 0.025 255)",
+          "oklch(38% 0.024 255)",
+          "oklch(50% 0.022 255)",
+          "oklch(62% 0.019 255)",
+          "oklch(74% 0.015 255)",
+          "oklch(86% 0.01 255)",
+          "oklch(95% 0.006 255)"
+        ]
       },
       "soft-ink": {
         "role": "neutral",
         "displayName": "Soft Ink",
         "canonical": "#667085",
-        "tonalRamp": ["oklch(15% 0.035 255)", "oklch(26% 0.035 255)", "oklch(38% 0.034 255)", "oklch(50% 0.032 255)", "oklch(62% 0.028 255)", "oklch(74% 0.022 255)", "oklch(86% 0.014 255)", "oklch(95% 0.008 255)"]
+        "tonalRamp": [
+          "oklch(15% 0.035 255)",
+          "oklch(26% 0.035 255)",
+          "oklch(38% 0.034 255)",
+          "oklch(50% 0.032 255)",
+          "oklch(62% 0.028 255)",
+          "oklch(74% 0.022 255)",
+          "oklch(86% 0.014 255)",
+          "oklch(95% 0.008 255)"
+        ]
       },
       "divider": {
         "role": "neutral",
         "displayName": "Divider",
         "canonical": "#dfe2e8",
-        "tonalRamp": ["oklch(15% 0.012 255)", "oklch(26% 0.012 255)", "oklch(38% 0.012 255)", "oklch(50% 0.012 255)", "oklch(62% 0.011 255)", "oklch(74% 0.01 255)", "oklch(86% 0.009 255)", "oklch(92% 0.008 255)"]
+        "tonalRamp": [
+          "oklch(15% 0.012 255)",
+          "oklch(26% 0.012 255)",
+          "oklch(38% 0.012 255)",
+          "oklch(50% 0.012 255)",
+          "oklch(62% 0.011 255)",
+          "oklch(74% 0.01 255)",
+          "oklch(86% 0.009 255)",
+          "oklch(92% 0.008 255)"
+        ]
       },
       "divider-strong": {
         "role": "neutral",
         "displayName": "Strong Divider",
         "canonical": "#c9ced8",
-        "tonalRamp": ["oklch(15% 0.018 255)", "oklch(26% 0.018 255)", "oklch(38% 0.018 255)", "oklch(50% 0.017 255)", "oklch(62% 0.016 255)", "oklch(74% 0.014 255)", "oklch(82% 0.012 255)", "oklch(95% 0.007 255)"]
+        "tonalRamp": [
+          "oklch(15% 0.018 255)",
+          "oklch(26% 0.018 255)",
+          "oklch(38% 0.018 255)",
+          "oklch(50% 0.017 255)",
+          "oklch(62% 0.016 255)",
+          "oklch(74% 0.014 255)",
+          "oklch(82% 0.012 255)",
+          "oklch(95% 0.007 255)"
+        ]
       },
       "electric-indigo": {
         "role": "primary",
         "displayName": "Electric Indigo",
         "canonical": "#5657f2",
-        "tonalRamp": ["oklch(15% 0.16 280)", "oklch(26% 0.21 280)", "oklch(38% 0.25 280)", "oklch(50% 0.27 280)", "oklch(62% 0.23 280)", "oklch(74% 0.17 280)", "oklch(86% 0.10 280)", "oklch(95% 0.045 280)"]
+        "tonalRamp": [
+          "oklch(15% 0.16 280)",
+          "oklch(26% 0.21 280)",
+          "oklch(38% 0.25 280)",
+          "oklch(50% 0.27 280)",
+          "oklch(62% 0.23 280)",
+          "oklch(74% 0.17 280)",
+          "oklch(86% 0.10 280)",
+          "oklch(95% 0.045 280)"
+        ]
       },
       "electric-indigo-strong": {
         "role": "primary",
         "displayName": "Strong Electric Indigo",
         "canonical": "#4445d8",
-        "tonalRamp": ["oklch(15% 0.15 280)", "oklch(26% 0.20 280)", "oklch(38% 0.24 280)", "oklch(48% 0.25 280)", "oklch(62% 0.21 280)", "oklch(74% 0.16 280)", "oklch(86% 0.09 280)", "oklch(95% 0.04 280)"]
+        "tonalRamp": [
+          "oklch(15% 0.15 280)",
+          "oklch(26% 0.20 280)",
+          "oklch(38% 0.24 280)",
+          "oklch(48% 0.25 280)",
+          "oklch(62% 0.21 280)",
+          "oklch(74% 0.16 280)",
+          "oklch(86% 0.09 280)",
+          "oklch(95% 0.04 280)"
+        ]
       },
       "electric-indigo-soft": {
         "role": "primary",
         "displayName": "Indigo Wash",
         "canonical": "#ececff",
-        "tonalRamp": ["oklch(15% 0.035 280)", "oklch(26% 0.04 280)", "oklch(38% 0.045 280)", "oklch(50% 0.05 280)", "oklch(62% 0.05 280)", "oklch(74% 0.045 280)", "oklch(86% 0.04 280)", "oklch(95% 0.03 280)"]
+        "tonalRamp": [
+          "oklch(15% 0.035 280)",
+          "oklch(26% 0.04 280)",
+          "oklch(38% 0.045 280)",
+          "oklch(50% 0.05 280)",
+          "oklch(62% 0.05 280)",
+          "oklch(74% 0.045 280)",
+          "oklch(86% 0.04 280)",
+          "oklch(95% 0.03 280)"
+        ]
       },
       "activity-emerald": {
         "role": "secondary",
         "displayName": "Activity Emerald",
         "canonical": "#087c5b",
-        "tonalRamp": ["oklch(15% 0.08 165)", "oklch(26% 0.11 165)", "oklch(38% 0.14 165)", "oklch(50% 0.14 165)", "oklch(62% 0.12 165)", "oklch(74% 0.09 165)", "oklch(86% 0.055 165)", "oklch(95% 0.025 165)"]
+        "tonalRamp": [
+          "oklch(15% 0.08 165)",
+          "oklch(26% 0.11 165)",
+          "oklch(38% 0.14 165)",
+          "oklch(50% 0.14 165)",
+          "oklch(62% 0.12 165)",
+          "oklch(74% 0.09 165)",
+          "oklch(86% 0.055 165)",
+          "oklch(95% 0.025 165)"
+        ]
       },
       "activity-emerald-muted": {
         "role": "secondary",
         "displayName": "Muted Activity Emerald",
         "canonical": "#316d61",
-        "tonalRamp": ["oklch(15% 0.05 175)", "oklch(26% 0.06 175)", "oklch(38% 0.07 175)", "oklch(48% 0.07 175)", "oklch(62% 0.06 175)", "oklch(74% 0.05 175)", "oklch(86% 0.035 175)", "oklch(95% 0.02 175)"]
+        "tonalRamp": [
+          "oklch(15% 0.05 175)",
+          "oklch(26% 0.06 175)",
+          "oklch(38% 0.07 175)",
+          "oklch(48% 0.07 175)",
+          "oklch(62% 0.06 175)",
+          "oklch(74% 0.05 175)",
+          "oklch(86% 0.035 175)",
+          "oklch(95% 0.02 175)"
+        ]
       },
       "activity-emerald-soft": {
         "role": "secondary",
         "displayName": "Activity Emerald Wash",
         "canonical": "#e9f8f2",
-        "tonalRamp": ["oklch(15% 0.025 165)", "oklch(26% 0.03 165)", "oklch(38% 0.035 165)", "oklch(50% 0.04 165)", "oklch(62% 0.04 165)", "oklch(74% 0.035 165)", "oklch(86% 0.03 165)", "oklch(95% 0.02 165)"]
+        "tonalRamp": [
+          "oklch(15% 0.025 165)",
+          "oklch(26% 0.03 165)",
+          "oklch(38% 0.035 165)",
+          "oklch(50% 0.04 165)",
+          "oklch(62% 0.04 165)",
+          "oklch(74% 0.035 165)",
+          "oklch(86% 0.03 165)",
+          "oklch(95% 0.02 165)"
+        ]
       },
       "caution-ochre": {
         "role": "secondary",
         "displayName": "Caution Ochre",
         "canonical": "#8a5b00",
-        "tonalRamp": ["oklch(15% 0.08 75)", "oklch(26% 0.10 75)", "oklch(38% 0.12 75)", "oklch(50% 0.12 75)", "oklch(62% 0.11 75)", "oklch(74% 0.08 75)", "oklch(86% 0.05 75)", "oklch(95% 0.025 75)"]
+        "tonalRamp": [
+          "oklch(15% 0.08 75)",
+          "oklch(26% 0.10 75)",
+          "oklch(38% 0.12 75)",
+          "oklch(50% 0.12 75)",
+          "oklch(62% 0.11 75)",
+          "oklch(74% 0.08 75)",
+          "oklch(86% 0.05 75)",
+          "oklch(95% 0.025 75)"
+        ]
       },
       "caution-soft": {
         "role": "secondary",
         "displayName": "Caution Wash",
         "canonical": "#fff5d6",
-        "tonalRamp": ["oklch(15% 0.03 85)", "oklch(26% 0.035 85)", "oklch(38% 0.04 85)", "oklch(50% 0.045 85)", "oklch(62% 0.045 85)", "oklch(74% 0.04 85)", "oklch(86% 0.035 85)", "oklch(95% 0.025 85)"]
+        "tonalRamp": [
+          "oklch(15% 0.03 85)",
+          "oklch(26% 0.035 85)",
+          "oklch(38% 0.04 85)",
+          "oklch(50% 0.045 85)",
+          "oklch(62% 0.045 85)",
+          "oklch(74% 0.04 85)",
+          "oklch(86% 0.035 85)",
+          "oklch(95% 0.025 85)"
+        ]
       },
       "danger-red": {
         "role": "secondary",
         "displayName": "Danger Red",
         "canonical": "#b42336",
-        "tonalRamp": ["oklch(15% 0.10 20)", "oklch(26% 0.13 20)", "oklch(38% 0.16 20)", "oklch(50% 0.17 20)", "oklch(62% 0.14 20)", "oklch(74% 0.10 20)", "oklch(86% 0.06 20)", "oklch(95% 0.025 20)"]
+        "tonalRamp": [
+          "oklch(15% 0.10 20)",
+          "oklch(26% 0.13 20)",
+          "oklch(38% 0.16 20)",
+          "oklch(50% 0.17 20)",
+          "oklch(62% 0.14 20)",
+          "oklch(74% 0.10 20)",
+          "oklch(86% 0.06 20)",
+          "oklch(95% 0.025 20)"
+        ]
       },
       "focus-violet": {
         "role": "secondary",
         "displayName": "Focus Violet",
         "canonical": "#7957ff",
-        "tonalRamp": ["oklch(15% 0.16 295)", "oklch(26% 0.21 295)", "oklch(38% 0.25 295)", "oklch(50% 0.27 295)", "oklch(62% 0.24 295)", "oklch(74% 0.18 295)", "oklch(86% 0.10 295)", "oklch(95% 0.045 295)"]
+        "tonalRamp": [
+          "oklch(15% 0.16 295)",
+          "oklch(26% 0.21 295)",
+          "oklch(38% 0.25 295)",
+          "oklch(50% 0.27 295)",
+          "oklch(62% 0.24 295)",
+          "oklch(74% 0.18 295)",
+          "oklch(86% 0.10 295)",
+          "oklch(95% 0.045 295)"
+        ]
       }
     },
     "typographyMeta": {
@@ -159,6 +331,10 @@
       "svg-label": {
         "displayName": "SVG Label",
         "purpose": "11px diagram captions inside the premise-band probe illustration."
+      },
+      "scale": {
+        "displayName": "Interface Scale",
+        "purpose": "The enumerated shipped ramp (0.66-2.15rem plus 11px SVG labels); every literal step in prototype.css is on-system."
       }
     },
     "shadows": [
@@ -253,10 +429,22 @@
       }
     ],
     "breakpoints": [
-      { "name": "workspace-compact", "value": "1180px" },
-      { "name": "workspace-stacked", "value": "920px" },
-      { "name": "small-screen", "value": "680px" },
-      { "name": "narrow-screen", "value": "380px" }
+      {
+        "name": "workspace-compact",
+        "value": "1180px"
+      },
+      {
+        "name": "workspace-stacked",
+        "value": "920px"
+      },
+      {
+        "name": "small-screen",
+        "value": "680px"
+      },
+      {
+        "name": "narrow-screen",
+        "value": "380px"
+      }
     ]
   },
   "components": [

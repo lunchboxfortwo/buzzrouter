@@ -329,6 +329,7 @@ p {
   opacity: .85;
 }
 
+.content-page .premise-underline path,
 .premise-band.is-entering .premise-underline path {
   animation: underline-draw 700ms 300ms var(--ease-out) backwards;
 }
@@ -1278,19 +1279,33 @@ kbd {
 }
 
 .content-page__header {
-  padding: 28px 30px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-  background: var(--surface);
+  position: relative;
+  z-index: 0;
+  padding: 30px 4px 26px;
+}
+
+.content-page__header::before {
+  position: absolute;
+  z-index: -1;
+  inset: -40px -120px -12px;
+  background:
+    radial-gradient(520px 260px at 16% 45%, rgb(86 87 242 / 15%), transparent 70%),
+    radial-gradient(420px 230px at 72% 55%, rgb(8 124 91 / 9%), transparent 72%),
+    radial-gradient(rgb(68 69 216 / 9%) 1.2px, transparent 1.3px);
+  background-size: auto, auto, 17px 17px;
+  content: "";
+  mask-image: radial-gradient(90% 100% at 40% 45%, #000 55%, transparent 100%);
+  pointer-events: none;
 }
 
 .content-page__header h1 {
-  max-width: 18ch;
+  max-width: 17ch;
   margin: 0;
-  font-size: clamp(2rem, 4vw, 3.4rem);
-  font-weight: 750;
-  letter-spacing: -.035em;
-  line-height: 1.02;
+  font-size: clamp(2.3rem, 4.2vw, 3.4rem);
+  font-weight: 700;
+  letter-spacing: -.04em;
+  line-height: 1.04;
+  text-shadow: 5px 5px 0 rgb(86 87 242 / 13%);
 }
 
 .lede {
@@ -1305,8 +1320,7 @@ kbd {
   gap: var(--space-3);
   padding: var(--space-3);
   border: 1px solid var(--line);
-  border-top: 0;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  border-radius: var(--radius-md);
   background: var(--surface-muted);
 }
 
@@ -1945,7 +1959,11 @@ dialog[open]::backdrop {
   }
 
   .content-page__header {
-    padding: 22px 18px;
+    padding: 22px 0 18px;
+  }
+
+  .content-page__header::before {
+    inset: -14px -40px 0;
   }
 
   .content-page__header h1 {

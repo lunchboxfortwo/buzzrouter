@@ -723,7 +723,11 @@
     viewRoot.innerHTML = `
       <div class="page-shell content-page">
         <header class="content-page__header">
-          <h1 id="page-title" tabindex="-1">List your community.</h1>
+          <h1 id="page-title" tabindex="-1">List your <em class="premise-mark">community.
+            <svg class="premise-underline" viewBox="0 0 220 12" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+              <path pathLength="1" d="M4 9 C 60 3.5, 150 2.5, 216 6.5"/>
+            </svg>
+          </em></h1>
           <p class="lede">Listing starts with a relay check — BuzzRouter contacts your relay directly before anything is published. Review does not guarantee publication or ranking.</p>
         </header>
         <div class="content-page__body">

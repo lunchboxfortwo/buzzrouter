@@ -249,6 +249,77 @@ describe("harvestInvites", () => {
     expect(result.newCommunitiesIngested).toBe(1);
     expect(injectImpl).toHaveBeenCalledTimes(1);
   });
+
+  it("merges an LLM-recalled invite the regex missed and flows it through the pipeline", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { pool } = poolWith([
+      { community_id: null, relay_host: "home.example", relay_url: "wss://home.example" },
+    ]);
+    // The message carries a messy invite the regex cannot parse; the LLM pass
+    // surfaces it in canonical form (already re-validated by extractInvites).
+    const readCommunity = readerReturning({
+      "wss://home.example": [message("psst, join us over at fresh.example")],
+    });
+    const llmExtractImpl = vi.fn(async () => [
+      { code: "LLM-CODE", relayHost: "fresh.example", relayUrl: "wss://fresh.example" },
+    ]);
+    const injectImpl: InjectCandidateFn = vi.fn(
+      async (_pool, relay: NormalizedRelay): Promise<CandidateRecord> =>
+        candidateRecord(relay.host),
+    );
+
+    const result = await harvestInvites({
+      injectImpl,
+      llmExtractImpl,
+      pool,
+      readCommunity,
+    });
+
+    expect(llmExtractImpl).toHaveBeenCalledTimes(1);
+    expect(result.invitesFound).toBe(1);
+    expect(result.newCommunitiesIngested).toBe(1);
+    // The recalled invite is ingested exactly like a regex hit would be.
+    expect(injectImpl).toHaveBeenCalledWith(
+      pool,
+      { canonicalRelayUrl: "wss://fresh.example", host: "fresh.example", port: null },
+      {
+        evidenceId: "fresh.example",
+        listing: { inviteCode: "LLM-CODE" },
+        type: "harvest",
+      },
+    );
+  });
+
+  it("dedupes an LLM-recalled invite against an identical regex hit", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { pool } = poolWith([
+      { community_id: null, relay_host: "home.example", relay_url: "wss://home.example" },
+    ]);
+    const readCommunity = readerReturning({
+      "wss://home.example": [
+        message("buzz://join?relay=wss://new.example&code=DUP"),
+      ],
+    });
+    // The LLM independently recalls the SAME invite — it must not double-count.
+    const llmExtractImpl = vi.fn(async () => [
+      { code: "DUP", relayHost: "new.example", relayUrl: "wss://new.example" },
+    ]);
+    const injectImpl: InjectCandidateFn = vi.fn(
+      async (_pool, relay: NormalizedRelay): Promise<CandidateRecord> =>
+        candidateRecord(relay.host),
+    );
+
+    const result = await harvestInvites({
+      injectImpl,
+      llmExtractImpl,
+      pool,
+      readCommunity,
+    });
+
+    expect(result.invitesFound).toBe(1);
+    expect(result.newCommunitiesIngested).toBe(1);
+    expect(injectImpl).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("registerHarvestInvitesWorker", () => {

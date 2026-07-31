@@ -8,7 +8,11 @@ import {
 } from "../db/candidates";
 import { listJoinedCommunities, recordInviteCandidate } from "../db/presence";
 import { normalizeRelayUrl, type NormalizedRelay } from "../discovery/normalize";
-import { extractInvites } from "../presence/extract-invites";
+import {
+  extractInvites,
+  type HarvestedInvite,
+} from "../presence/extract-invites";
+import { llmExtractInvites } from "../presence/llm-extract-invites";
 import {
   readCommunity as defaultReadCommunity,
   type PresenceMessage,
@@ -43,6 +47,10 @@ export type ReadCommunityFn = (
   options: ReadCommunityOptions,
 ) => Promise<PresenceMessage[]>;
 
+export type LlmExtractFn = (
+  messages: { content: string }[],
+) => Promise<HarvestedInvite[]>;
+
 export type InjectCandidateFn = (
   pool: Pool,
   relay: NormalizedRelay,
@@ -55,6 +63,13 @@ export interface HarvestInvitesDeps {
   readCommunity?: ReadCommunityFn;
   /** Injectable candidate ingestion; defaults to the real `upsertCandidate`. */
   injectImpl?: InjectCandidateFn;
+  /**
+   * Injectable LLM recall pass; defaults to the real `llmExtractInvites`. Runs
+   * as a second pass alongside the regex extractor to surface invites the
+   * structured formats miss. Recall-only: every candidate it returns is still
+   * re-validated by `extractInvites` and vetted downstream.
+   */
+  llmExtractImpl?: LlmExtractFn;
   /** Agent private key; defaults to the loaded agent identity's key. */
   privateKey?: Uint8Array;
   /** Recent-message read cap per community. Defaults to the reader's own. */
@@ -85,6 +100,7 @@ interface Harvested {
 async function collectInvites(
   deps: HarvestInvitesDeps,
   readCommunity: ReadCommunityFn,
+  llmExtract: LlmExtractFn,
   result: HarvestInvitesResult,
 ): Promise<{ joinedHosts: Set<string>; harvested: Harvested[] }> {
   const joined = await listJoinedCommunities(deps.pool);
@@ -92,6 +108,13 @@ async function collectInvites(
 
   const harvested: Harvested[] = [];
   const seen = new Set<string>();
+
+  const push = (invite: HarvestedInvite, sourceRelayHost: string): void => {
+    const key = `${invite.relayHost} ${invite.code}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    harvested.push({ ...invite, sourceRelayHost });
+  };
 
   for (const community of joined) {
     result.scannedCommunities += 1;
@@ -110,13 +133,26 @@ async function collectInvites(
       continue;
     }
 
+    // First pass: the deterministic structured-format extractor.
     for (const message of messages) {
       for (const invite of extractInvites(message.content)) {
-        const key = `${invite.relayHost} ${invite.code}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        harvested.push({ ...invite, sourceRelayHost: community.relayHost });
+        push(invite, community.relayHost);
       }
+    }
+
+    // Second pass: LLM recall for invites the regex missed. Every candidate is
+    // already re-validated by `extractInvites` inside `llmExtract`, so these are
+    // merged (and deduped) on equal footing with the regex hits. Isolated so a
+    // recall failure never aborts the scan.
+    try {
+      for (const invite of await llmExtract(messages)) {
+        push(invite, community.relayHost);
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error(
+        `${HARVEST_INVITES_QUEUE}: recall failed ${community.relayHost}: ${reason}`,
+      );
     }
   }
 
@@ -129,6 +165,7 @@ export async function harvestInvites(
 ): Promise<HarvestInvitesResult> {
   const readCommunity = deps.readCommunity ?? defaultReadCommunity;
   const injectImpl = deps.injectImpl ?? defaultUpsertCandidate;
+  const llmExtract = deps.llmExtractImpl ?? llmExtractInvites;
 
   const result: HarvestInvitesResult = {
     candidatesForExisting: 0,
@@ -141,6 +178,7 @@ export async function harvestInvites(
   const { harvested, joinedHosts } = await collectInvites(
     deps,
     readCommunity,
+    llmExtract,
     result,
   );
 

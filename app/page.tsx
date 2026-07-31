@@ -14,6 +14,8 @@ import { focusLabel } from "../src/ranking/focus";
 
 import { AutoSubmitSelect } from "./AutoSubmitSelect";
 import { CopyRelayButton } from "./CopyRelayButton";
+import { SiteMasthead } from "./SiteMasthead";
+import chrome from "./site-chrome.module.css";
 import styles from "./directory.module.css";
 
 export const dynamic = "force-dynamic";
@@ -82,7 +84,7 @@ export default async function DirectoryPage({
   const filtersApplied = Boolean(search || focusFilter || accessFilter !== "all");
 
   return (
-    <div className={styles.page}>
+    <div className={`${chrome.siteCanvas} ${styles.page}`}>
       <a className={styles.skipLink} href="#directory">
         Skip to directory
       </a>
@@ -92,53 +94,7 @@ export default async function DirectoryPage({
           <input name="selected" type="hidden" value={selected.candidateId} />
         ) : null}
 
-        <header className={styles.header}>
-          <div className={styles.headerInner}>
-            <a
-              aria-label="BuzzRouter directory"
-              className={styles.brand}
-              href="/"
-            >
-              <Image
-                alt=""
-                className={styles.logo}
-                height={34}
-                priority
-                src="/assets/brand/buzzrouter-logo.png"
-                width={34}
-              />
-              <span>BuzzRouter</span>
-            </a>
-
-            <nav aria-label="Primary navigation" className={styles.nav}>
-              <a aria-current="page" className={styles.navLink} href="/">
-                Discover
-              </a>
-              <Link className={styles.navLink} href="/shared-channels">
-                Shared channels
-              </Link>
-              <Link className={styles.navLink} href="/submit">List a community</Link>
-            </nav>
-
-            <div className={styles.searchField}>
-              <label className={styles.visuallyHidden} htmlFor="community-search">
-                Search communities
-              </label>
-              <svg aria-hidden="true" className={styles.searchIcon} viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="7" />
-                <path d="m16.5 16.5 4 4" />
-              </svg>
-              <input
-                className={styles.searchInput}
-                defaultValue={search}
-                id="community-search"
-                name="q"
-                placeholder="Search communities or topics"
-                type="search"
-              />
-            </div>
-          </div>
-        </header>
+        <SiteMasthead current="discover" searchDefaultValue={search} searchInForm />
 
         <main id="directory">
           <div className={styles.workspaceShell}>
@@ -312,12 +268,6 @@ export default async function DirectoryPage({
               )}
             </div>
 
-            <section aria-label="Directory actions" className={styles.workspaceActions}>
-              <p>
-                BuzzRouter links you to each community&rsquo;s own Buzz relay; joining
-                happens there.
-              </p>
-            </section>
 
           </div>
         </main>

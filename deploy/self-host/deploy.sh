@@ -58,7 +58,11 @@ compose=(
   worker \
   tunnel
 
-expected_migration="$(ls "${source_dir}/migrations" | sort | tail -1)"
+# Assert every migration file in the deploying revision has been applied, not
+# just the single newest name: under concurrency production's newest applied
+# migration can legitimately run ahead of this revision's newest file, which a
+# newest-to-newest comparison would misreport as a failure. A subset check
+# tolerates production being ahead while still failing on a genuinely missing one.
 release_ready=false
 for attempt in $(seq 1 30); do
   if health="$(
@@ -66,15 +70,27 @@ for attempt in $(seq 1 30); do
       "http://127.0.0.1:${BUZZROUTER_PORT:-13100}/api/health"
   )" &&
     node -e '
+      const fs = require("node:fs");
       const health = JSON.parse(process.argv[1]);
       const expectedRelease = process.argv[2];
-      const expectedMigration = process.argv[3];
+      const migrationsDir = process.argv[3];
+      const expected = fs
+        .readdirSync(migrationsDir)
+        .filter((name) => name.endsWith(".sql"))
+        .sort();
+      const applied = new Set(
+        Array.isArray(health.migrations) ? health.migrations : [],
+      );
+      const missing = expected.filter((name) => !applied.has(name));
+      if (missing.length > 0) {
+        console.error(`migrations not yet applied: ${missing.join(", ")}`);
+      }
       const valid =
         health.status === "ok" &&
-        health.migration === expectedMigration &&
-        health.release === expectedRelease;
+        health.release === expectedRelease &&
+        missing.length === 0;
       process.exit(valid ? 0 : 1);
-    ' "${health}" "${target_revision}" "${expected_migration}"; then
+    ' "${health}" "${target_revision}" "${source_dir}/migrations"; then
     release_ready=true
     break
   fi

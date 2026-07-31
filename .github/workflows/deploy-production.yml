@@ -121,11 +121,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Derived, never hard-coded: a pinned name goes stale the moment a
-          # migration lands, which reports a false failure for a deploy that
-          # actually succeeded.
-          EXPECTED_MIGRATION="$(ls migrations | sort | tail -1)"
-          echo "Expecting migration ${EXPECTED_MIGRATION}."
+          # Assert every migration file in the DEPLOYING revision has been
+          # applied in production — do NOT compare only the single newest name.
+          # Comparing newest-to-newest reports a false failure whenever a
+          # concurrent commit lands a HIGHER-numbered migration: production's
+          # newest applied name then legitimately runs ahead of this revision's
+          # newest file. A subset check tolerates production being ahead while
+          # still failing loudly if any file this revision ships is missing.
+          echo "Expecting production to have applied:"
+          ls migrations | sort | sed 's/^/  /'
 
           for attempt in $(seq 1 30); do
             if health="$(
@@ -138,18 +142,28 @@ jobs:
             )" &&
               python3 -c '
           import json
+          import pathlib
           import sys
 
           health = json.loads(sys.argv[1])
-          expected = sys.argv[2]
-          expected_migration = sys.argv[3]
-          valid = (
-              health.get("status") == "ok"
-              and health.get("migration") == expected_migration
-              and health.get("release") == expected
-          )
+          expected_release = sys.argv[2]
+
+          expected = sorted(p.name for p in pathlib.Path("migrations").glob("*.sql"))
+          applied = set(health.get("migrations") or [])
+          missing = [name for name in expected if name not in applied]
+
+          status = health.get("status")
+          release = health.get("release")
+          if status != "ok":
+              print("health status is not ok: %r" % (status,), file=sys.stderr)
+          if release != expected_release:
+              print("release mismatch: %r != %r" % (release, expected_release), file=sys.stderr)
+          if missing:
+              print("migrations not yet applied: %r" % (missing,), file=sys.stderr)
+
+          valid = status == "ok" and release == expected_release and not missing
           raise SystemExit(0 if valid else 1)
-          ' "${health}" "${EXPECTED_RELEASE}" "${EXPECTED_MIGRATION}"; then
+          ' "${health}" "${EXPECTED_RELEASE}"; then
               echo "Production is serving ${EXPECTED_RELEASE}."
               exit 0
             fi

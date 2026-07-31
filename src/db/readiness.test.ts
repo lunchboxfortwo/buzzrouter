@@ -31,12 +31,16 @@ describe("assertDiscoveryDatabaseReady", () => {
         ],
       })
       .mockResolvedValueOnce({
-        rows: [{ name: "0001_discovery.sql" }],
+        rows: [
+          { name: "0001_discovery.sql" },
+          { name: "0002_source_discovery.sql" },
+        ],
       });
     const pool = { query } as unknown as Pool;
 
     await expect(assertDiscoveryDatabaseReady(pool)).resolves.toEqual({
-      migration: "0001_discovery.sql",
+      migration: "0002_source_discovery.sql",
+      migrations: ["0001_discovery.sql", "0002_source_discovery.sql"],
       tables: [
         "community_candidates",
         "community_sources",

@@ -10,6 +10,7 @@ export async function GET(): Promise<Response> {
     return Response.json(
       {
         migration: readiness.migration,
+        migrations: readiness.migrations,
         release: process.env.APP_RELEASE_SHA ?? "unknown",
         status: "ok",
       },

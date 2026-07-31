@@ -3,7 +3,14 @@
 -- activates the route once it hears that code typed into the chosen channel by a
 -- pubkey the community's relay-signed roster marks owner/admin. The web click
 -- alone is a POINTER; authority to bind lives in the counterparty's own roster.
-CREATE TABLE shared_channel_confirmations (
+--
+-- Renumbered from 0013_shared_channel_confirmations.sql after a concurrent 0013
+-- collision on main. Production already applied this DDL under the OLD filename,
+-- and the runner keys buzzrouter_schema_migrations by filename, so it will treat
+-- 0015 as pending and re-run this file once. Every statement below is therefore
+-- idempotent (IF NOT EXISTS throughout): the reconciling re-run is a clean no-op
+-- that just records the new name; fresh databases still get the full schema.
+CREATE TABLE IF NOT EXISTS shared_channel_confirmations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   shared_channel_id uuid NOT NULL
     REFERENCES shared_channels (id) ON DELETE CASCADE,
@@ -60,11 +67,11 @@ CREATE TABLE shared_channel_confirmations (
 );
 
 -- At most one live code per endpoint; re-arming replaces the previous one.
-CREATE UNIQUE INDEX shared_channel_confirmations_pending_idx
+CREATE UNIQUE INDEX IF NOT EXISTS shared_channel_confirmations_pending_idx
   ON shared_channel_confirmations (endpoint_id)
   WHERE state = 'pending';
 
 -- The connector loads live codes by the connection it already holds open.
-CREATE INDEX shared_channel_confirmations_connection_idx
+CREATE INDEX IF NOT EXISTS shared_channel_confirmations_connection_idx
   ON shared_channel_confirmations (connection_id)
   WHERE state = 'pending';

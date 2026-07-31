@@ -18,8 +18,9 @@ export default async function SubmitPage({
   const host = firstValue(params.host);
 
   return (
-    <div className={`${chrome.siteCanvas} ${styles.page}`}>
+    <div className={chrome.siteCanvas}>
       <SiteMasthead current="submit" />
+      <div className={styles.page}>
 
       <main>
         <section className={styles.intro}>
@@ -93,6 +94,7 @@ export default async function SubmitPage({
           </dl>
         </section>
       </main>
+      </div>
     </div>
   );
 }

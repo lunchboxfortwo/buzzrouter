@@ -11,9 +11,9 @@ export const metadata: Metadata = {
 
 export default function SharedChannelsPage() {
   return (
-    <div className={`${chrome.siteCanvas} ${styles.page}`}>
+    <div className={chrome.siteCanvas}>
       <SiteMasthead current="shared-channels" />
-      <main>
+      <main className={styles.page}>
       <header className={styles.header}>
         <p>Community administration</p>
         <h1>Shared channels</h1>

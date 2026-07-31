@@ -32,7 +32,9 @@ import {
   ConnectorSupervisor,
   type RelayConnection,
   type RelayConnectionFactory,
+  type RelayGroup,
 } from "./connector";
+import { listCommunityLocalChannels } from "./local-channels";
 import {
   getCommunityInstallDescriptor,
   hashInstallToken,
@@ -432,6 +434,69 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
     });
   });
 
+  it("lists local channels for an owned, connected community", async () => {
+    const community = await createConnectedCommunity(pool, "picker");
+    const relayFactory = new GroupListingRelayFactory([
+      { id: "group-2", name: "Zeta" },
+      { id: "group-1", name: "Alpha" },
+    ]);
+
+    const listing = await listCommunityLocalChannels(
+      pool,
+      {
+        communityId: community.communityId,
+        ownerPubkey: community.ownerPubkey,
+      },
+      { getKey: async () => wrappingKey },
+      relayFactory,
+    );
+
+    expect(listing.connectorActive).toBe(true);
+    expect(listing.channels).toEqual([
+      { id: "group-1", name: "Alpha" },
+      { id: "group-2", name: "Zeta" },
+    ]);
+    expect(relayFactory.connectCalls).toBe(1);
+    expect(relayFactory.closed).toBe(true);
+  });
+
+  it("reports the connector inactive for an owned community with no connector", async () => {
+    const community = await createVerifiedCommunity(pool, "unconnected");
+    const relayFactory = new GroupListingRelayFactory([]);
+
+    const listing = await listCommunityLocalChannels(
+      pool,
+      {
+        communityId: community.communityId,
+        ownerPubkey: community.ownerPubkey,
+      },
+      { getKey: async () => wrappingKey },
+      relayFactory,
+    );
+
+    expect(listing).toEqual({ channels: [], connectorActive: false });
+    expect(relayFactory.connectCalls).toBe(0);
+  });
+
+  it("refuses to list channels for a community the caller does not own", async () => {
+    const community = await createConnectedCommunity(pool, "guarded");
+
+    await expect(
+      listCommunityLocalChannels(
+        pool,
+        {
+          communityId: community.communityId,
+          ownerPubkey: hex(32),
+        },
+        { getKey: async () => wrappingKey },
+        new GroupListingRelayFactory([]),
+      ),
+    ).rejects.toMatchObject({
+      code: "community_owner_required",
+      status: 403,
+    });
+  });
+
   it("ingests and delivers through the connector supervisor", async () => {
     const route = await createActiveRoute(pool);
     const endpoints = await listSharedChannelEndpoints(
@@ -671,6 +736,10 @@ class FakeRelayConnection implements RelayConnection {
     return this.published.some((event) => event.id === eventId);
   }
 
+  async listGroups(): Promise<never[]> {
+    return [];
+  }
+
   async publish(event: Event): Promise<void> {
     this.published.push(event);
   }
@@ -681,6 +750,31 @@ class FakeRelayConnection implements RelayConnection {
     _onClose: (reason: string) => void,
   ): void {
     this.onEvent = onEvent;
+  }
+}
+
+class GroupListingRelayFactory implements RelayConnectionFactory {
+  connectCalls = 0;
+  closed = false;
+
+  constructor(private readonly groups: RelayGroup[]) {}
+
+  async connect(): Promise<RelayConnection> {
+    this.connectCalls += 1;
+    const factory = this;
+    return {
+      close() {
+        factory.closed = true;
+      },
+      async hasEvent() {
+        return false;
+      },
+      async listGroups() {
+        return factory.groups;
+      },
+      async publish() {},
+      subscribe() {},
+    };
   }
 }
 

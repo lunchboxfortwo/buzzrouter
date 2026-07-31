@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
+import type { Event } from "nostr-tools/core";
 import type { Relay } from "nostr-tools/relay";
 
 import {
@@ -59,6 +60,77 @@ describe("NostrRelayConnection", () => {
 
     expect(state.authCalls).toBe(0);
     expect(state.publishCalls).toBe(1);
+  });
+});
+
+describe("NostrRelayConnection.listGroups", () => {
+  function groupEvent(id: string, name?: string): Event {
+    const tags = [["d", id]];
+    if (name !== undefined) tags.push(["name", name]);
+    return { kind: 39_000, tags } as unknown as Event;
+  }
+
+  it("returns deduplicated NIP-29 groups, falling back to the id for a missing name", async () => {
+    const relay = {
+      async auth() {
+        return "";
+      },
+      subscribe(
+        _filters: unknown,
+        params: {
+          onevent: (event: Event) => void;
+          oneose: () => void;
+        },
+      ) {
+        params.onevent(groupEvent("group-b", "Beta"));
+        params.onevent(groupEvent("group-a", "Alpha"));
+        params.onevent(groupEvent("group-a", "Alpha (renamed)"));
+        params.onevent(groupEvent("group-c"));
+        params.oneose();
+        return { close() {} };
+      },
+    } as unknown as Relay;
+    const connection = new NostrRelayConnection(relay, randomBytes(32));
+
+    await expect(connection.listGroups()).resolves.toEqual([
+      { id: "group-b", name: "Beta" },
+      { id: "group-a", name: "Alpha (renamed)" },
+      { id: "group-c", name: "group-c" },
+    ]);
+  });
+
+  it("re-authenticates and retries once when a listing is closed auth-required", async () => {
+    const state = { authCalls: 0, subscribeCalls: 0 };
+    const relay = {
+      async auth() {
+        state.authCalls += 1;
+        return "";
+      },
+      subscribe(
+        _filters: unknown,
+        params: {
+          onclose: (reason: string) => void;
+          onevent: (event: Event) => void;
+          oneose: () => void;
+        },
+      ) {
+        state.subscribeCalls += 1;
+        if (state.subscribeCalls === 1) {
+          params.onclose("auth-required: authentication needed");
+        } else {
+          params.onevent(groupEvent("group-a", "Alpha"));
+          params.oneose();
+        }
+        return { close() {} };
+      },
+    } as unknown as Relay;
+    const connection = new NostrRelayConnection(relay, randomBytes(32));
+
+    await expect(connection.listGroups()).resolves.toEqual([
+      { id: "group-a", name: "Alpha" },
+    ]);
+    expect(state.authCalls).toBe(1);
+    expect(state.subscribeCalls).toBe(2);
   });
 });
 

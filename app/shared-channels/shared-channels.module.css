@@ -345,6 +345,40 @@
   grid-column: 1 / -1;
 }
 
+.channelField {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.channelFieldLabel {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.channelHint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.channelPickerInline {
+  display: contents;
+}
+
+.channelActions select {
+  min-width: 160px;
+}
+
+.channelHintInline {
+  color: var(--muted);
+  flex-basis: 100%;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
 .channelSection {
   padding: 20px;
 }

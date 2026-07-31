@@ -34,6 +34,11 @@ import {
   type RelayConnectionFactory,
 } from "./connector";
 import {
+  getCommunityInstallDescriptor,
+  hashInstallToken,
+  verifyAndActivateCommunityConnection,
+} from "./installer";
+import {
   acceptSharedChannel,
   activateCommunityConnection,
   beginCommunityConnectionInstall,
@@ -86,6 +91,47 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
   afterAll(async () => {
     await boss?.stop();
     await pool?.end();
+  });
+
+  it("activates an install token only after a relay round trip", async () => {
+    const community = await createVerifiedCommunity(pool, "installer");
+    const token = randomBytes(32).toString("base64url");
+    const privateKey = randomBytes(32);
+    const bridgePubkey = getPublicKey(privateKey);
+    await beginCommunityConnectionInstall(pool, {
+      bridgePubkey,
+      communityId: community.communityId,
+      ownerPubkey: community.ownerPubkey,
+      privateKey,
+      tokenHash: hashInstallToken(token),
+      wrappingKey,
+      wrappingKeyVersion: 1,
+    });
+    const descriptor = await getCommunityInstallDescriptor(pool, token);
+    expect(descriptor).toMatchObject({
+      bridgePubkey,
+      relayUrl: community.relayUrl,
+    });
+
+    const relays = new FakeRelayFactory();
+    const connection = await verifyAndActivateCommunityConnection(
+      pool,
+      token,
+      { getKey: async () => wrappingKey },
+      relays,
+    );
+    expect(connection.state).toBe("active");
+    expect(relays.get(community.relayUrl).published).toMatchObject([
+      { kind: 0, pubkey: bridgePubkey },
+    ]);
+    await expect(
+      verifyAndActivateCommunityConnection(
+        pool,
+        token,
+        { getKey: async () => wrappingKey },
+        relays,
+      ),
+    ).rejects.toMatchObject({ code: "install_token_unavailable" });
   });
 
   it("enforces endpoint-owned pause and immediate disconnect", async () => {
@@ -412,6 +458,10 @@ interface CommunityFixture {
   ownerPubkey: string;
 }
 
+interface VerifiedCommunityFixture extends CommunityFixture {
+  relayUrl: string;
+}
+
 async function createActiveRoute(pool: Pool): Promise<{
   destination: CommunityFixture;
   sharedChannelId: string;
@@ -451,32 +501,8 @@ async function createConnectedCommunity(
   pool: Pool,
   name: string,
 ): Promise<CommunityFixture> {
-  const ownerPubkey = hex(32);
-  const candidate = await pool.query<{ id: string }>(
-    `
-      INSERT INTO community_candidates (
-        canonical_relay_url,
-        host,
-        state
-      )
-      VALUES ($1, $2, 'verified_buzz')
-      RETURNING id
-    `,
-    [`wss://${name}-${randomUUID()}.example.com`, `${name}.example.com`],
-  );
-  const community = await pool.query<{ id: string }>(
-    `
-      INSERT INTO communities (
-        candidate_id,
-        claim_state,
-        owner_pubkey
-      )
-      VALUES ($1, 'admin_verified', $2)
-      RETURNING id
-    `,
-    [candidate.rows[0].id, ownerPubkey],
-  );
-  const communityId = community.rows[0].id;
+  const fixture = await createVerifiedCommunity(pool, name);
+  const { communityId, ownerPubkey } = fixture;
   const tokenHash = hex(32);
   const privateKey = randomBytes(32);
   await beginCommunityConnectionInstall(pool, {
@@ -492,6 +518,40 @@ async function createConnectedCommunity(
     challengeEventId: hex(32),
   });
   return { communityId, ownerPubkey };
+}
+
+async function createVerifiedCommunity(
+  pool: Pool,
+  name: string,
+): Promise<VerifiedCommunityFixture> {
+  const ownerPubkey = hex(32);
+  const relayUrl = `wss://${name}-${randomUUID()}.example.com`;
+  const candidate = await pool.query<{ id: string }>(
+    `
+      INSERT INTO community_candidates (
+        canonical_relay_url,
+        host,
+        state
+      )
+      VALUES ($1, $2, 'verified_buzz')
+      RETURNING id
+    `,
+    [relayUrl, `${name}.example.com`],
+  );
+  const community = await pool.query<{ id: string }>(
+    `
+      INSERT INTO communities (
+        candidate_id,
+        claim_state,
+        owner_pubkey
+      )
+      VALUES ($1, 'admin_verified', $2)
+      RETURNING id
+    `,
+    [candidate.rows[0].id, ownerPubkey],
+  );
+  const communityId = community.rows[0].id;
+  return { communityId, ownerPubkey, relayUrl };
 }
 
 function hex(bytes: number): string {

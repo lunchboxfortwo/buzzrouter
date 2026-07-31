@@ -37,6 +37,35 @@ export function requireUuid(value: unknown): string {
   return value;
 }
 
+export function requireInstallToken(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    !/^[A-Za-z0-9_-]{43}$/.test(value)
+  ) {
+    throw new ApiError("invalid_input", "Install token is invalid.");
+  }
+  return value;
+}
+
+export async function readInstallerRequest(
+  request: Request,
+): Promise<Record<string, unknown>> {
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > 1_024) {
+    throw new ApiError("invalid_input", "Request body is too large.", 413);
+  }
+  const body = await request.text();
+  if (Buffer.byteLength(body, "utf8") > 1_024) {
+    throw new ApiError("invalid_input", "Request body is too large.", 413);
+  }
+  try {
+    return requireObject(JSON.parse(body));
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError("invalid_input", "Request body is invalid.");
+  }
+}
+
 export function requireText(
   value: unknown,
   maxLength: number,

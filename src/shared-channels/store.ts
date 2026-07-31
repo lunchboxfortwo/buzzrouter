@@ -103,6 +103,13 @@ export interface BeginCommunityConnectionInstallResult {
   tokenId: string;
 }
 
+export interface CommunityConnectionInstallContext
+  extends CommunityConnectionRecord,
+    EncryptedConnectorKey {
+  expiresAt: string;
+  tokenId: string;
+}
+
 export interface CreateSharedChannelInput {
   destinationCommunityId: string;
   expiresAt?: Date;
@@ -499,6 +506,64 @@ export async function activateCommunityConnection(
 
     return mapConnection(connection);
   });
+}
+
+export async function getCommunityConnectionInstallContext(
+  pool: Pool,
+  tokenHash: string,
+): Promise<CommunityConnectionInstallContext> {
+  assertHex(tokenHash, 64, "Install token hash");
+  const result = await pool.query<
+    CommunityConnectionRow & {
+      encrypted_private_key: Buffer;
+      expires_at: Date;
+      private_key_auth_tag: Buffer;
+      private_key_nonce: Buffer;
+      token_id: string;
+    }
+  >(
+    `
+      SELECT
+        connections.id,
+        connections.community_id,
+        connections.relay_url_snapshot,
+        connections.bridge_pubkey,
+        connections.encrypted_private_key,
+        connections.private_key_nonce,
+        connections.private_key_auth_tag,
+        connections.wrapping_key_version,
+        connections.state,
+        connections.health,
+        tokens.id AS token_id,
+        tokens.expires_at
+      FROM connection_install_tokens AS tokens
+      JOIN community_connections AS connections
+        ON connections.community_id = tokens.community_id
+        AND connections.bridge_pubkey = tokens.bridge_pubkey
+      WHERE tokens.token_hash = $1
+        AND tokens.state = 'pending'
+        AND tokens.expires_at > now()
+        AND tokens.attempts < 10
+        AND connections.state = 'installing'
+    `,
+    [tokenHash],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new ApiError(
+      "install_token_unavailable",
+      "The install token is expired or already used.",
+      409,
+    );
+  }
+  return {
+    ...mapConnection(row),
+    authTag: row.private_key_auth_tag,
+    ciphertext: row.encrypted_private_key,
+    expiresAt: row.expires_at.toISOString(),
+    nonce: row.private_key_nonce,
+    tokenId: row.token_id,
+  };
 }
 
 export async function createSharedChannel(

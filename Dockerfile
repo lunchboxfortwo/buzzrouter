@@ -2,6 +2,7 @@ FROM node:24-bookworm-slim AS dependencies
 
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY packages/connect/package.json packages/connect/package.json
 RUN npm ci
 
 FROM dependencies AS build

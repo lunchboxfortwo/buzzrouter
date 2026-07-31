@@ -16,6 +16,13 @@ import styles from "./shared-channels.module.css";
 
 type Action = "accept" | "reject" | "pause" | "resume" | "disconnect";
 
+interface InstallTokenResponse {
+  bridgePubkey: string;
+  command: string;
+  expiresAt: string;
+  relayUrl: string;
+}
+
 export function SharedChannelsClient() {
   const [workspace, setWorkspace] =
     useState<SharedChannelAdminWorkspace | null>(null);
@@ -23,6 +30,9 @@ export function SharedChannelsClient() {
   const [pubkey, setPubkey] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [install, setInstall] = useState<InstallTokenResponse | null>(
+    null,
+  );
 
   const activeCommunity = workspace?.communities.find(
     (community) => community.id === activeCommunityId,
@@ -51,6 +61,7 @@ export function SharedChannelsClient() {
       );
       setPubkey(signerPubkey);
       setWorkspace(next);
+      setInstall(null);
       setActiveCommunityId((current) =>
         next.communities.some((community) => community.id === current)
           ? current
@@ -90,6 +101,24 @@ export function SharedChannelsClient() {
       );
       await refresh();
       setMessage(actionMessage(action));
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createInstallCommand() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await signedRequest<InstallTokenResponse>(
+        "/api/community-connections/install-token",
+        "POST",
+        { communityId: activeCommunityId },
+      );
+      setInstall(result);
+      setMessage("Install command ready.");
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -148,8 +177,14 @@ export function SharedChannelsClient() {
       </section>
 
       {activeCommunity ? (
-        <ConnectionStatus community={activeCommunity} />
+        <ConnectionStatus
+          busy={busy}
+          community={activeCommunity}
+          onConnect={createInstallCommand}
+        />
       ) : null}
+
+      {install ? <InstallerCommand install={install} /> : null}
 
       {activeCommunity?.connectionState === "active" ? (
         <ProposalForm
@@ -199,9 +234,13 @@ export function SharedChannelsClient() {
 }
 
 function ConnectionStatus({
+  busy,
   community,
+  onConnect,
 }: {
+  busy: boolean;
   community: SharedChannelCommunitySummary;
+  onConnect: () => Promise<void>;
 }) {
   const connected = community.connectionState === "active";
   return (
@@ -213,9 +252,38 @@ function ConnectionStatus({
           <p>{community.relayUrl}</p>
         </div>
       </div>
-      <span className={styles.state}>
-        {connected ? community.connectionHealth : "Not connected"}
-      </span>
+      {connected ? (
+        <span className={styles.state}>{community.connectionHealth}</span>
+      ) : (
+        <button disabled={busy} onClick={onConnect} type="button">
+          Connect Buzz
+        </button>
+      )}
+    </section>
+  );
+}
+
+function InstallerCommand({
+  install,
+}: {
+  install: InstallTokenResponse;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    await navigator.clipboard.writeText(install.command);
+    setCopied(true);
+  }
+
+  return (
+    <section className={styles.installer}>
+      <div>
+        <span>One-time command</span>
+        <code>{install.command}</code>
+      </div>
+      <button className={styles.secondary} onClick={copy} type="button">
+        {copied ? "Copied" : "Copy command"}
+      </button>
     </section>
   );
 }

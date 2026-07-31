@@ -217,7 +217,7 @@
   .headerInner {
     align-items: center;
     column-gap: 12px;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     min-height: 56px;
     padding: 0 10px;
     row-gap: 4px;
@@ -234,28 +234,25 @@
     width: 30px;
   }
 
+  /* The masthead scrolls away on phones, so the nav can have a full row and
+     fit all three routes without a hidden sideways swipe. */
   .nav {
-    grid-column: 2;
-    grid-row: 1;
-    justify-content: flex-start;
-    overflow-x: auto;
-    scrollbar-width: none;
-    white-space: nowrap;
-  }
-
-  .nav::-webkit-scrollbar {
-    display: none;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: space-between;
+    margin-inline: -8px;
   }
 
   .navLink {
-    flex: 0 0 auto;
-    padding-inline: 10px;
+    flex: 0 1 auto;
+    font-size: 0.86rem;
+    padding-inline: 8px;
   }
 
   .searchField,
   .searchForm {
     grid-column: 1 / -1;
-    grid-row: 2;
+    grid-row: 3;
   }
 }
 

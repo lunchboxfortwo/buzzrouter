@@ -1058,6 +1058,11 @@
   background-size: 18px 18px;
   border-top: 1px solid var(--line);
   margin-top: var(--space-6);
+  .indexNoFocus .indexHeader,
+  .indexNoFocus .indexRow {
+    grid-template-columns: minmax(0, 1fr) auto 24px;
+  }
+
 }
 
 .footerInner {
@@ -1392,9 +1397,32 @@
     padding-block: 26px 30px;
     width: min(100% - 20px, 640px);
   }
+  .indexNoFocus .indexHeader,
+  .indexNoFocus .indexRow {
+    grid-template-columns: minmax(0, 1fr) auto 20px;
+  }
+
 }
 
 @media (max-width: 380px) {
+  /* Row columns still totalled more than a 320px screen, so status was
+     clipped at the right edge. */
+  .indexHeader,
+  .indexRow {
+    column-gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+    padding-inline: 10px;
+  }
+
+  .indexStatusCell {
+    font-size: 0.73rem;
+  }
+
+  .indexRowArrow {
+    height: 16px;
+    width: 16px;
+  }
+
   .indexInsignia {
     flex-basis: 44px;
     height: 44px;
@@ -1404,6 +1432,11 @@
   .indexStatusCell .statusDot {
     display: none;
   }
+  .indexNoFocus .indexHeader,
+  .indexNoFocus .indexRow {
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+  }
+
 }
 
 @media (prefers-reduced-motion: reduce) {

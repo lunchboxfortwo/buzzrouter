@@ -33,6 +33,13 @@ Key routing rules:
 - If TCP auth to the system Postgres isn't set up, connect over the local
   unix socket instead (peer auth matches your OS user to a same-named role):
   `postgresql://<os-user>@/<dbname>?host=/var/run/postgresql`.
+- `e2e/shared-channel-unseeded-journey.spec.ts` drives the whole new-owner
+  journey (claim → publish → connector activation → propose → accept) from a
+  bare `verified_buzz` candidate, using an in-process fake `wss://` relay
+  (`e2e/support/fake-relay.ts`) plus the committed cert/wrapping-key fixtures
+  and connector env in `playwright.config.ts`. The only un-CI-able step, the
+  claim-proof network hop (DNS/HTTPS/hosted-icon), is skipped explicitly and
+  documented in that spec — do not add live-path proof bypasses to make it run.
 
 ## Maintaining this file
 

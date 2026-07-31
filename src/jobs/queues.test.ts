@@ -2,6 +2,7 @@ import type { PgBoss } from "pg-boss";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  AUTO_JOIN_QUEUE,
   RELIABILITY_ROLLUP_QUEUE,
   BRIDGE_DELIVERY_QUEUE,
   configureQueues,
@@ -93,6 +94,23 @@ describe("configureQueues", () => {
       null,
       { key: "phase3-reliability-rollup", tz: "UTC" },
     );
+  });
+
+  it("creates the auto-join queue on its daily cadence", async () => {
+    const createQueue = vi.fn().mockResolvedValue(undefined);
+    const schedule = vi.fn().mockResolvedValue(undefined);
+    const boss = { createQueue, schedule } as unknown as PgBoss;
+
+    await configureQueues(boss);
+
+    expect(createQueue).toHaveBeenCalledWith(
+      AUTO_JOIN_QUEUE,
+      expect.objectContaining({ retryLimit: 2 }),
+    );
+    expect(schedule).toHaveBeenCalledWith(AUTO_JOIN_QUEUE, "0 3 * * *", null, {
+      key: "presence-auto-join",
+      tz: "UTC",
+    });
   });
 
   it("deduplicates candidate jobs within the scheduler lease window", async () => {

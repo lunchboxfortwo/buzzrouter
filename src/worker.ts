@@ -5,10 +5,15 @@ import {
   getDatabasePool,
 } from "./db/pool";
 import { assertDiscoveryDatabaseReady } from "./db/readiness";
+import { registerAutoJoinWorker } from "./jobs/auto-join-communities";
 import { registerProbeCandidateWorker } from "./jobs/probe-candidate";
 import { registerRefreshSummariesWorker } from "./jobs/refresh-community-summaries";
 import { registerReliabilityRollupWorker } from "./jobs/reliability-rollup";
-import { configureQueues, REFRESH_SUMMARIES_QUEUE } from "./jobs/queues";
+import {
+  AUTO_JOIN_QUEUE,
+  configureQueues,
+  REFRESH_SUMMARIES_QUEUE,
+} from "./jobs/queues";
 import { registerDueProbeScheduler } from "./jobs/schedule-due-probes";
 import { registerSourceWorkers } from "./jobs/source-workers";
 import {
@@ -38,6 +43,7 @@ try {
   await registerSourceWorkers(boss, pool);
   await registerReliabilityRollupWorker(boss, pool);
   await registerRefreshSummariesWorker(boss, pool);
+  await registerAutoJoinWorker(boss, pool);
   // Kick one summary refresh on startup so a redeploy/restart populates
   // community summaries right away instead of waiting for the next 4h tick.
   // Best-effort: the job itself is per-community fault-tolerant, and a failed
@@ -46,6 +52,14 @@ try {
     await boss.send(REFRESH_SUMMARIES_QUEUE, null);
   } catch (error) {
     console.error("initial presence summary refresh enqueue failed", error);
+  }
+  // Kick one auto-join pass on startup so a redeploy joins every currently
+  // listed joinable community immediately. Best-effort for the same reasons;
+  // the worker itself chains a summary refresh when it joins anything new.
+  try {
+    await boss.send(AUTO_JOIN_QUEUE, null);
+  } catch (error) {
+    console.error("initial community auto-join enqueue failed", error);
   }
   connectorSupervisor = new ConnectorSupervisor(
     pool,

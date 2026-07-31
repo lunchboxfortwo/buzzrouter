@@ -6,6 +6,7 @@ import {
 } from "./db/pool";
 import { assertDiscoveryDatabaseReady } from "./db/readiness";
 import { registerProbeCandidateWorker } from "./jobs/probe-candidate";
+import { registerReliabilityRollupWorker } from "./jobs/reliability-rollup";
 import { configureQueues } from "./jobs/queues";
 import { registerDueProbeScheduler } from "./jobs/schedule-due-probes";
 import { registerSourceWorkers } from "./jobs/source-workers";
@@ -28,6 +29,7 @@ try {
   await registerProbeCandidateWorker(boss, pool);
   await registerDueProbeScheduler(boss, pool);
   await registerSourceWorkers(boss, pool);
+  await registerReliabilityRollupWorker(boss, pool);
 } catch (error) {
   if (bossStarted) {
     await boss.stop();

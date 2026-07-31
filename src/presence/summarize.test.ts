@@ -178,6 +178,33 @@ describe("summarizeMessages", () => {
     expect(JSON.parse(init.body as string).model).toBe("custom/model");
   });
 
+  it("builds the endpoint from OPENROUTER_BASE_URL when set", async () => {
+    const fetchImpl = vi.fn(async () =>
+      completion('{"goals":"G","recentProjects":[]}'),
+    );
+    vi.stubEnv("OPENROUTER_BASE_URL", "https://proxy.example");
+    await summarizeMessages(messages, {
+      apiKey: "k",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://proxy.example/api/v1/chat/completions");
+  });
+
+  it("prefers an explicit baseUrl over the env and default", async () => {
+    const fetchImpl = vi.fn(async () =>
+      completion('{"goals":"G","recentProjects":[]}'),
+    );
+    vi.stubEnv("OPENROUTER_BASE_URL", "https://env.example");
+    await summarizeMessages(messages, {
+      apiKey: "k",
+      baseUrl: "https://explicit.example",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://explicit.example/api/v1/chat/completions");
+  });
+
   it("defaults the model from OPENROUTER_MODEL then the built-in", async () => {
     const fetchImpl = vi.fn(async () =>
       completion('{"goals":"G","recentProjects":[]}'),

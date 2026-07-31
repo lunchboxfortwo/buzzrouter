@@ -43,6 +43,13 @@ export type AcceptJoinPolicyResult =
   | { ok: true; receipt: string }
   | { ok: false; status: number; reason: string };
 
+export interface JoinedCommunityInfo {
+  /** Bare relay host of the community that was just joined. */
+  host: string;
+  /** Community id from the joined response body, when present. */
+  communityId?: string;
+}
+
 export interface JoinCommunityOptions {
   host: string;
   code: string;
@@ -53,6 +60,13 @@ export interface JoinCommunityOptions {
    * policy-gated community.
    */
   acceptTerms: boolean;
+  /**
+   * Invoked once after a successful join with the community identifiers, so a
+   * caller can record membership (e.g. upsert into `presence_communities`)
+   * without this module taking a database dependency. Errors thrown here are
+   * swallowed — bookkeeping never fails an otherwise-successful join.
+   */
+  onJoined?: (info: JoinedCommunityInfo) => Promise<void> | void;
   fetchImpl?: typeof fetch;
   now?: number;
 }
@@ -198,6 +212,7 @@ export async function joinCommunity(
 
   const first = await claimInvite({ code, fetchImpl, host, now, privateKey });
   if (first.ok) {
+    await notifyJoined(options.onJoined, host, first.body);
     return { body: first.body, ok: true, status: first.status };
   }
   if (!(first.status === 403 && isJoinPolicyRequired(first.body))) {
@@ -241,6 +256,7 @@ export async function joinCommunity(
     privateKey,
   });
   if (claimed.ok) {
+    await notifyJoined(options.onJoined, host, claimed.body);
     return { body: claimed.body, ok: true, status: claimed.status };
   }
   return {
@@ -249,6 +265,33 @@ export async function joinCommunity(
     reason: claimed.reason,
     status: claimed.status,
   };
+}
+
+/**
+ * Best-effort membership notification. Extracts `community_id` from the joined
+ * body when present and swallows any error from the callback so a bookkeeping
+ * failure never turns a successful join into a failed one.
+ */
+async function notifyJoined(
+  onJoined: JoinCommunityOptions["onJoined"],
+  host: string,
+  body: unknown,
+): Promise<void> {
+  if (!onJoined) return;
+  const communityId = communityIdFromBody(body);
+  try {
+    await onJoined(communityId ? { communityId, host } : { host });
+  } catch {
+    // Intentionally ignored — see the onJoined doc comment.
+  }
+}
+
+function communityIdFromBody(body: unknown): string | undefined {
+  if (typeof body === "object" && body !== null) {
+    const value = (body as Record<string, unknown>).community_id;
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return undefined;
 }
 
 /** True when a claim failure body is the `join_policy_required` signal. */

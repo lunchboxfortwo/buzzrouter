@@ -10,6 +10,9 @@
  *   node --import tsx scripts/presence.ts read <relayUrl> [channelId] [--live]
  *   node --import tsx scripts/presence.ts summarize <relayUrl>
  */
+import { getDatabasePool } from "../src/db/pool";
+import { upsertMembership } from "../src/db/presence";
+import { normalizeHost } from "../src/presence/claim";
 import { loadAgentIdentity } from "../src/presence/identity";
 import { joinCommunity } from "../src/presence/policy";
 import { publishProfile } from "../src/presence/profile";
@@ -40,13 +43,38 @@ async function runClaim(
   }
   const identity = loadAgentIdentity();
   err(`Claiming invite on ${host} as ${identity.npub}`);
-  const result = await joinCommunity({
-    acceptTerms,
-    code,
-    host,
-    privateKey: identity.privateKey,
-  });
 
+  // Record membership so the recurring summary refresh job discovers this
+  // community. Best-effort: only when a database is configured.
+  const pool = process.env.DATABASE_URL ? getDatabasePool() : undefined;
+  try {
+    const result = await joinCommunity({
+      acceptTerms,
+      code,
+      host,
+      onJoined: pool
+        ? async ({ communityId, host: joinedHost }) => {
+            const relayHost = normalizeHost(joinedHost);
+            await upsertMembership(pool, {
+              communityId,
+              relayHost,
+              relayUrl: `wss://${relayHost}`,
+            });
+            err(`Recorded membership for ${relayHost}`);
+          }
+        : undefined,
+      privateKey: identity.privateKey,
+    });
+
+    reportClaimResult(result);
+  } finally {
+    await pool?.end();
+  }
+}
+
+function reportClaimResult(
+  result: Awaited<ReturnType<typeof joinCommunity>>,
+): void {
   if (!result.ok && result.reason === "terms_required") {
     err(
       "This community requires a join policy. Joining requires accepting " +

@@ -14,7 +14,7 @@ import type { PresenceMessage } from "./reader";
  * model — so the directory's activity claims are auditable and stable.
  */
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const DEFAULT_OPENROUTER_ORIGIN = "https://openrouter.ai";
 const DEFAULT_MODEL = "deepseek/deepseek-v4-flash";
 const DEFAULT_WINDOW_DAYS = 7;
 const SECONDS_PER_DAY = 86_400;
@@ -57,6 +57,13 @@ export interface MetricsOptions {
 export interface SummarizeOptions extends MetricsOptions {
   apiKey?: string;
   model?: string;
+  /**
+   * Origin the OpenRouter-compatible endpoint is built from; the request is
+   * POSTed to `${baseUrl}/api/v1/chat/completions`. Defaults to
+   * `OPENROUTER_BASE_URL` then `https://openrouter.ai`. Point this at the Squire
+   * egress proxy to have the real key injected at the boundary.
+   */
+  baseUrl?: string;
   fetchImpl?: typeof fetch;
 }
 
@@ -180,7 +187,13 @@ export async function summarizeMessages(
     response_format: { type: "json_object" },
   });
 
-  const response = await fetchImpl(OPENROUTER_URL, {
+  const origin =
+    options.baseUrl ??
+    process.env.OPENROUTER_BASE_URL ??
+    DEFAULT_OPENROUTER_ORIGIN;
+  const url = `${origin}/api/v1/chat/completions`;
+
+  const response = await fetchImpl(url, {
     body: requestBody,
     headers: {
       authorization: `Bearer ${apiKey}`,

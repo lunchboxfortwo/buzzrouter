@@ -29,6 +29,7 @@ export {
   type AcceptJoinPolicyResult,
   type JoinCommunityOptions,
   type JoinCommunityResult,
+  type JoinedCommunityInfo,
   type JoinPolicy,
 } from "./policy";
 

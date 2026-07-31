@@ -270,6 +270,95 @@ describe("joinCommunity", () => {
     });
   });
 
+  it("invokes onJoined with the host and community id on a bare join", async () => {
+    const joined = { community_id: "c1", host: "h", status: "joined" };
+    const { fetchImpl } = router({
+      "/api/invites/claim": () => json(joined),
+    });
+    const onJoined = vi.fn();
+    await joinCommunity({
+      acceptTerms: false,
+      code: "abc123",
+      fetchImpl,
+      host: "relay.example.com",
+      onJoined,
+      privateKey: secret,
+    });
+    expect(onJoined).toHaveBeenCalledWith({
+      communityId: "c1",
+      host: "relay.example.com",
+    });
+  });
+
+  it("invokes onJoined after the policy handshake completes the join", async () => {
+    const joined = { community_id: "c9", status: "joined" };
+    let claimCalls = 0;
+    const fetchImpl = vi.fn(async (input: string | URL) => {
+      const path = new URL(
+        typeof input === "string" ? input : input.toString(),
+      ).pathname;
+      if (path === "/api/invites/claim") {
+        claimCalls += 1;
+        return claimCalls === 1
+          ? json({ error: "join_policy_required" }, 403)
+          : json(joined);
+      }
+      if (path === "/api/join-policy") {
+        return json({ policy: { version: "v" } });
+      }
+      return json({ receipt: "receipt-token" });
+    });
+    const onJoined = vi.fn();
+    await joinCommunity({
+      acceptTerms: true,
+      code: "abc123",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      host: "relay.example.com",
+      onJoined,
+      privateKey: secret,
+    });
+    expect(onJoined).toHaveBeenCalledTimes(1);
+    expect(onJoined).toHaveBeenCalledWith({
+      communityId: "c9",
+      host: "relay.example.com",
+    });
+  });
+
+  it("does not invoke onJoined and does not fail the join on a rejected claim", async () => {
+    const { fetchImpl } = router({
+      "/api/invites/claim": () => json({ error: "gone" }, 410),
+    });
+    const onJoined = vi.fn();
+    const result = await joinCommunity({
+      acceptTerms: true,
+      code: "abc123",
+      fetchImpl,
+      host: "relay.example.com",
+      onJoined,
+      privateKey: secret,
+    });
+    expect(result.ok).toBe(false);
+    expect(onJoined).not.toHaveBeenCalled();
+  });
+
+  it("swallows an onJoined error so bookkeeping never fails a real join", async () => {
+    const joined = { community_id: "c1", status: "joined" };
+    const { fetchImpl } = router({
+      "/api/invites/claim": () => json(joined),
+    });
+    const result = await joinCommunity({
+      acceptTerms: false,
+      code: "abc123",
+      fetchImpl,
+      host: "relay.example.com",
+      onJoined: () => {
+        throw new Error("db down");
+      },
+      privateKey: secret,
+    });
+    expect(result).toEqual({ body: joined, ok: true, status: 200 });
+  });
+
   it("passes through non-policy claim failures", async () => {
     const { fetchImpl } = router({
       "/api/invites/claim": () => json({ error: "gone" }, 410),

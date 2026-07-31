@@ -18,6 +18,7 @@ export async function classifyPendingFocus(
 ): Promise<FocusClassificationResult> {
   const { rows } = await pool.query<{
     candidate_id: string;
+    catalog_categories: string[];
     github_locators: string[];
     host: string;
     relay_description: string | null;
@@ -27,6 +28,17 @@ export async function classifyPendingFocus(
         candidates.id AS candidate_id,
         candidates.host,
         latest.relay_description,
+        COALESCE(
+          (
+            SELECT source_categories
+            FROM community_sources
+            WHERE candidate_id = candidates.id
+              AND source_categories IS NOT NULL
+            ORDER BY source_observed_at DESC
+            LIMIT 1
+          ),
+          '{}'::text[]
+        ) AS catalog_categories,
         COALESCE(
           (
             SELECT array_agg(source_locator)
@@ -60,6 +72,7 @@ export async function classifyPendingFocus(
 
   for (const row of rows) {
     const result = classifyFocus({
+      catalogCategories: row.catalog_categories,
       description: row.relay_description,
       githubLocators: row.github_locators,
       host: row.host,

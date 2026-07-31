@@ -316,27 +316,6 @@ export default async function DirectoryPage({
               </p>
             </section>
 
-            <section className={styles.methodSection} id="ranking-method">
-              <h2>Evidence before visibility</h2>
-              <p className={styles.methodIntro}>
-                A community only appears once BuzzRouter has confirmed it directly at
-                the relay.
-              </p>
-              <div className={styles.methodGrid}>
-                <div className={styles.methodItem}>
-                  <strong>Software</strong>
-                  <p>Canonical Buzz implementation confirmed by NIP-11.</p>
-                </div>
-                <div className={styles.methodItem}>
-                  <strong>Transport</strong>
-                  <p>Valid TLS and a successful WebSocket handshake.</p>
-                </div>
-                <div className={styles.methodItem}>
-                  <strong>Freshness</strong>
-                  <p>A successful direct probe from the previous 7 days.</p>
-                </div>
-              </div>
-            </section>
           </div>
         </main>
       </form>
@@ -365,7 +344,6 @@ export default async function DirectoryPage({
               Activity is observed directly at each relay, thin evidence is
               discounted, and popularity is never a substitute for quality.
             </p>
-            <a href="#ranking-method">Read the ranking method</a>
           </div>
         </div>
       </footer>

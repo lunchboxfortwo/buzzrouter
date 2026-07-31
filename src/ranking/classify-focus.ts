@@ -118,10 +118,26 @@ const GENERIC_DESCRIPTION = /private team communication relay|^buzz\b[\s.]*$/i;
 const MIN_COMPOUND_MATCH = 4;
 
 export interface FocusClassificationInput {
+  /** Category tags the source catalog published for this relay. */
+  catalogCategories?: string[];
   description?: string | null;
   githubLocators?: string[];
   host: string;
 }
+
+/**
+ * The public catalog publishes its own category per entry. That is the
+ * community's own declared topic rather than something we inferred, so it
+ * outranks every keyword signal.
+ */
+const CATALOG_FOCUS: Record<string, FocusSlug> = {
+  bitcoin: "bitcoin-money",
+  builders: "building",
+  culture: "design-creative",
+  gtm: "growth-gtm",
+  labs: "research-knowledge",
+  privacy: "privacy-security",
+};
 
 export interface FocusClassification {
   focus: FocusSlug;
@@ -148,6 +164,13 @@ function matches(token: string, word: string): boolean {
 export function classifyFocus(
   input: FocusClassificationInput,
 ): FocusClassification | null {
+  for (const category of input.catalogCategories ?? []) {
+    const declared = CATALOG_FOCUS[category.trim().toLowerCase()];
+    if (declared) {
+      return { focus: declared, matched: [category.trim().toLowerCase()] };
+    }
+  }
+
   const hostTokens = tokenize(input.host.split(".")[0] ?? "");
 
   const description = (input.description ?? "").trim();

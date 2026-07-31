@@ -1,29 +1,15 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
-const INSTALL_URL = "https://buzz.xyz";
-
-/**
- * Builds the Buzz app handoff. The mobile app registers the `buzz://` scheme
- * and its join parser expects `buzz://join?relay=<wss>&code=<code>`, rejecting
- * the link if the code is missing. So a real join handoff is only possible for
- * communities that carry an invite code; a bare relay has no deep link.
- */
-function buildJoinUri(relayUrl: string, inviteCode: string): string {
-  const relay = encodeURIComponent(relayUrl);
-  const code = encodeURIComponent(inviteCode);
-  return `buzz://join?relay=${relay}&code=${code}`;
-}
+import { launchJoin } from "./joinCascade";
 
 /**
  * One join action per community.
  *
- * - Invite code present: open the app via `buzz://join`. There is no reliable
- *   way to know whether the app is installed, so we attempt the handoff and,
- *   if the tab is still foregrounded shortly after, fall back to the install
- *   page. A successful open backgrounds the tab and cancels the fallback.
- * - Public URL present: a plain link, which opens the web experience.
+ * - Invite code or public URL present: the shared join cascade in
+ *   `joinCascade.ts` (app deep link with install-page fallback, or the web
+ *   experience).
  * - Neither: copy the relay URL, which is what a Buzz client needs to connect.
  */
 export function JoinButton({
@@ -40,26 +26,9 @@ export function JoinButton({
   relayUrl: string;
 }) {
   const [copied, setCopied] = useState(false);
-  const fallbackTimer = useRef<number | null>(null);
 
   const openInApp = useCallback(() => {
-    if (!inviteCode) return;
-    const uri = buildJoinUri(relayUrl, inviteCode);
-
-    const onHide = () => {
-      if (fallbackTimer.current) {
-        window.clearTimeout(fallbackTimer.current);
-        fallbackTimer.current = null;
-      }
-    };
-    document.addEventListener("visibilitychange", onHide, { once: true });
-
-    fallbackTimer.current = window.setTimeout(() => {
-      document.removeEventListener("visibilitychange", onHide);
-      window.location.href = INSTALL_URL;
-    }, 1600);
-
-    window.location.href = uri;
+    launchJoin({ inviteCode, publicUrl: null, relayUrl });
   }, [inviteCode, relayUrl]);
 
   const copyRelay = useCallback(async () => {

@@ -88,8 +88,11 @@ export default async function SubmitPage({
               <dd>Only after a fresh direct relay verification</dd>
             </div>
             <div>
-              <dt>Private data</dt>
-              <dd>Invite paths and tokens are discarded before storage</dd>
+              <dt>Invite links</dt>
+              <dd>
+                The invite code is kept, labelled, and used only to hand
+                members to the Buzz app
+              </dd>
             </div>
           </dl>
         </section>

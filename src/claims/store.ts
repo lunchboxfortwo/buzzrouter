@@ -33,6 +33,7 @@ export interface ClaimWorkspace {
   id: string;
   joinMode: string;
   joinUrl: string | null;
+  openToSharedChannels: boolean;
   ownerPubkey: string | null;
   slug: string | null;
   state: string;
@@ -351,6 +352,7 @@ export async function updateListingMetadata(
             categories = $7,
             public_join_mode = $8,
             public_join_url = $9,
+            open_to_shared_channels = $10,
             listed_at = CASE
               WHEN $4 = 'public' THEN COALESCE(listed_at, now())
               ELSE listed_at
@@ -371,6 +373,7 @@ export async function updateListingMetadata(
         metadata.categories,
         metadata.joinMode,
         metadata.joinUrl,
+        metadata.openToSharedChannels,
       ],
     );
     const row = result.rows[0];
@@ -412,6 +415,7 @@ export async function getClaimWorkspace(
     display_name: string | null;
     host: string;
     id: string;
+    open_to_shared_channels: boolean | null;
     public_join_mode: string | null;
     public_join_url: string | null;
     owner_pubkey: string | null;
@@ -433,7 +437,8 @@ export async function getClaimWorkspace(
         communities.slug,
         communities.visibility,
         communities.public_join_mode,
-        communities.public_join_url
+        communities.public_join_url,
+        communities.open_to_shared_channels
       FROM community_candidates AS candidates
       LEFT JOIN communities
         ON communities.candidate_id = candidates.id
@@ -455,6 +460,7 @@ export async function getClaimWorkspace(
         id: row.id,
         joinMode: row.public_join_mode ?? "invite_required",
         joinUrl: row.public_join_url,
+        openToSharedChannels: row.open_to_shared_channels ?? false,
         ownerPubkey: row.owner_pubkey,
         slug: row.slug,
         state: row.state,

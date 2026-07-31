@@ -20,6 +20,7 @@ export interface ListingMetadataInput {
   displayName: string;
   joinMode: JoinMode;
   joinUrl: string | null;
+  openToSharedChannels: boolean;
   slug: string;
   visibility: "internal" | "public";
 }
@@ -75,6 +76,10 @@ export function parseListingMetadata(value: unknown): ListingMetadataInput {
   }
   const joinMode = value.joinMode as JoinMode;
   const joinUrl = parseJoinUrl(value.joinUrl, joinMode);
+  if (typeof value.openToSharedChannels !== "boolean") {
+    throw invalidMetadata();
+  }
+  const openToSharedChannels = value.openToSharedChannels;
   const visibility =
     value.visibility === "internal" || value.visibility === "public"
       ? value.visibility
@@ -89,6 +94,7 @@ export function parseListingMetadata(value: unknown): ListingMetadataInput {
     displayName,
     joinMode,
     joinUrl,
+    openToSharedChannels,
     slug,
     visibility,
   };

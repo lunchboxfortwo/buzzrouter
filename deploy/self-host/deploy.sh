@@ -69,7 +69,7 @@ for attempt in $(seq 1 30); do
       const expectedRelease = process.argv[2];
       const valid =
         health.status === "ok" &&
-        health.migration === "0011_join_targets.sql" &&
+        health.migration === "0012_shared_channel_openness.sql" &&
         health.release === expectedRelease;
       process.exit(valid ? 0 : 1);
     ' "${health}" "${target_revision}"; then

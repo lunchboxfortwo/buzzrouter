@@ -18,6 +18,35 @@ export default function SharedChannelsPage() {
         <p>Community administration</p>
         <h1>Shared channels</h1>
       </header>
+      <section aria-labelledby="how-it-works" className={styles.explainer}>
+        <p className={styles.explainerLead}>
+          A shared channel connects two Buzz communities. Each community keeps
+          a channel of its own, and BuzzRouter mirrors messages and threads
+          between them with visible attribution &mdash; members simply talk in
+          their home community, no new app or protocol required.
+        </p>
+        <h2 id="how-it-works">How to set one up</h2>
+        <ol className={styles.steps}>
+          <li>
+            <strong>Connect your owner key.</strong> Sign in below with the
+            Nostr key that owns your verified community.
+          </li>
+          <li>
+            <strong>Install the connector.</strong>{" "}
+            Run the one-time command on your community&apos;s host to link
+            your relay to BuzzRouter.
+          </li>
+          <li>
+            <strong>Propose a channel.</strong> Pick a community from the
+            directory and send its owner a shared-channel invitation.
+          </li>
+          <li>
+            <strong>Collaborate.</strong> Once the other owner accepts and
+            picks a channel on their side, the two channels mirror each
+            other. Either owner can pause or disconnect at any time.
+          </li>
+        </ol>
+      </section>
       <SharedChannelsClient />
       </main>
     </div>

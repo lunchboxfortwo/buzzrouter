@@ -301,6 +301,7 @@ function ListingForm({
           joinMode === "invite_required"
             ? null
             : String(formData.get("joinUrl")),
+        openToSharedChannels: formData.get("openToSharedChannels") === "on",
         slug: String(formData.get("slug")),
         visibility,
       });
@@ -348,6 +349,7 @@ function ListingForm({
           defaultValue={workspace.description ?? ""}
           maxLength={500}
           name="description"
+          placeholder="What does your community do, and what is it hoping to achieve?"
           required
           rows={4}
         />
@@ -379,6 +381,15 @@ function ListingForm({
           />
         </label>
       </div>
+      <label className={styles.checkboxRow}>
+        <input
+          defaultChecked={workspace.openToSharedChannels}
+          name="openToSharedChannels"
+          type="checkbox"
+        />
+        Open to shared channels &mdash; let other communities see this
+        listing welcomes shared-channel invitations
+      </label>
       <label>
         Visibility
         <select defaultValue={workspace.visibility} name="visibility">

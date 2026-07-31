@@ -213,6 +213,20 @@
   resize: vertical;
 }
 
+.form label.checkboxRow {
+  align-items: center;
+  display: flex;
+  font-weight: 400;
+  gap: 9px;
+}
+
+.form label.checkboxRow input {
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  width: 16px;
+}
+
 .grid {
   display: grid;
   gap: 18px;

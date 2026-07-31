@@ -1,7 +1,6 @@
 import { Fragment } from "react";
 
 import Image from "next/image";
-import Link from "next/link";
 
 import { listDirectoryCommunities, type DirectoryCommunity } from "../src/db/directory";
 import { getDatabasePool } from "../src/db/pool";
@@ -15,6 +14,7 @@ import {
 import { focusLabel } from "../src/ranking/focus";
 
 import { AutoSubmitSelect } from "./AutoSubmitSelect";
+import { CommunityRowLink } from "./CommunityRowLink";
 import { JoinButton } from "./JoinButton";
 import { MobileCollapsible } from "./MobileCollapsible";
 import { SiteMasthead } from "./SiteMasthead";
@@ -273,11 +273,15 @@ function CommunityRow({
   const tone = insigniaTone(community.relayHost);
 
   return (
-    <Link
-      aria-current={selected ? "true" : undefined}
+    <CommunityRowLink
+      ariaCurrent={selected ? "true" : undefined}
       className={styles.indexRow}
       href={buildHref(filters, { selected: community.candidateId })}
-      scroll={false}
+      joinTarget={{
+        inviteCode: community.inviteCode,
+        publicUrl: community.publicUrl,
+        relayUrl: community.canonicalRelayUrl,
+      }}
     >
       <span className={styles.indexCommunityCell}>
         {community.iconUrl ? (
@@ -318,7 +322,7 @@ function CommunityRow({
       <svg aria-hidden="true" className={styles.indexRowArrow} viewBox="0 0 24 24">
         <path d="m9 6 6 6-6 6" />
       </svg>
-    </Link>
+    </CommunityRowLink>
   );
 }
 
@@ -364,6 +368,15 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
                 <span className={`${styles.accessFlag} ${styles.accessFlagInvite}`}>
                   Invite-only
                 </span>
+              ) : null}
+              {community.openToSharedChannels ? (
+                <a
+                  className={`${styles.accessFlag} ${styles.accessFlagOpen}`}
+                  href="/shared-channels"
+                  title="This community welcomes shared-channel invitations"
+                >
+                  Open to shared channels
+                </a>
               ) : null}
             </div>
           </div>

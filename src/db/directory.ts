@@ -28,6 +28,7 @@ export interface DirectoryCommunity {
   joinMode: string | null;
   joinUrl: string | null;
   lastVerifiedAt: string;
+  openToSharedChannels: boolean;
   relayHost: string;
   slug: string | null;
   softwareVersion: string | null;
@@ -94,6 +95,7 @@ export async function listDirectoryCommunities(
     join_mode: string | null;
     join_url: string | null;
     last_verified_at: Date;
+    open_to_shared_channels: boolean;
     relay_host: string;
     slug: string | null;
     software_version: string | null;
@@ -166,6 +168,13 @@ export async function listDirectoryCommunities(
             WHEN communities.visibility = 'public'
               THEN communities.public_join_url
           END AS join_url,
+          COALESCE(
+            CASE
+              WHEN communities.visibility = 'public'
+                THEN communities.open_to_shared_channels
+            END,
+            false
+          ) AS open_to_shared_channels,
           latest.probed_at AS last_verified_at,
           latest.ws_open_ms,
           latest.software_version,
@@ -304,6 +313,7 @@ export async function listDirectoryCommunities(
     joinMode: row.join_mode,
     joinUrl: row.join_url,
     lastVerifiedAt: row.last_verified_at.toISOString(),
+    openToSharedChannels: row.open_to_shared_channels,
     relayHost: row.relay_host,
     slug: row.slug,
     softwareVersion: row.software_version,

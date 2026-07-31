@@ -22,6 +22,7 @@ describe("parseListingMetadata", () => {
         displayName: "Research Guild",
         joinMode: "request_invite",
         joinUrl: "https://example.com/join",
+        openToSharedChannels: true,
         slug: "research-guild",
         visibility: "public",
       }),
@@ -31,9 +32,25 @@ describe("parseListingMetadata", () => {
       displayName: "Research Guild",
       joinMode: "request_invite",
       joinUrl: "https://example.com/join",
+      openToSharedChannels: true,
       slug: "research-guild",
       visibility: "public",
     });
+  });
+
+  it("rejects a non-boolean shared-channel openness flag", () => {
+    expect(() =>
+      parseListingMetadata({
+        categories: ["research"],
+        description: "Description",
+        displayName: "Name",
+        joinMode: "invite_required",
+        joinUrl: null,
+        openToSharedChannels: "yes",
+        slug: "valid-slug",
+        visibility: "public",
+      }),
+    ).toThrow("invalid");
   });
 
   it("rejects credentials, malformed categories, and hidden invite URLs", () => {

@@ -1,0 +1,21 @@
+{
+  "name": "@buzzrouter/connect",
+  "version": "0.1.0",
+  "description": "One-shot installer for a BuzzRouter community connector",
+  "type": "module",
+  "bin": {
+    "buzzrouter-connect": "bin/connect.js"
+  },
+  "files": [
+    "bin",
+    "src/installer.js"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

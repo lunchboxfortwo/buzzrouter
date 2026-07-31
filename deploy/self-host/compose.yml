@@ -28,6 +28,9 @@ services:
     restart: "no"
     environment: &app-environment
       APP_RELEASE_SHA: ${BUZZROUTER_RELEASE_SHA:-unknown}
+      BUZZROUTER_CONNECTOR_WRAPPING_KEYS_FILE: /run/secrets/connector-wrapping-keys.json
+      BUZZROUTER_CONNECTOR_WRAPPING_KEY_VERSION: ${BUZZROUTER_CONNECTOR_WRAPPING_KEY_VERSION:-1}
+      BUZZROUTER_CONNECT_PACKAGE_SPEC: ${BUZZROUTER_CONNECT_PACKAGE_SPEC:-}
       DATABASE_SSL: "false"
       DATABASE_URL: postgresql://buzzrouter:${POSTGRES_PASSWORD}@buzzrouter-db:5432/buzzrouter
       DISCOVERY_GITHUB_ENABLED: "false"
@@ -60,6 +63,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment: *app-environment
+    volumes:
+      - ${BUZZROUTER_CONFIG_DIR:-/etc/buzzrouter}/connector-wrapping-keys.json:/run/secrets/connector-wrapping-keys.json:ro
     command: ["npm", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]
     depends_on:
       migrate:
@@ -83,6 +88,8 @@ services:
     image: buzzrouter-self-hosted:latest
     restart: unless-stopped
     environment: *app-environment
+    volumes:
+      - ${BUZZROUTER_CONFIG_DIR:-/etc/buzzrouter}/connector-wrapping-keys.json:/run/secrets/connector-wrapping-keys.json:ro
     command: ["npm", "run", "worker"]
     depends_on:
       seed:

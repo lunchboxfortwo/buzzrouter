@@ -1,6 +1,6 @@
 # BuzzRouter Cross-Community Messaging
 
-**Status:** Product and architecture decision
+**Status:** Engineering reviewed; ready for implementation
 **Version:** 0.2
 **Date:** 2026-07-30
 **Supersedes:** Version 0.1 managed message router proposal
@@ -219,7 +219,8 @@ Either administrator may pause or disconnect the route. Disconnecting:
    - Publishing only through configured routes.
 
 4. **Bridge service**
-   - Validates source signatures and current channel membership.
+   - Validates source signatures and trusts the verified relay's admission
+     decision for community membership.
    - Converts source events into canonical bridge messages.
    - Creates visibly attributed destination events.
    - Maintains root and reply mappings.
@@ -238,8 +239,8 @@ Either administrator may pause or disconnect the route. Disconnecting:
 ```text
 SharedChannel
   id
-  owner_community_id
-  state: proposed | active | paused | rejected | disconnected
+  proposed_by_community_id
+  state: proposed | active | rejected | disconnected
   purpose
   created_by
   created_at
@@ -252,6 +253,7 @@ SharedChannelEndpoint
   local_channel_id
   local_channel_name_snapshot
   bridge_pubkey
+  state: pending | active | paused | disconnected
   accepted_by
   accepted_at
 
@@ -288,8 +290,9 @@ BridgeEventMapping
 
 1. A connector observes a new kind-9 message in a mapped channel.
 2. It ignores its own signer, known bridge markers, and already mapped events.
-3. BuzzRouter verifies the event signature, channel, route, member, age, size,
-   and source-event uniqueness.
+3. BuzzRouter verifies the event signature, configured relay and channel,
+   route state, age, size, and source-event uniqueness. The verified relay's
+   admission decision is authoritative for membership at publication time.
 4. It creates a canonical `BridgeMessage`.
 5. A `pg-boss` job creates and persists the signed destination event.
 6. The destination connector publishes the event.
@@ -320,7 +323,7 @@ repository and does not require a new relay event kind.
 - Text messages and threads.
 - Distinct bridge identity per connected community.
 - Visible source community and signer attribution.
-- Durable retry, ordering, and deduplication.
+- Durable retry, parent-aware thread delivery, and deduplication.
 - Pause, disconnect, and route audit history.
 - Directory integration and verified community identity.
 
@@ -371,3 +374,428 @@ message requests:
   <https://github.com/block/buzz/pull/2756>
 - Slack Connect product behavior:
   <https://slack.com/help/articles/115004151203-Slack-Connect-guide--Work-with-external-organizations>
+
+## 9. Engineering Decisions
+
+The engineering review keeps the complete v0.2 product scope while consolidating
+the implementation around the existing Next.js application, PostgreSQL
+database, `pg-boss` worker, and Nostr tooling.
+
+### 9.1 Administrator authentication
+
+All shared-channel mutations require a fresh NIP-98 request signed by the
+verified `communities.owner_pubkey`. Authorization is checked in the store
+query as well as the route handler. There are no delegated administrators in
+v0.2.
+
+The reusable bounded-body, NIP-98 verification, and replay-protection code moves
+from the claim domain into generic HTTP modules. Claims and shared channels use
+the same implementation without sharing domain-specific error codes.
+
+### 9.2 Connector credentials
+
+Each connected community has one distinct bridge key. Its private key is stored
+as AES-256-GCM ciphertext in PostgreSQL with a random nonce, authentication tag,
+and wrapping-key version. The wrapping key is loaded from a root-owned file on
+the production host and never stored in PostgreSQL, source control, CI logs, or
+ordinary application logs.
+
+Rotation creates and verifies a new bridge key before switching the active key.
+Revoking the community connection closes its socket and schedules encrypted key
+material for deletion after a short recovery window. Disconnecting one shared
+channel removes only that route and never interrupts the community's other
+routes.
+
+### 9.3 One-shot installer
+
+Connection setup begins with an owner-signed web action that creates a hashed,
+single-use, short-lived token. The owner then runs:
+
+```text
+npx @buzzrouter/connect <one-time-token>
+```
+
+The installer uses relay administrator credentials only on the community's
+machine. It adds the tenant-specific bot, completes a signed challenge through
+a temporary setup channel, and verifies a connector round trip. Route-specific
+channels are selected or created later through the invitation flow. The
+connection becomes active only after both the installer receipt and the
+round-trip check succeed.
+
+The installer is built from this repository and published by a release-triggered
+GitHub Actions workflow. Production must not advertise an installer version
+until its package publication succeeds.
+
+### 9.4 Atomic ingestion
+
+Canonical message insertion, delivery insertion, and `pg-boss` enqueue occur in
+one PostgreSQL transaction. The queue call receives the same transaction through
+`SendOptions.db`. A failure rolls back all three writes.
+
+The canonical message ID is the deterministic queue job ID. Database uniqueness
+on the source event and `(destination_endpoint_id, bridge_message_id)` prevents
+duplicate ingestion and projection.
+
+### 9.5 Runtime model
+
+The existing worker owns one connector supervisor:
+
+```text
+worker startup
+    |
+    +--> load active community connections
+    |       |
+    |       +--> one authenticated WebSocket per connection
+    |
+    +--> reconcile connection state every 30 seconds
+    |
+    +--> pg-boss delivery workers
+```
+
+The production deployment runs exactly one worker. The supervisor reconnects
+with bounded exponential backoff, records health, and immediately closes paused,
+revoked, or disconnected connectors. Multiple-worker advisory locks and
+`LISTEN/NOTIFY` are intentionally deferred.
+
+### 9.6 Delivery and thread behavior
+
+There is no separate persisted thread sequence in v0.2. Every reply records its
+canonical parent. If the parent's destination mapping does not yet exist, the
+delivery job retries with a bound. Deterministic destination event IDs and
+database uniqueness make retries idempotent.
+
+The destination event ID and signed event are persisted before publication. If
+a relay acknowledgement is ambiguous, the connector queries the relay by event
+ID before retrying.
+
+### 9.7 Pause and disconnect
+
+Pause belongs to an endpoint, not the shared channel globally. A route is
+effective only when both endpoints are active. Each community may pause and
+resume only its own endpoint.
+
+Disconnect is terminal and may be initiated by either owner. Every delivery
+rechecks endpoint and route state immediately before publication. Disconnect
+cancels queued and in-flight delivery for that route, removes its connector
+subscriptions, preserves already delivered local history, and marks undelivered
+messages `cancelled`. The community connection and its other routes remain
+active.
+
+```text
+                           destination rejects
+proposed ------------------------------------------> rejected
+   |
+   | destination accepts and both endpoints connect
+   v
+ active <---- endpoint owner resumes ----> paused
+   |
+   | either owner disconnects
+   v
+disconnected (terminal)
+```
+
+## 10. Consolidated Modules
+
+The implementation has three shared-channel modules rather than one module per
+concept:
+
+| Module | Owns |
+| --- | --- |
+| `src/shared-channels/store.ts` | Invitations, endpoint state, owner authorization, encrypted connector records, canonical messages, mappings, audit events, and atomic queue insertion |
+| `src/shared-channels/connector.ts` | Connection supervisor, NIP-42 sessions, reconciliation, health, reconnect, publish, and shutdown |
+| `src/shared-channels/bridge.ts` | Event validation, loop prevention, canonical message construction, inert destination projection, parent resolution, and deterministic event IDs |
+
+Small generic infrastructure stays outside the domain:
+
+- `src/http/nostr-auth.ts` owns bounded JSON authentication and NIP-98 replay
+  protection.
+- `src/http/api-error.ts` owns stable API error codes and status mapping.
+- `src/jobs/queues.ts` declares the bridge delivery queue beside existing
+  queues.
+- `src/worker.ts` starts the connector supervisor and delivery worker.
+- Route handlers remain thin adapters under `app/api/shared-channels`.
+
+Types live beside the module that owns their behavior. A generic
+`shared-channels/types.ts` dumping ground is not part of the design.
+
+## 11. Data Model
+
+A new migration adds:
+
+| Table | Purpose and constraints |
+| --- | --- |
+| `community_connections` | One current connector per verified community; encrypted private key fields, bridge pubkey, relay snapshot, state, health, wrapping-key version |
+| `connection_install_tokens` | Hashed single-use token, community, expiry, attempt state, and activation receipt |
+| `shared_channels` | Immutable ID, proposer community, purpose, invitation state, optional expiry, and terminal disconnect metadata |
+| `shared_channel_endpoints` | Exactly two endpoints per shared channel; community, connection, local channel, endpoint state, accepting owner, and channel snapshots |
+| `bridge_messages` | Canonical source event, actor, body, body hash, canonical parent, timestamps, and unique `(shared_channel_id, source_endpoint_id, source_event_id)` |
+| `bridge_deliveries` | One destination delivery per message; deterministic event, state, attempts, retry time, and unique `(destination_endpoint_id, bridge_message_id)` |
+| `bridge_event_mappings` | Canonical message to local relay event mapping; unique endpoint/local event and endpoint/message pairs |
+| `shared_channel_audit_events` | Owner signer, action, target, previous state, next state, and non-secret metadata |
+
+Required indexes cover:
+
+- Active connections by connector state.
+- Invitations by destination community and state.
+- Endpoints by community and effective state.
+- Due deliveries by state and `next_attempt_at`.
+- Source-event and local-event deduplication.
+- Parent mapping lookup by endpoint and canonical message.
+
+Rules, audit records, and routes use immutable community IDs. Relay URLs,
+channel names, and directory slugs are snapshots and never authorization keys.
+
+## 12. API and Installation Surface
+
+The behavioral API boundaries are:
+
+```text
+POST /api/community-connections/install-token
+POST /api/community-connections/activate
+GET  /api/community-connections/current
+POST /api/shared-channels
+GET  /api/shared-channels
+GET  /api/shared-channels/{id}
+POST /api/shared-channels/{id}/accept
+POST /api/shared-channels/{id}/reject
+POST /api/shared-channels/{id}/pause
+POST /api/shared-channels/{id}/resume
+POST /api/shared-channels/{id}/disconnect
+```
+
+Every browser mutation uses owner-only NIP-98 authentication and accepts an
+idempotency key. Installer activation uses its single-use token and signed
+round-trip receipt; it never accepts relay administrator credentials.
+
+The source community must complete connector installation before submitting an
+invitation. The destination may receive an invitation while disconnected and
+completes installation as part of acceptance.
+
+## 13. End-to-End Data Flow
+
+```text
+Buzz kind-9 event
+    |
+    v
+connector.ts
+  verify configured relay/channel and ignore bridge-authored events
+    |
+    v
+bridge.ts
+  verify signature -> sanitize tags -> resolve canonical parent
+    |
+    v
+store.ts transaction
+  insert message -> insert delivery -> enqueue deterministic pg-boss job
+    |
+    v
+delivery worker
+  recheck route/endpoints -> resolve parent mapping -> persist signed event
+    |
+    v
+connector.ts publish
+  relay OK -> store mapping and delivered_to_relay
+  ambiguous -> query deterministic event ID before retry
+```
+
+Remote mentions, commands, and arbitrary tags are never copied. The projection
+contains only the destination channel tag, local thread tags, and BuzzRouter
+provenance. New shared channels have no workflows attached; administrators may
+deliberately attach local workflows after activation.
+
+## 14. Failure Modes
+
+| Failure | Handling | Test | User-visible result |
+| --- | --- | --- | --- |
+| Replayed or wrong-owner NIP-98 request | Reject before mutation | Route integration test | Stable `401` or `403` response |
+| Installer token replay or expiry | Consume atomically; reject reused token | PostgreSQL integration test | Connection remains incomplete with retry guidance |
+| Worker crash during ingestion | Message, delivery, and queue job roll back together | PostgreSQL transaction test | Source remains eligible for re-ingestion |
+| Duplicate relay event | Source-event unique constraint returns existing message | PostgreSQL integration test | No duplicate destination post |
+| Relay disconnect or authentication failure | Reconnect with backoff and persist health | Fake-relay integration test | Admin health shows degraded or unauthorized |
+| Ambiguous relay acknowledgement | Query deterministic event ID before retry | Fake-relay integration test | Pending status, never a duplicate |
+| Parent mapping missing | Bounded retry without global queue blocking | Worker integration test | Reply remains pending until parent arrives or delivery fails |
+| Pause or disconnect races with delivery | Recheck endpoint state immediately before publish and reconcile route subscriptions | PostgreSQL and worker integration test | Delivery is paused or cancelled without affecting other routes |
+| Wrong or corrupted wrapping key | Fail closed and never open connector | Encryption unit and integration tests | Connection health reports credential failure |
+| Destination relay rejects an event | Classify permanent versus transient failure | Fake-relay integration test | Admin sees failed delivery and reason class |
+
+There are no identified failures that are both silent and uncovered.
+
+## 15. Test Plan
+
+The project remains on Vitest for unit, route, and integration tests. CI already
+starts PostgreSQL 16 and applies migrations, so no additional database test
+container is introduced. A fake local WebSocket relay covers NIP-42,
+reconnection, ambiguous acknowledgements, rejection, and loop prevention.
+
+```text
+CODE PATHS                                      USER FLOWS
+[+] generic NIP-98 HTTP auth                    [+] Connect community
+    [★★★] valid, malformed, stale, replay           [★★★] token, activation, retry
+[+] invitation/store state                     [+] Propose and accept
+    [★★★] owner, wrong owner, duplicate             [★★★] accept, reject, stale form
+[+] encrypted connector keys                   [+] Pause and resume
+    [★★★] round trip, wrong key, rotation           [★★★] endpoint ownership enforced
+[+] atomic message ingestion                   [+] Disconnect
+    [★★★] commit, rollback, duplicate               [★★★] immediate cancellation
+[+] connector supervisor                       [+] Shared thread
+    [★★★] reconnect, revoke, reconcile              [★★★] root, reply, parent delay
+[+] delivery worker
+    [★★★] OK, ambiguous, reject, retry
+
+Coverage target: every listed branch has a behavior, edge, and error assertion.
+No LLM evaluation is required.
+```
+
+Add one focused Playwright workflow using deterministic test signers:
+
+```text
+Owner A proposes
+  -> Owner B accepts
+  -> route becomes active
+  -> Owner A pauses
+  -> Owner B cannot resume Owner A's endpoint
+  -> Owner A resumes
+  -> Owner B disconnects
+  -> both views remain disconnected
+```
+
+This is the complete browser-test scope for v0.2. It runs in CI against the
+existing PostgreSQL service. Relay delivery remains covered by the fake-relay
+Vitest integration suite.
+
+## 16. Performance and Retention
+
+No performance blocker is expected for the single-host MVP after applying the
+listed indexes and limits:
+
+- One indexed reconciliation query runs every 30 seconds.
+- Each active connection owns one WebSocket and bounded reconnect state.
+- Delivery worker concurrency is configurable and defaults to 10.
+- Text bodies are limited to 16 KiB.
+- Queue queries operate on indexed state and retry timestamps.
+- Connector queries load endpoints in batches rather than per route.
+
+Delivered message bodies and preserved signed source events are removed seven
+days after terminal delivery. Hashes, event IDs, mappings, and audit metadata
+remain while the route is active so old threads can receive replies. They are
+removed 90 days after disconnect unless an abuse or legal hold applies. Local
+Buzz relays remain the conversation-history source of truth.
+
+## 17. What Already Exists
+
+| Existing capability | Reuse decision |
+| --- | --- |
+| Verified communities, immutable IDs, `owner_pubkey`, and claim state | Reuse as the identity and owner-authorization source |
+| NIP-98 signature verification and replay table | Extract into generic HTTP modules; do not duplicate |
+| Relay URL normalization and SSRF controls | Reuse for connector relay validation |
+| `nostr-tools` signature and event primitives | Reuse; build a separate persistent connector because discovery queries are bounded |
+| PostgreSQL pool and migration runner | Reuse for all shared-channel state |
+| `pg-boss` worker, retries, and queue configuration | Reuse for durable delivery and atomic enqueue |
+| Next.js API route and error-response patterns | Reuse with thin shared-channel route handlers |
+| Self-hosted production worker and GitHub Actions deployment | Extend for connector runtime and installer publication |
+
+## 18. Implementation Order
+
+| Step | Modules touched | Depends on |
+| --- | --- | --- |
+| Foundation | migrations, generic HTTP auth, shared-channel store | - |
+| Bridge runtime | shared-channel bridge and connector, jobs, worker | Foundation |
+| Product surfaces | shared-channel API routes and web views | Foundation |
+| Installer | connector package and release workflow | Foundation |
+| Verification | tests, production health, documentation | Bridge runtime, product surfaces, installer |
+
+Parallel lanes:
+
+- Lane A: Foundation.
+- Lane B: Bridge runtime after Foundation.
+- Lane C: Product surfaces after Foundation.
+- Lane D: Installer after Foundation.
+- Lane E: Verification after B, C, and D merge.
+
+Launch B, C, and D in parallel worktrees after Lane A lands. They own separate
+module directories; integration changes to `src/worker.ts`, queue declarations,
+and GitHub workflows should be merged by Lane E to avoid conflicts.
+
+## 19. Implementation Tasks
+
+Synthesized from the engineering review. Each task maps directly to an approved
+decision.
+
+- [ ] **T1 (P2, human: ~1 day / CC: ~2-4h)** - HTTP auth - Extract generic NIP-98 request authentication and API errors.
+  - Surfaced by: Code quality review - claim-specific authentication errors cannot be reused safely.
+  - Files: `src/http/`, `src/claims/`, existing claim route tests.
+  - Verify: `npm test -- src/claims src/http`.
+- [ ] **T2 (P1, human: ~3 days / CC: ~1 day)** - Persistence - Add the shared-channel schema and owner-authorized store.
+  - Surfaced by: Architecture review - bilateral endpoint state, immediate disconnect, and immutable identity constraints.
+  - Files: `migrations/`, `src/shared-channels/store.ts`.
+  - Verify: migrations plus focused PostgreSQL integration tests.
+- [ ] **T3 (P1, human: ~2 days / CC: ~1 day)** - Credentials - Add encrypted connector-key storage, activation tokens, rotation, and revocation.
+  - Surfaced by: Architecture review - managed connector key custody.
+  - Files: `src/shared-channels/store.ts`, production secret configuration.
+  - Verify: encryption, wrong-key, token replay, rotation, and deletion tests.
+- [ ] **T4 (P1, human: ~5 days / CC: ~2 days)** - Bridge runtime - Implement canonical projection, connector supervision, and durable delivery.
+  - Surfaced by: Architecture review - persistent relay sessions, atomic enqueue, idempotency, and parent-aware retry.
+  - Files: `src/shared-channels/bridge.ts`, `src/shared-channels/connector.ts`, `src/jobs/`, `src/worker.ts`.
+  - Verify: fake-relay and PostgreSQL integration suites.
+- [ ] **T5 (P1, human: ~4 days / CC: ~2 days)** - Product surfaces - Add invitation, acceptance, health, pause, resume, disconnect, and audit APIs and views.
+  - Surfaced by: Product contract and owner-only bilateral administration decisions.
+  - Files: `app/api/shared-channels/`, shared-channel pages and components.
+  - Verify: route and component integration tests plus browser canary.
+- [ ] **T6 (P1, human: ~3 days / CC: ~1 day)** - Installer - Build the one-shot connector CLI and release publication workflow.
+  - Surfaced by: Architecture review - relay credentials must remain on the community host.
+  - Files: connector package, `.github/workflows/`, installation documentation.
+  - Verify: clean-host install, expired token, replay, partial setup, and successful round trip.
+- [ ] **T7 (P1, human: ~2 days / CC: ~1 day)** - Verification - Complete database, fake-relay, route, component, focused Playwright, and release checks.
+  - Surfaced by: Test review - transaction and bilateral flows require real integration coverage.
+  - Files: `src/shared-channels/*.test.ts`, shared-channel API tests, `e2e/shared-channel-admin.spec.ts`, Playwright configuration, CI workflow.
+  - Verify: `npm run typecheck && npm test && npx playwright test && npm run build`.
+
+## 20. NOT in Scope
+
+- Global community aliases or a `buzz:` namespace: conflicts with Buzz's
+  domain-based identity direction.
+- Delegated administrators: owner-only NIP-98 matches the current registry.
+- Membership mirroring: the verified Buzz relay remains authoritative.
+- Multiple worker instances, advisory locks, and `LISTEN/NOTIFY`: unnecessary
+  for the current single-host deployment.
+- Strict persisted thread sequencing and operator skip controls: parent-aware
+  retry is sufficient for v0.2.
+- Cloud KMS or one secret file per community: encrypted PostgreSQL keys plus one
+  host wrapping key fit the current deployment.
+- Broad browser coverage beyond the single bilateral administration workflow:
+  route, component, and fake-relay tests cover the remaining branches.
+- Attachments, reactions, edits, deletes, DMs, huddles, public senders, groups
+  larger than two communities, payments, and protocol federation: unchanged
+  from the product exclusions.
+
+No separate `TODOS.md` entries are proposed. Deferred items above have explicit
+adoption conditions and should be reconsidered only when those conditions
+exist.
+
+## 21. Review Completion
+
+- Step 0 scope challenge: complete v0.2 retained with consolidated modules.
+- Architecture review: nine issues resolved.
+- Code quality review: one issue resolved.
+- Test review: coverage diagram produced; two gaps resolved through PostgreSQL,
+  fake-relay, route, component, focused Playwright, and canary coverage.
+- Performance review: one issue resolved through indexes, limits, batch loading,
+  and bounded retention.
+- Failure modes: ten evaluated; zero silent critical gaps.
+- Outside voice: skipped.
+- Parallelization: five lanes; three implementation lanes can run in parallel
+  after the foundation lands.
+- Unresolved decisions: none.
+
+## CGSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+| --- | --- | --- | ---: | --- | --- |
+| CEO Review | `$plan-ceo-review` | Scope and strategy | 0 | Not run | Product direction was already fixed in v0.2 |
+| Codex Review | `Codex review` | Independent second opinion | 0 | Skipped | No outside voice requested |
+| Eng Review | `$plan-eng-review` | Architecture and tests (required) | 1 | CLEAR | 13 issues resolved, 0 critical gaps |
+| Design Review | `$plan-design-review` | UI and UX gaps | 0 | Not run | Existing product design remains the visual source |
+| DX Review | `$plan-devex-review` | Developer experience gaps | 0 | Not run | Installer DX is specified for implementation |
+
+- **UNRESOLVED:** 0
+- **VERDICT:** ENG CLEARED - ready to implement.

@@ -11,6 +11,12 @@ const REQUIRED_TABLES = [
   "nostr_auth_events",
   "community_icons",
   "community_reliability_metrics",
+  "community_connections",
+  "shared_channels",
+  "shared_channel_endpoints",
+  "bridge_messages",
+  "bridge_deliveries",
+  "bridge_event_mappings",
 ] as const;
 
 export interface DiscoveryDatabaseReadiness {
@@ -32,6 +38,12 @@ export async function assertDiscoveryDatabaseReady(
     nostr_auth_events: string | null;
     community_icons: string | null;
     community_reliability_metrics: string | null;
+    community_connections: string | null;
+    shared_channels: string | null;
+    shared_channel_endpoints: string | null;
+    bridge_messages: string | null;
+    bridge_deliveries: string | null;
+    bridge_event_mappings: string | null;
     migrations: string | null;
   }>(`
     SELECT
@@ -55,6 +67,18 @@ export async function assertDiscoveryDatabaseReady(
         AS community_icons,
       to_regclass('public.community_reliability_metrics')::text
         AS community_reliability_metrics,
+      to_regclass('public.community_connections')::text
+        AS community_connections,
+      to_regclass('public.shared_channels')::text
+        AS shared_channels,
+      to_regclass('public.shared_channel_endpoints')::text
+        AS shared_channel_endpoints,
+      to_regclass('public.bridge_messages')::text
+        AS bridge_messages,
+      to_regclass('public.bridge_deliveries')::text
+        AS bridge_deliveries,
+      to_regclass('public.bridge_event_mappings')::text
+        AS bridge_event_mappings,
       to_regclass('public.buzzrouter_schema_migrations')::text
         AS migrations
   `);

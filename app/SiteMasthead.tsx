@@ -16,7 +16,7 @@ export function SiteMasthead({
   searchDefaultValue = "",
   searchInForm = false,
 }: {
-  current: "discover" | "submit";
+  current: "discover" | "shared-channels" | "submit";
   searchDefaultValue?: string;
   searchInForm?: boolean;
 }) {
@@ -59,6 +59,13 @@ export function SiteMasthead({
             href="/"
           >
             Discover
+          </Link>
+          <Link
+            aria-current={current === "shared-channels" ? "page" : undefined}
+            className={styles.navLink}
+            href="/shared-channels"
+          >
+            Shared channels
           </Link>
           <Link
             aria-current={current === "submit" ? "page" : undefined}

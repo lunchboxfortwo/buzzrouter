@@ -7,6 +7,7 @@
     "packages/connect"
   ],
   "scripts": {
+    "admin": "node --import tsx scripts/signed-request.ts",
     "build": "next build",
     "test:e2e": "playwright test",
     "db:migrate": "node --import tsx scripts/migrate.ts",

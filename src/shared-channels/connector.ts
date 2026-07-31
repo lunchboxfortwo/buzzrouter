@@ -492,15 +492,52 @@ export function createRelayConnectionFactory(): RelayConnectionFactory {
       relay.onauth = async (template: EventTemplate) =>
         finalizeEvent(template, privateKey) as VerifiedEvent;
       await relay.connect({ timeout: CONNECT_TIMEOUT_MS });
-      return new NostrRelayConnection(relay);
+      const connection = new NostrRelayConnection(relay, privateKey);
+      await connection.authenticate();
+      return connection;
     },
   };
 }
 
-class NostrRelayConnection implements RelayConnection {
+/**
+ * Buzz relays reject publishes and subscriptions until the session completes
+ * NIP-42. Setting `onauth` alone does not authenticate — nostr-tools only
+ * signs when `auth()` is called — so authenticate eagerly, and retry once if
+ * the challenge lands after connect.
+ */
+function isAuthRequired(error: unknown): boolean {
+  return (
+    error instanceof Error && /auth-required/i.test(error.message)
+  );
+}
+
+function isMissingChallenge(error: unknown): boolean {
+  return error instanceof Error && /no challenge/i.test(error.message);
+}
+
+export class NostrRelayConnection implements RelayConnection {
   private subscription: Subscription | undefined;
 
-  constructor(private readonly relay: Relay) {}
+  constructor(
+    private readonly relay: Relay,
+    private readonly privateKey: Uint8Array,
+  ) {}
+
+  /**
+   * Best effort: relays that never send a challenge do not need NIP-42, and
+   * `auth()` reports that by throwing rather than hanging.
+   */
+  async authenticate(): Promise<void> {
+    try {
+      await this.relay.auth(
+        async (template: EventTemplate) =>
+          finalizeEvent(template, this.privateKey) as VerifiedEvent,
+      );
+    } catch (error) {
+      if (isMissingChallenge(error)) return;
+      throw error;
+    }
+  }
 
   close(): void {
     this.subscription?.close("connector stopped");
@@ -537,7 +574,13 @@ class NostrRelayConnection implements RelayConnection {
   }
 
   async publish(event: Event): Promise<void> {
-    await this.relay.publish(event);
+    try {
+      await this.relay.publish(event);
+    } catch (error) {
+      if (!isAuthRequired(error)) throw error;
+      await this.authenticate();
+      await this.relay.publish(event);
+    }
   }
 
   subscribe(

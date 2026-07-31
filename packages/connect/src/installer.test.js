@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { parseArguments, runInstaller } from "./installer.js";
+import {
+  buildAdminArguments,
+  parseArguments,
+  runInstaller,
+} from "./installer.js";
 
 const token = "a".repeat(43);
 const bridgePubkey = "b".repeat(64);
@@ -40,6 +44,21 @@ describe("@buzzrouter/connect", () => {
     expect(
       output.write.mock.calls.flat().join(""),
     ).not.toContain(token);
+  });
+
+  it("admits the bridge with a role buzz-admin accepts", () => {
+    const args = buildAdminArguments(["buzz-admin"], { bridgePubkey });
+
+    expect(args).toEqual([
+      "add-member",
+      "--pubkey",
+      bridgePubkey,
+      "--role",
+      "member",
+    ]);
+    // buzz-admin rejects anything outside this set, which is how the
+    // original "bot" role failed against a real relay.
+    expect(["member", "admin"]).toContain(args[args.length - 1]);
   });
 
   it("rejects unsafe router origins and malformed tokens", () => {

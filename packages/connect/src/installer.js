@@ -104,18 +104,28 @@ async function postJson(origin, path, body) {
   return result;
 }
 
+/**
+ * buzz-admin accepts only 'member' or 'admin'. The bridge needs to read and
+ * publish in its mapped channels, nothing more.
+ */
+export const BRIDGE_ROLE = "member";
+
+export function buildAdminArguments(command, descriptor) {
+  return [
+    ...command.slice(1),
+    "add-member",
+    "--pubkey",
+    descriptor.bridgePubkey,
+    "--role",
+    BRIDGE_ROLE,
+  ];
+}
+
 async function runBuzzAdmin(descriptor) {
   const command = await resolveAdminCommand();
   await spawnCommand(
     command[0],
-    [
-      ...command.slice(1),
-      "add-member",
-      "--pubkey",
-      descriptor.bridgePubkey,
-      "--role",
-      "bot",
-    ],
+    buildAdminArguments(command, descriptor),
     {
       ...process.env,
       BUZZ_RELAY_URL: descriptor.relayUrl,

@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+
 import Image from "next/image";
 import Link from "next/link";
 
@@ -314,7 +316,9 @@ function CommunityRow({
               </span>
             )}
           </span>
-          <small className={styles.indexSummary}>{community.relayHost}</small>
+          <small className={styles.indexSummary}>
+            {hostParts(community.relayHost)}
+          </small>
         </span>
       </span>
       <span className={styles.indexFocusCell}>
@@ -454,6 +458,21 @@ function firstValue(value: string | string[] | undefined): string {
 }
 
 
+
+/**
+ * Offers the browser a break after each dot so a wrapped host splits at label
+ * boundaries rather than mid-word.
+ */
+function hostParts(host: string) {
+  const labels = host.split(".");
+  return labels.map((label, index) => (
+    <Fragment key={`${label}-${index}`}>
+      {label}
+      {index < labels.length - 1 ? "." : null}
+      {index < labels.length - 1 ? <wbr /> : null}
+    </Fragment>
+  ));
+}
 
 function monogram(displayName: string): string {
   return displayName.trim().slice(0, 1).toUpperCase() || "B";

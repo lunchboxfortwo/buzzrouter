@@ -1066,54 +1066,8 @@
   margin: 0;
 }
 
-.methodSection {
-  border-top: 1px solid var(--line);
-  margin-top: var(--space-6);
-  padding-block: 32px 40px;
-}
-
-.methodSection h2 {
-  font-size: 1.08rem;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  margin: 0 0 6px;
-}
-
-.methodIntro {
-  color: var(--ink-soft);
-  margin: 0 0 var(--space-4);
-  max-width: 60ch;
-}
-
-.methodGrid {
-  display: grid;
-  gap: var(--space-3);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.methodItem {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 18px;
-}
-
-.methodItem strong {
-  display: block;
-  font-size: 0.9rem;
-}
-
-.methodItem p {
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-  margin: 6px 0 0;
-}
-
 @media (max-width: 920px) {
-  .methodGrid {
-    grid-template-columns: 1fr;
   }
-}
 
 /* Footer */
 

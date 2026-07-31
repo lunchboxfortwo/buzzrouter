@@ -36,7 +36,15 @@ const IDLE_LOCAL_CHANNELS: LocalChannelsState = {
 
 const MANUAL_CHANNEL_VALUE = "__manual__";
 
-type Action = "accept" | "reject" | "pause" | "resume" | "disconnect";
+type Action = "reject" | "pause" | "resume" | "disconnect";
+
+interface ArmConfirmationResponse {
+  code: string;
+  expiresAt: string;
+  localChannelId: string;
+  localChannelName: string;
+  sharedChannelId: string;
+}
 
 interface InstallTokenResponse {
   bridgeNpub: string;
@@ -392,11 +400,15 @@ export function SharedChannelsClient() {
           <div className={styles.channelList}>
             {channels.map((channel) => (
               <ChannelRow
+                activeCommunityId={activeCommunityId}
                 busy={busy}
                 channel={channel}
                 key={channel.id}
                 localChannels={localChannels}
                 onAction={runAction}
+                onRefresh={refresh}
+                setBusy={setBusy}
+                setMessage={setMessage}
               />
             ))}
           </div>
@@ -792,11 +804,16 @@ function ProposalForm({
 }
 
 function ChannelRow({
+  activeCommunityId,
   busy,
   channel,
   localChannels,
   onAction,
+  onRefresh,
+  setBusy,
+  setMessage,
 }: {
+  activeCommunityId: string;
   busy: boolean;
   channel: SharedChannelAdminRecord;
   localChannels: LocalChannelsState;
@@ -805,6 +822,9 @@ function ChannelRow({
     action: Action,
     extra?: Record<string, string>,
   ) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  setBusy: (busy: boolean) => void;
+  setMessage: (message: string) => void;
 }) {
   const incoming =
     channel.state === "proposed" &&
@@ -825,10 +845,14 @@ function ChannelRow({
       <div className={styles.channelActions}>
         {incoming ? (
           <AcceptControls
+            activeCommunityId={activeCommunityId}
             busy={busy}
             channel={channel}
             localChannels={localChannels}
-            onAction={onAction}
+            onReject={() => onAction(channel, "reject")}
+            onRefresh={onRefresh}
+            setBusy={setBusy}
+            setMessage={setMessage}
           />
         ) : null}
         {channel.state === "proposed" && !incoming ? (
@@ -871,24 +895,86 @@ function ChannelRow({
 }
 
 function AcceptControls({
+  activeCommunityId,
   busy,
   channel,
   localChannels,
-  onAction,
+  onReject,
+  onRefresh,
+  setBusy,
+  setMessage,
 }: {
+  activeCommunityId: string;
   busy: boolean;
   channel: SharedChannelAdminRecord;
   localChannels: LocalChannelsState;
-  onAction: (
-    channel: SharedChannelAdminRecord,
-    action: Action,
-    extra?: Record<string, string>,
-  ) => Promise<void>;
+  onReject: () => Promise<void>;
+  onRefresh: () => Promise<void>;
+  setBusy: (busy: boolean) => void;
+  setMessage: (message: string) => void;
 }) {
   const [selection, setSelection] = useState<LocalChannelSelection>({
     channelId: "",
     channelName: "",
   });
+  const [armed, setArmed] = useState<ArmConfirmationResponse | null>(null);
+
+  // Once armed, poll for the bridge to hear the code and flip us to active.
+  useEffect(() => {
+    if (!armed) return;
+    const interval = setInterval(() => {
+      void onRefresh();
+    }, 4_000);
+    return () => clearInterval(interval);
+  }, [armed, onRefresh]);
+
+  async function arm() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await signedRequest<ArmConfirmationResponse>(
+        `/api/shared-channels/${channel.id}/accept`,
+        "POST",
+        {
+          communityId: activeCommunityId,
+          idempotencyKey: crypto.randomUUID(),
+          localChannelId: selection.channelId,
+          localChannelName: selection.channelName,
+        },
+      );
+      setArmed(result);
+      setMessage("Type the code in your channel to finish.");
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (armed) {
+    return (
+      <div className={styles.confirmPending}>
+        <p>
+          Post this code as a message in{" "}
+          <strong>{armed.localChannelName}</strong> from your Buzz app. The
+          connection finishes once an owner or admin sends it &mdash; no one
+          else can.
+        </p>
+        <code className={styles.confirmCode}>{armed.code}</code>
+        <button
+          className={styles.secondary}
+          disabled={busy}
+          onClick={() => {
+            setArmed(null);
+            setMessage("");
+          }}
+          type="button"
+        >
+          Pick a different channel
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -904,12 +990,7 @@ function AcceptControls({
           !selection.channelId.trim() ||
           !selection.channelName.trim()
         }
-        onClick={() =>
-          onAction(channel, "accept", {
-            localChannelId: selection.channelId,
-            localChannelName: selection.channelName,
-          })
-        }
+        onClick={arm}
         type="button"
       >
         Accept
@@ -917,7 +998,7 @@ function AcceptControls({
       <button
         className={styles.secondary}
         disabled={busy}
-        onClick={() => onAction(channel, "reject")}
+        onClick={onReject}
         type="button"
       >
         Reject
@@ -1083,7 +1164,6 @@ function LocalChannelPicker({
 
 function actionMessage(action: Action): string {
   return {
-    accept: "Shared channel active.",
     disconnect: "Shared channel disconnected.",
     pause: "Your endpoint is paused.",
     reject: "Invitation rejected.",

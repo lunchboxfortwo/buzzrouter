@@ -17,6 +17,10 @@ const CONNECTOR_KEY_BYTES = 32;
 const WRAPPING_KEY_BYTES = 32;
 const GCM_NONCE_BYTES = 12;
 const GCM_TAG_BYTES = 16;
+const CONFIRMATION_CODE_LENGTH = 8;
+// Crockford-ish alphabet: no 0/O/1/I so a code is easy to read and retype.
+const CONFIRMATION_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const CONFIRMATION_TTL_MS = 15 * 60_000;
 
 export interface EncryptedConnectorKey {
   authTag: Buffer;
@@ -134,13 +138,33 @@ export interface CreateSharedChannelInput {
   sourceCommunityId: string;
 }
 
-export interface AcceptSharedChannelInput {
+export interface ArmSharedChannelConfirmationInput {
   communityId: string;
   idempotencyKey: string;
   localChannelId: string;
   localChannelName: string;
   ownerPubkey: string;
   sharedChannelId: string;
+}
+
+export interface ArmSharedChannelConfirmationResult {
+  code: string;
+  expiresAt: string;
+  localChannelId: string;
+  localChannelName: string;
+  sharedChannelId: string;
+}
+
+export interface ConfirmSharedChannelBindingInput {
+  actorCreatedAt: number;
+  actorEventId: string;
+  actorPubkey: string;
+  confirmationId: string;
+}
+
+export interface ConfirmSharedChannelBindingResult {
+  activated: boolean;
+  sharedChannelId?: string;
 }
 
 export interface ChangeEndpointStateInput {
@@ -177,9 +201,19 @@ export interface ConnectorRouteConfig {
   sourceEndpointId: string;
 }
 
+export interface PendingConfirmationConfig {
+  code: string;
+  confirmationId: string;
+  endpointId: string;
+  localChannelId: string;
+  sharedChannelId: string;
+  since: number;
+}
+
 export interface ActiveConnectorConfig
   extends CommunityConnectionRecord,
     EncryptedConnectorKey {
+  pendingConfirmations: PendingConfirmationConfig[];
   routes: ConnectorRouteConfig[];
 }
 
@@ -793,80 +827,244 @@ export async function createSharedChannel(
   });
 }
 
-export async function acceptSharedChannel(
+/**
+ * Arm a pending destination endpoint for chat-proof binding: pin the chosen
+ * local channel onto the still-pending endpoint (so the already-admitted bridge
+ * can subscribe to it) and mint a single-use code the owner types into that
+ * channel. Clicking accept in the web UI only gets you here — the code is NOT
+ * authority. The route stays proposed until the bridge hears the code from a
+ * roster owner/admin ({@link confirmSharedChannelBinding}).
+ */
+export async function armSharedChannelConfirmation(
   pool: Pool,
-  input: AcceptSharedChannelInput,
-): Promise<SharedChannelRecord> {
+  input: ArmSharedChannelConfirmationInput,
+): Promise<ArmSharedChannelConfirmationResult> {
   assertText(input.localChannelId, 1, 200, "Local channel");
   assertText(input.localChannelName, 1, 80, "Local channel name");
+  assertIdempotencyKey(input.idempotencyKey);
 
-  return mutateSharedChannel(
-    pool,
-    {
-      action: "shared_channel.accepted",
-      ...input,
-    },
-    async (client, channel) => {
-      if (channel.state !== "proposed") {
-        throw invalidChannelState();
-      }
-      if (
-        channel.expires_at &&
-        channel.expires_at.getTime() <= Date.now()
-      ) {
-        throw new ApiError(
-          "invitation_expired",
-          "The shared-channel invitation has expired.",
-          409,
-        );
-      }
-      const connection = await requireActiveConnection(
-        client,
-        input.communityId,
-      );
-      const endpointResult = await client.query<{ id: string }>(
-        `
-          UPDATE shared_channel_endpoints
-          SET connection_id = $3,
-              state = 'active',
-              relay_url_snapshot = $4,
-              local_channel_id = $5,
-              local_channel_name_snapshot = $6,
-              last_event_created_at = floor(extract(epoch FROM now()))::bigint,
-              accepted_by = $7,
-              accepted_at = now(),
-              updated_at = now()
-          WHERE shared_channel_id = $1
-            AND community_id = $2
-            AND role = 'destination'
-            AND state = 'pending'
-          RETURNING id
-        `,
-        [
-          input.sharedChannelId,
-          input.communityId,
-          connection.id,
-          connection.relayUrl,
-          input.localChannelId,
-          input.localChannelName,
-          input.ownerPubkey,
-        ],
-      );
-      if (!endpointResult.rows[0]) {
-        throw new ApiError(
-          "invitation_not_found",
-          "The invitation is unavailable.",
-          404,
-        );
-      }
+  return withTransaction(pool, async (client) => {
+    await requireVerifiedOwner(client, input.communityId, input.ownerPubkey);
 
-      return updateChannelState(
-        client,
+    const target = await client.query<{
+      channel_expires_at: Date | null;
+      channel_state: SharedChannelRecord["state"];
+      endpoint_id: string;
+      endpoint_state: SharedChannelEndpointRecord["state"];
+    }>(
+      `
+        SELECT
+          channels.state AS channel_state,
+          channels.expires_at AS channel_expires_at,
+          endpoints.id AS endpoint_id,
+          endpoints.state AS endpoint_state
+        FROM shared_channels AS channels
+        JOIN shared_channel_endpoints AS endpoints
+          ON endpoints.shared_channel_id = channels.id
+        WHERE channels.id = $1
+          AND endpoints.community_id = $2
+          AND endpoints.role = 'destination'
+        FOR UPDATE OF channels, endpoints
+      `,
+      [input.sharedChannelId, input.communityId],
+    );
+    const row = target.rows[0];
+    if (!row) {
+      throw new ApiError(
+        "invitation_not_found",
+        "The invitation is unavailable.",
+        404,
+      );
+    }
+    if (row.channel_state !== "proposed" || row.endpoint_state !== "pending") {
+      throw invalidChannelState();
+    }
+    if (
+      row.channel_expires_at &&
+      row.channel_expires_at.getTime() <= Date.now()
+    ) {
+      throw new ApiError(
+        "invitation_expired",
+        "The shared-channel invitation has expired.",
+        409,
+      );
+    }
+
+    const connection = await requireActiveConnection(
+      client,
+      input.communityId,
+    );
+
+    await client.query(
+      `
+        UPDATE shared_channel_endpoints
+        SET connection_id = $2,
+            relay_url_snapshot = $3,
+            local_channel_id = $4,
+            local_channel_name_snapshot = $5,
+            updated_at = now()
+        WHERE id = $1
+          AND role = 'destination'
+          AND state = 'pending'
+      `,
+      [
+        row.endpoint_id,
+        connection.id,
+        connection.relayUrl,
+        input.localChannelId,
+        input.localChannelName,
+      ],
+    );
+
+    // Re-arming replaces any prior live code for this endpoint.
+    await client.query(
+      `
+        DELETE FROM shared_channel_confirmations
+        WHERE endpoint_id = $1
+          AND state = 'pending'
+      `,
+      [row.endpoint_id],
+    );
+
+    const code = generateConfirmationCode();
+    const inserted = await client.query<{ expires_at: Date }>(
+      `
+        INSERT INTO shared_channel_confirmations (
+          shared_channel_id,
+          endpoint_id,
+          community_id,
+          connection_id,
+          local_channel_id,
+          local_channel_name_snapshot,
+          code,
+          expires_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(secs => $8))
+        RETURNING expires_at
+      `,
+      [
         input.sharedChannelId,
-        "active",
-      );
-    },
-  );
+        row.endpoint_id,
+        input.communityId,
+        connection.id,
+        input.localChannelId,
+        input.localChannelName,
+        code,
+        Math.floor(CONFIRMATION_TTL_MS / 1_000),
+      ],
+    );
+
+    await insertAuditEvent(client, {
+      action: "shared_channel.confirmation_armed",
+      actorPubkey: input.ownerPubkey,
+      communityId: input.communityId,
+      idempotencyKey: input.idempotencyKey,
+      nextState: "proposed",
+      previousState: "proposed",
+      sharedChannelId: input.sharedChannelId,
+      targetId: input.sharedChannelId,
+    });
+
+    return {
+      code,
+      expiresAt: inserted.rows[0].expires_at.toISOString(),
+      localChannelId: input.localChannelId,
+      localChannelName: input.localChannelName,
+      sharedChannelId: input.sharedChannelId,
+    };
+  });
+}
+
+/**
+ * Consume a confirmation code and activate the destination endpoint + channel.
+ * The caller (the connector) has ALREADY verified, against the relay-signed
+ * roster, that the typing pubkey is an owner/admin — this only does the atomic
+ * single-use consume + activation. A replayed or expired code matches no pending
+ * row and returns `{ activated: false }`.
+ */
+export async function confirmSharedChannelBinding(
+  pool: Pool,
+  input: ConfirmSharedChannelBindingInput,
+): Promise<ConfirmSharedChannelBindingResult> {
+  assertHex(input.actorPubkey, 64, "Confirmation author");
+  assertHex(input.actorEventId, 64, "Confirmation event ID");
+
+  return withTransaction(pool, async (client) => {
+    const consumed = await client.query<{
+      community_id: string;
+      endpoint_id: string;
+      shared_channel_id: string;
+    }>(
+      `
+        UPDATE shared_channel_confirmations
+        SET state = 'consumed',
+            consumed_at = now(),
+            consumed_by_pubkey = $2,
+            consumed_event_id = $3,
+            updated_at = now()
+        WHERE id = $1
+          AND state = 'pending'
+          AND expires_at > now()
+        RETURNING endpoint_id, shared_channel_id, community_id
+      `,
+      [input.confirmationId, input.actorPubkey, input.actorEventId],
+    );
+    const row = consumed.rows[0];
+    if (!row) {
+      return { activated: false };
+    }
+
+    const endpoint = await client.query<{ id: string }>(
+      `
+        UPDATE shared_channel_endpoints
+        SET state = 'active',
+            accepted_by = $2,
+            accepted_at = now(),
+            last_event_created_at = GREATEST(
+              COALESCE(last_event_created_at, 0),
+              $3
+            ),
+            updated_at = now()
+        WHERE id = $1
+          AND role = 'destination'
+          AND state = 'pending'
+        RETURNING id
+      `,
+      [row.endpoint_id, input.actorPubkey, input.actorCreatedAt],
+    );
+    if (!endpoint.rows[0]) {
+      throw invalidChannelState();
+    }
+
+    const channel = await client.query<{ id: string }>(
+      `
+        UPDATE shared_channels
+        SET state = 'active',
+            updated_at = now()
+        WHERE id = $1
+          AND state = 'proposed'
+          AND (expires_at IS NULL OR expires_at > now())
+        RETURNING id
+      `,
+      [row.shared_channel_id],
+    );
+    if (!channel.rows[0]) {
+      throw invalidChannelState();
+    }
+
+    await insertAuditEvent(client, {
+      action: "shared_channel.accepted",
+      actorPubkey: input.actorPubkey,
+      communityId: row.community_id,
+      idempotencyKey: `confirm:${input.confirmationId}`,
+      nextState: "active",
+      previousState: "proposed",
+      sharedChannelId: row.shared_channel_id,
+      targetId: row.shared_channel_id,
+    });
+
+    return { activated: true, sharedChannelId: row.shared_channel_id };
+  });
 }
 
 export async function rejectSharedChannel(
@@ -1492,11 +1690,56 @@ export async function listActiveConnectorConfigs(
     routesByConnection.set(route.connection_id, connectionRoutes);
   }
 
+  const confirmations = await pool.query<{
+    code: string;
+    confirmation_id: string;
+    connection_id: string;
+    endpoint_id: string;
+    local_channel_id: string;
+    shared_channel_id: string;
+    since: string | number | null;
+  }>(
+    `
+      SELECT
+        id AS confirmation_id,
+        connection_id,
+        endpoint_id,
+        shared_channel_id,
+        local_channel_id,
+        code,
+        floor(extract(epoch FROM created_at))::bigint AS since
+      FROM shared_channel_confirmations
+      WHERE connection_id = ANY($1::uuid[])
+        AND state = 'pending'
+        AND expires_at > now()
+      ORDER BY connection_id, created_at
+    `,
+    [connections.rows.map((row) => row.id)],
+  );
+  const confirmationsByConnection = new Map<
+    string,
+    PendingConfirmationConfig[]
+  >();
+  for (const confirmation of confirmations.rows) {
+    const list =
+      confirmationsByConnection.get(confirmation.connection_id) ?? [];
+    list.push({
+      code: confirmation.code,
+      confirmationId: confirmation.confirmation_id,
+      endpointId: confirmation.endpoint_id,
+      localChannelId: confirmation.local_channel_id,
+      sharedChannelId: confirmation.shared_channel_id,
+      since: Number(confirmation.since ?? 0),
+    });
+    confirmationsByConnection.set(confirmation.connection_id, list);
+  }
+
   return connections.rows.map((row) => ({
     ...mapConnection(row),
     authTag: row.private_key_auth_tag,
     ciphertext: row.encrypted_private_key,
     nonce: row.private_key_nonce,
+    pendingConfirmations: confirmationsByConnection.get(row.id) ?? [],
     routes: routesByConnection.get(row.id) ?? [],
   }));
 }
@@ -1970,31 +2213,6 @@ async function requireOwnedEndpointChannel(
   return channel;
 }
 
-async function updateChannelState(
-  client: PoolClient,
-  sharedChannelId: string,
-  state: SharedChannelRecord["state"],
-): Promise<SharedChannelRow> {
-  const result = await client.query<SharedChannelRow>(
-    `
-      UPDATE shared_channels
-      SET state = $2,
-          updated_at = now()
-      WHERE id = $1
-      RETURNING
-        id,
-        proposed_by_community_id,
-        proposed_name,
-        purpose,
-        state,
-        created_at,
-        expires_at
-    `,
-    [sharedChannelId, state],
-  );
-  return result.rows[0];
-}
-
 async function requireVerifiedOwner(
   client: PoolClient,
   communityId: string,
@@ -2191,6 +2409,15 @@ async function withTransaction<T>(
   } finally {
     client.release();
   }
+}
+
+function generateConfirmationCode(): string {
+  const bytes = randomBytes(CONFIRMATION_CODE_LENGTH);
+  let code = "";
+  for (const byte of bytes) {
+    code += CONFIRMATION_CODE_ALPHABET[byte % CONFIRMATION_CODE_ALPHABET.length];
+  }
+  return code;
 }
 
 function mapConnection(

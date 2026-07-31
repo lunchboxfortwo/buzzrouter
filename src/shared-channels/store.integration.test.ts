@@ -30,6 +30,8 @@ import {
 } from "../jobs/queues";
 import {
   ConnectorSupervisor,
+  type CommunityRoster,
+  type ConfirmationSubscription,
   type RelayConnection,
   type RelayConnectionFactory,
   type RelayGroup,
@@ -43,9 +45,10 @@ import {
   verifyAndActivateCommunityConnection,
 } from "./installer";
 import {
-  acceptSharedChannel,
   activateCommunityConnection,
+  armSharedChannelConfirmation,
   beginCommunityConnectionInstall,
+  confirmSharedChannelBinding,
   createSharedChannel,
   disconnectSharedChannel,
   getSharedChannelAdminWorkspace,
@@ -53,6 +56,7 @@ import {
   listSharedChannelEndpoints,
   pauseSharedChannelEndpoint,
   resumeSharedChannelEndpoint,
+  type ConnectorRouteConfig,
 } from "./store";
 
 const databaseUrl =
@@ -79,6 +83,7 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
     await pool.query(`
       TRUNCATE
         shared_channel_audit_events,
+        shared_channel_confirmations,
         bridge_event_mappings,
         bridge_deliveries,
         bridge_messages,
@@ -418,7 +423,7 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
     });
 
     await expect(
-      acceptSharedChannel(pool, {
+      armSharedChannelConfirmation(pool, {
         communityId: destination.communityId,
         idempotencyKey: "expired-accept-1",
         localChannelId: randomUUID(),
@@ -665,6 +670,157 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
       await supervisor.stop();
     }
   });
+
+  describe("chat-proof confirmation authorization", () => {
+    it("activates the route when an owner types the code", async () => {
+      const armed = await armPendingRoute(pool);
+      await withSupervisorHearing(pool, boss, async (relays) => {
+        const relay = relays.get(armed.destinationRelayUrl);
+        relay.roster = new Map([[armed.destination.ownerPubkey, "owner"]]);
+        relay.emit(
+          confirmationEvent(
+            armed.destination.ownerPubkey,
+            armed.localChannelId,
+            armed.code,
+          ),
+        );
+        await waitFor(
+          async () =>
+            (await endpointState(
+              pool,
+              armed.sharedChannelId,
+              armed.destination.communityId,
+            )) === "active",
+        );
+      });
+      expect(await channelState(pool, armed.sharedChannelId)).toBe("active");
+      expect(await confirmationState(pool, armed.confirmationId)).toBe(
+        "consumed",
+      );
+    });
+
+    it("refuses when an ordinary member types the code", async () => {
+      const armed = await armPendingRoute(pool);
+      await withSupervisorHearing(pool, boss, async (relays) => {
+        const relay = relays.get(armed.destinationRelayUrl);
+        relay.roster = new Map([[armed.destination.ownerPubkey, "member"]]);
+        relay.emit(
+          confirmationEvent(
+            armed.destination.ownerPubkey,
+            armed.localChannelId,
+            armed.code,
+          ),
+        );
+        await settleConfirmation();
+      });
+      expect(
+        await endpointState(
+          pool,
+          armed.sharedChannelId,
+          armed.destination.communityId,
+        ),
+      ).toBe("pending");
+      expect(await confirmationState(pool, armed.confirmationId)).toBe(
+        "pending",
+      );
+    });
+
+    it("fails closed when the roster cannot be read", async () => {
+      const armed = await armPendingRoute(pool);
+      await withSupervisorHearing(pool, boss, async (relays) => {
+        const relay = relays.get(armed.destinationRelayUrl);
+        relay.rosterReadable = false;
+        relay.emit(
+          confirmationEvent(
+            armed.destination.ownerPubkey,
+            armed.localChannelId,
+            armed.code,
+          ),
+        );
+        await settleConfirmation();
+      });
+      expect(
+        await endpointState(
+          pool,
+          armed.sharedChannelId,
+          armed.destination.communityId,
+        ),
+      ).toBe("pending");
+      expect(await confirmationState(pool, armed.confirmationId)).toBe(
+        "pending",
+      );
+    });
+
+    it("refuses a replayed code", async () => {
+      const armed = await armPendingRoute(pool);
+      await withSupervisorHearing(pool, boss, async (relays) => {
+        const relay = relays.get(armed.destinationRelayUrl);
+        relay.roster = new Map([[armed.destination.ownerPubkey, "owner"]]);
+        relay.emit(
+          confirmationEvent(
+            armed.destination.ownerPubkey,
+            armed.localChannelId,
+            armed.code,
+          ),
+        );
+        await waitFor(
+          async () =>
+            (await confirmationState(pool, armed.confirmationId)) ===
+            "consumed",
+        );
+        // Same code, second event: nothing pending matches -> refused.
+        relay.emit(
+          confirmationEvent(
+            armed.destination.ownerPubkey,
+            armed.localChannelId,
+            armed.code,
+          ),
+        );
+        await settleConfirmation();
+      });
+      const replays = await pool.query<{ count: string }>(
+        `
+          SELECT count(*)::text AS count
+          FROM shared_channel_audit_events
+          WHERE shared_channel_id = $1
+            AND action = 'shared_channel.accepted'
+        `,
+        [armed.sharedChannelId],
+      );
+      expect(replays.rows[0].count).toBe("1");
+    });
+
+    it("refuses an expired code", async () => {
+      const armed = await armPendingRoute(pool);
+      await withSupervisorHearing(pool, boss, async (relays) => {
+        const relay = relays.get(armed.destinationRelayUrl);
+        relay.roster = new Map([[armed.destination.ownerPubkey, "owner"]]);
+        await pool.query(
+          `
+            UPDATE shared_channel_confirmations
+            SET expires_at = now() - interval '1 second'
+            WHERE id = $1
+          `,
+          [armed.confirmationId],
+        );
+        relay.emit(
+          confirmationEvent(
+            armed.destination.ownerPubkey,
+            armed.localChannelId,
+            armed.code,
+          ),
+        );
+        await settleConfirmation();
+      });
+      expect(
+        await endpointState(
+          pool,
+          armed.sharedChannelId,
+          armed.destination.communityId,
+        ),
+      ).toBe("pending");
+    });
+  });
 });
 
 interface CommunityFixture {
@@ -696,9 +852,8 @@ async function createActiveRoute(pool: Pool): Promise<{
     sourceChannelName: "partner-research",
     sourceCommunityId: source.communityId,
   });
-  await acceptSharedChannel(pool, {
+  await acceptViaConfirmation(pool, {
     communityId: destination.communityId,
-    idempotencyKey: "accept-route-1",
     localChannelId: randomUUID(),
     localChannelName: "external-research",
     ownerPubkey: destination.ownerPubkey,
@@ -709,6 +864,194 @@ async function createActiveRoute(pool: Pool): Promise<{
     sharedChannelId: channel.id,
     source,
   };
+}
+
+/**
+ * Drive the full two-step binding as a helper: arm the destination endpoint,
+ * then consume the code the way the connector does after the roster check
+ * passes. Used to reach an active route in tests that are not about the
+ * authorization branches themselves.
+ */
+async function acceptViaConfirmation(
+  pool: Pool,
+  input: {
+    communityId: string;
+    localChannelId: string;
+    localChannelName: string;
+    ownerPubkey: string;
+    sharedChannelId: string;
+  },
+): Promise<void> {
+  await armSharedChannelConfirmation(pool, {
+    communityId: input.communityId,
+    idempotencyKey: `arm-${input.sharedChannelId}`,
+    localChannelId: input.localChannelId,
+    localChannelName: input.localChannelName,
+    ownerPubkey: input.ownerPubkey,
+    sharedChannelId: input.sharedChannelId,
+  });
+  const confirmation = await pool.query<{ id: string }>(
+    `
+      SELECT id
+      FROM shared_channel_confirmations
+      WHERE shared_channel_id = $1
+        AND community_id = $2
+        AND state = 'pending'
+    `,
+    [input.sharedChannelId, input.communityId],
+  );
+  const result = await confirmSharedChannelBinding(pool, {
+    actorCreatedAt: Math.floor(Date.now() / 1_000),
+    actorEventId: hex(32),
+    actorPubkey: input.ownerPubkey,
+    confirmationId: confirmation.rows[0].id,
+  });
+  if (!result.activated) {
+    throw new Error("Test route activation failed.");
+  }
+}
+
+interface ArmedRoute {
+  code: string;
+  confirmationId: string;
+  destination: CommunityFixture;
+  destinationRelayUrl: string;
+  localChannelId: string;
+  sharedChannelId: string;
+  source: CommunityFixture;
+}
+
+async function armPendingRoute(pool: Pool): Promise<ArmedRoute> {
+  const source = await createConnectedCommunity(pool, "conf-source");
+  const destination = await createConnectedCommunity(
+    pool,
+    "conf-destination",
+  );
+  const channel = await createSharedChannel(pool, {
+    destinationCommunityId: destination.communityId,
+    idempotencyKey: `propose-${randomUUID()}`,
+    ownerPubkey: source.ownerPubkey,
+    proposedName: "confirm-route",
+    purpose: "Bind via chat proof",
+    sourceChannelId: randomUUID(),
+    sourceChannelName: "confirm-route",
+    sourceCommunityId: source.communityId,
+  });
+  const localChannelId = randomUUID();
+  const armed = await armSharedChannelConfirmation(pool, {
+    communityId: destination.communityId,
+    idempotencyKey: `arm-${randomUUID()}`,
+    localChannelId,
+    localChannelName: "external-confirm",
+    ownerPubkey: destination.ownerPubkey,
+    sharedChannelId: channel.id,
+  });
+  const confirmation = await pool.query<{ id: string }>(
+    `
+      SELECT id
+      FROM shared_channel_confirmations
+      WHERE shared_channel_id = $1
+        AND state = 'pending'
+    `,
+    [channel.id],
+  );
+  const relay = await pool.query<{ relay_url_snapshot: string }>(
+    `
+      SELECT relay_url_snapshot
+      FROM community_connections
+      WHERE community_id = $1
+    `,
+    [destination.communityId],
+  );
+  return {
+    code: armed.code,
+    confirmationId: confirmation.rows[0].id,
+    destination,
+    destinationRelayUrl: relay.rows[0].relay_url_snapshot,
+    localChannelId,
+    sharedChannelId: channel.id,
+    source,
+  };
+}
+
+async function withSupervisorHearing(
+  pool: Pool,
+  boss: PgBoss,
+  run: (relays: FakeRelayFactory) => Promise<void>,
+): Promise<void> {
+  const relays = new FakeRelayFactory();
+  const supervisor = new ConnectorSupervisor(
+    pool,
+    boss,
+    { getKey: async () => wrappingKey },
+    relays,
+  );
+  await supervisor.start();
+  try {
+    await run(relays);
+  } finally {
+    await supervisor.stop();
+  }
+}
+
+function confirmationEvent(
+  pubkey: string,
+  channelId: string,
+  content: string,
+): Event {
+  return {
+    content,
+    created_at: Math.floor(Date.now() / 1_000),
+    id: hex(32),
+    kind: 9,
+    pubkey,
+    sig: "0".repeat(128),
+    tags: [["h", channelId]],
+  } as unknown as Event;
+}
+
+/** Let the fire-and-forget confirmation handler settle before asserting. */
+async function settleConfirmation(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 150));
+}
+
+async function endpointState(
+  pool: Pool,
+  sharedChannelId: string,
+  communityId: string,
+): Promise<string> {
+  const result = await pool.query<{ state: string }>(
+    `
+      SELECT state
+      FROM shared_channel_endpoints
+      WHERE shared_channel_id = $1
+        AND community_id = $2
+    `,
+    [sharedChannelId, communityId],
+  );
+  return result.rows[0].state;
+}
+
+async function channelState(
+  pool: Pool,
+  sharedChannelId: string,
+): Promise<string> {
+  const result = await pool.query<{ state: string }>(
+    "SELECT state FROM shared_channels WHERE id = $1",
+    [sharedChannelId],
+  );
+  return result.rows[0].state;
+}
+
+async function confirmationState(
+  pool: Pool,
+  confirmationId: string,
+): Promise<string> {
+  const result = await pool.query<{ state: string }>(
+    "SELECT state FROM shared_channel_confirmations WHERE id = $1",
+    [confirmationId],
+  );
+  return result.rows[0].state;
 }
 
 async function createConnectedCommunity(
@@ -809,6 +1152,10 @@ class FakeRelayFactory implements RelayConnectionFactory {
 class FakeRelayConnection implements RelayConnection {
   private onEvent: ((event: Event) => void) | undefined;
   readonly published: Event[] = [];
+  // Test controls: the roster this relay hands back, and whether reading it
+  // fails (null => the connector must fail closed).
+  roster: CommunityRoster | null = new Map();
+  rosterReadable = true;
 
   close(): void {
     this.onEvent = undefined;
@@ -830,8 +1177,13 @@ class FakeRelayConnection implements RelayConnection {
     this.published.push(event);
   }
 
+  async readRoster(): Promise<CommunityRoster | null> {
+    return this.rosterReadable ? this.roster : null;
+  }
+
   subscribe(
-    _routes: unknown[],
+    _routes: ConnectorRouteConfig[],
+    _confirmations: ConfirmationSubscription[],
     onEvent: (event: Event) => void,
     _onClose: (reason: string) => void,
   ): void {
@@ -859,6 +1211,9 @@ class GroupListingRelayFactory implements RelayConnectionFactory {
         return factory.groups;
       },
       async publish() {},
+      async readRoster() {
+        return new Map();
+      },
       subscribe() {},
     };
   }

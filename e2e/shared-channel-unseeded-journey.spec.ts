@@ -1,8 +1,16 @@
 import { createHash, randomBytes } from "node:crypto";
+import { resolve } from "node:path";
+
+// This spec runs a ConnectorSupervisor IN THE TEST PROCESS (the app server does
+// not run one), so the runner itself opens the wss:// handshake to the fake
+// relay. Trust its self-signed cert here, before any TLS happens — no
+// verification is disabled.
+process.env.NODE_EXTRA_CA_CERTS = resolve("e2e/fixtures/fake-relay-cert.pem");
 
 import { expect, test } from "@playwright/test";
 import type { EventTemplate } from "nostr-tools/core";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
+import type { PgBoss } from "pg-boss";
 import { Pool } from "pg";
 
 import {
@@ -10,6 +18,10 @@ import {
   completeClaimChallenge,
   createClaimChallenge,
 } from "../src/claims/store";
+import {
+  ConnectorSupervisor,
+  createFileWrappingKeyProvider,
+} from "../src/shared-channels/connector";
 
 import { startFakeRelay, type FakeRelay } from "./support/fake-relay";
 
@@ -104,6 +116,10 @@ test.beforeAll(async () => {
     slug: "beta-community",
   });
   await activateConnector(ownerB, communityB);
+
+  // Beta's relay-signed roster: owner B is the owner, so a code B types is
+  // authorized. A forwarded link grants nothing without this.
+  relayB.setRoster([{ pubkey: ownerB.pubkey, role: "owner" }]);
 });
 
 test.afterAll(async () => {
@@ -218,7 +234,8 @@ test("a new owner completes the whole shared-channel journey through real UI and
   await page.getByRole("button", { name: "Send invitation" }).click();
   await expect(page.getByText("Invitation sent.")).toBeVisible();
 
-  // Accept as the second community's owner and assert the route reaches active.
+  // ── Step 6: as the second community's owner, arm the acceptance by picking a
+  // channel — this only mints a one-time code, it does NOT bind the route.
   activeSigner = ownerB;
   await page.goto("/shared-channels");
   await page.getByRole("button", { name: "Connect signer" }).click();
@@ -230,8 +247,38 @@ test("a new owner completes the whole shared-channel journey through real UI and
   await expect(acceptPicker).toBeEnabled();
   await acceptPicker.selectOption({ label: "builders" });
   await route.getByRole("button", { name: "Accept" }).click();
-  await expect(page.getByText("Shared channel active.")).toBeVisible();
-  await expect(route).toContainText("active");
+
+  const code = (await route.locator("code").innerText()).trim();
+  expect(code).toMatch(/^[A-Z2-9]{8}$/);
+
+  // ── Step 7: authority to bind lives in Beta's roster, not the web click. Run
+  // the bridge (the app server does not) and have owner B type the code into the
+  // chosen channel; the connector reads Beta's roster, sees B is owner, and only
+  // then activates the route.
+  const supervisor = new ConnectorSupervisor(
+    pool,
+    {} as unknown as PgBoss,
+    createFileWrappingKeyProvider(
+      resolve("e2e/fixtures/connector-wrapping-keys.json"),
+    ),
+  );
+  await supervisor.start();
+  try {
+    relayB.injectEvent(
+      finalizeEvent(
+        {
+          content: `Confirming BuzzRouter: ${code}`,
+          created_at: Math.floor(Date.now() / 1_000),
+          kind: 9,
+          tags: [["h", "builders"]],
+        },
+        ownerB.privateKey,
+      ),
+    );
+    await expect(route).toContainText("active", { timeout: 20_000 });
+  } finally {
+    await supervisor.stop();
+  }
 });
 
 // ── Signer injection ───────────────────────────────────────────────────────
@@ -458,6 +505,7 @@ async function resetDatabase(database: Pool): Promise<void> {
   await database.query(`
     TRUNCATE
       shared_channel_audit_events,
+      shared_channel_confirmations,
       bridge_event_mappings,
       bridge_deliveries,
       bridge_messages,

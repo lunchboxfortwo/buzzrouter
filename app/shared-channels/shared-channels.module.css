@@ -596,3 +596,30 @@
     width: 100%;
   }
 }
+
+.confirmPending {
+  display: grid;
+  gap: 8px;
+  max-width: 320px;
+  min-width: 0;
+}
+
+.confirmPending p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.confirmCode {
+  background: #f6f8fa;
+  border: 1px solid var(--border, #d0d7de);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  padding: 10px 14px;
+  text-align: center;
+  word-break: break-all;
+}

@@ -561,7 +561,7 @@
           <label class="command-filter sort-command-filter">
             <span>Sort</span>
             <select id="sort-control">
-              <option value="reliable"${state.sort === "reliable" ? " selected" : ""}>Most reliable</option>
+              <option value="reliable"${state.sort === "reliable" ? " selected" : ""}>Most active</option>
               <option value="new"${state.sort === "new" ? " selected" : ""}>Newest listing</option>
             </select>
           </label>

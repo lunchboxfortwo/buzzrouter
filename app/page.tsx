@@ -57,7 +57,7 @@ export default async function DirectoryPage({
     ? allCommunities.filter((community) => Boolean(community.focus)).length /
       allCommunities.length
     : 0;
-  const hasFocusData = focusCoverage >= 0.6;
+  const hasFocusData = focusCoverage >= 0.5;
   const focusOptions = hasFocusData
     ? Array.from(
         new Set(
@@ -213,7 +213,7 @@ export default async function DirectoryPage({
               <label className={styles.commandFilter}>
                 <span>Sort</span>
                 <AutoSubmitSelect defaultValue={sort} name="sort">
-                  <option value="reliable">Most reliable</option>
+                  <option value="reliable">Most active</option>
                   <option value="new">Recently discovered</option>
                 </AutoSubmitSelect>
               </label>

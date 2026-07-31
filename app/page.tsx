@@ -50,20 +50,13 @@ export default async function DirectoryPage({
     search,
   });
 
-  const focusCoverage = allCommunities.length
-    ? allCommunities.filter((community) => Boolean(community.focus)).length /
-      allCommunities.length
-    : 0;
-  const hasFocusData = focusCoverage >= 0.5;
-  const focusOptions = hasFocusData
-    ? Array.from(
-        new Set(
-          allCommunities.flatMap((community) =>
-            community.focus ? [community.focus] : [],
-          ),
-        ),
-      ).sort((a, b) => focusLabel(a).localeCompare(focusLabel(b)))
-    : [];
+  const focusOptions = Array.from(
+    new Set(
+      allCommunities.flatMap((community) =>
+        community.focus ? [community.focus] : [],
+      ),
+    ),
+  ).sort((a, b) => focusLabel(a).localeCompare(focusLabel(b)));
 
   const communities = allCommunities.filter((community) => {
     if (focusFilter && community.focus !== focusFilter) return false;
@@ -151,19 +144,17 @@ export default async function DirectoryPage({
 
             <MobileCollapsible label="Search options">
             <section aria-label="Filter communities" className={styles.commandBar}>
-              {hasFocusData ? (
-                <label className={styles.commandFilter}>
-                  <span>Focus</span>
-                  <AutoSubmitSelect defaultValue={focusFilter} name="focus">
-                    <option value="">Any focus</option>
-                    {focusOptions.map((focus) => (
-                      <option key={focus} value={focus}>
-                        {focusLabel(focus)}
-                      </option>
-                    ))}
-                  </AutoSubmitSelect>
-                </label>
-              ) : null}
+              <label className={styles.commandFilter}>
+                <span>Focus</span>
+                <AutoSubmitSelect defaultValue={focusFilter} name="focus">
+                  <option value="">Any focus</option>
+                  {focusOptions.map((focus) => (
+                    <option key={focus} value={focus}>
+                      {focusLabel(focus)}
+                    </option>
+                  ))}
+                </AutoSubmitSelect>
+              </label>
               <noscript>
                 <button className={styles.applyButton} type="submit">
                   Apply
@@ -179,11 +170,11 @@ export default async function DirectoryPage({
             <div className={styles.workspaceGrid}>
               <section
                 aria-labelledby="directory-results-title"
-                className={`${styles.communityIndex} ${hasFocusData ? "" : styles.indexNoFocus}`}
+                className={styles.communityIndex}
               >
                 <div aria-hidden="true" className={styles.indexHeader}>
                   <span>Community</span>
-                  {hasFocusData ? <span>Focus</span> : null}
+                  <span>Focus</span>
                   <span />
                 </div>
                 <h2 className={styles.visuallyHidden} id="directory-results-title">

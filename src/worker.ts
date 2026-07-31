@@ -6,6 +6,7 @@ import {
 } from "./db/pool";
 import { assertDiscoveryDatabaseReady } from "./db/readiness";
 import { registerProbeCandidateWorker } from "./jobs/probe-candidate";
+import { registerRefreshSummariesWorker } from "./jobs/refresh-community-summaries";
 import { registerReliabilityRollupWorker } from "./jobs/reliability-rollup";
 import { configureQueues } from "./jobs/queues";
 import { registerDueProbeScheduler } from "./jobs/schedule-due-probes";
@@ -36,6 +37,7 @@ try {
   await registerDueProbeScheduler(boss, pool);
   await registerSourceWorkers(boss, pool);
   await registerReliabilityRollupWorker(boss, pool);
+  await registerRefreshSummariesWorker(boss, pool);
   connectorSupervisor = new ConnectorSupervisor(
     pool,
     boss,

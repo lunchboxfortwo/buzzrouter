@@ -12,6 +12,7 @@
     "test:e2e": "playwright test",
     "db:migrate": "node --import tsx scripts/migrate.ts",
     "dev": "next dev",
+    "presence": "node --import tsx scripts/presence.ts",
     "discovery:add": "node --import tsx scripts/add-reviewed-candidate.ts",
     "discovery:buzzdir": "node --import tsx scripts/run-buzzdir-source.ts",
     "discovery:doctor": "node --import tsx scripts/discovery-doctor.ts",

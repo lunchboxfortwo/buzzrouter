@@ -11,6 +11,9 @@ config/reviewed-relays.json
 .DS_Store
 .cgstack/
 
+# Local agent identity / secrets (never commit)
+.secrets/
+
 # Playwright artifacts
 /test-results/
 /playwright-report/

@@ -9,6 +9,7 @@ import {
   listSimilarCommunities,
   type DirectoryCommunity,
 } from "../../../src/db/directory";
+import { getCommunitySummary } from "../../../src/db/presence";
 import { reliabilityLabel } from "../../../src/ranking/explain";
 import { focusLabel } from "../../../src/ranking/focus";
 import { JoinButton } from "../../JoinButton";
@@ -94,6 +95,26 @@ function statusOf(c: DirectoryCommunity): string {
   });
 }
 
+const ACTIVITY_LABEL: Record<string, string> = {
+  active: "Active",
+  busy: "Busy",
+  light: "Light activity",
+  quiet: "Quiet",
+};
+
+function activityLabel(level: string): string {
+  return ACTIVITY_LABEL[level] ?? "Active";
+}
+
+function activityDotKey(
+  level: string,
+): "actBusy" | "actActive" | "actLight" | "actQuiet" {
+  if (level === "busy") return "actBusy";
+  if (level === "light") return "actLight";
+  if (level === "quiet") return "actQuiet";
+  return "actActive";
+}
+
 export default async function CommunityPage({
   params,
 }: {
@@ -111,10 +132,11 @@ export default async function CommunityPage({
     community.relayHost,
   );
 
-  const uptime =
-    community.probesTotal > 0
-      ? Math.round((community.probesSuccessful / community.probesTotal) * 100)
-      : null;
+  const summary = await getCommunitySummary(
+    getDatabasePool(),
+    community.relayHost,
+  );
+
   const status = statusOf(community);
   const access = accessKind(community);
   const tone = insigniaTone(community.relayHost);
@@ -179,7 +201,49 @@ export default async function CommunityPage({
           </div>
         </div>
 
-        {community.description ? (
+        {summary ? (
+          <section className={styles.pulse}>
+            <div className={styles.pulseHead}>
+              <span className={styles.pulseKicker}>
+                <span
+                  aria-hidden
+                  className={`${styles.actDot} ${styles[activityDotKey(summary.activityLevel)]}`}
+                />
+                Inside the community
+              </span>
+              <span className={styles.pulseFresh}>
+                Updated {relativeTime(summary.lastSummarizedAt)}
+              </span>
+            </div>
+            <p className={styles.pulseGoals}>{summary.goals}</p>
+            {summary.recentProjects.length > 0 ? (
+              <>
+                <h2 className={styles.pulseSubhead}>Recently working on</h2>
+                <ul className={styles.pulseList}>
+                  {summary.recentProjects.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+            <div className={styles.pulseStats}>
+              <span className={styles.pulseStat}>
+                <strong>{activityLabel(summary.activityLevel)}</strong>
+              </span>
+              <span className={styles.pulseStat}>
+                <strong>{summary.activeMemberCount}</strong> active{" "}
+                {summary.activeMemberCount === 1 ? "member" : "members"}
+                {summary.totalMemberCount
+                  ? ` of ${summary.totalMemberCount}`
+                  : ""}
+              </span>
+              <span className={styles.pulseStat}>
+                <strong>{summary.messageCount}</strong> messages · past{" "}
+                {summary.windowDays}d
+              </span>
+            </div>
+          </section>
+        ) : community.description ? (
           <p className={styles.lede}>{community.description}</p>
         ) : (
           <p className={styles.lede}>
@@ -187,88 +251,6 @@ export default async function CommunityPage({
             BuzzRouter, not reported by the community.
           </p>
         )}
-
-        <div className={styles.grid}>
-          <div className={styles.card}>
-            <h2>What we checked</h2>
-            <dl className={styles.evidence}>
-              <div className={styles.ev}>
-                <dt>Uptime · 30 days</dt>
-                <dd>
-                  {uptime === null ? "—" : `${uptime}%`}
-                  <small>
-                    {community.evidenceSufficient
-                      ? `${community.probesSuccessful} of ${community.probesTotal} successful probes`
-                      : "not enough checks yet"}
-                  </small>
-                </dd>
-              </div>
-              <div className={styles.ev}>
-                <dt>Independent sources</dt>
-                <dd>{community.corroborationSources}<small>that have seen this relay</small></dd>
-              </div>
-              <div className={styles.ev}>
-                <dt>Public code references</dt>
-                <dd>{community.adoptionRepos}<small>GitHub source mentions</small></dd>
-              </div>
-              <div className={styles.ev}>
-                <dt>First discovered</dt>
-                <dd>{relativeTime(community.firstSeenAt)}<small>by BuzzRouter</small></dd>
-              </div>
-            </dl>
-            <div className={styles.checkwrap}>
-              <ul className={styles.checklist}>
-                <li>
-                  <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg>
-                  Runs the canonical Buzz relay software, confirmed via NIP-11
-                </li>
-                <li>
-                  <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg>
-                  Valid TLS and a live WebSocket handshake on recent checks
-                </li>
-                {community.metadataChangedAt ? (
-                  <li>
-                    <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg>
-                    Relay details refreshed by the operator {relativeTime(community.metadataChangedAt)}
-                  </li>
-                ) : null}
-              </ul>
-            </div>
-          </div>
-
-          <div className={`${styles.card} ${styles.probe}`}>
-            <h2>Checked directly</h2>
-            <svg viewBox="0 0 300 130">
-              <path d="M40 70 C110 26 194 26 262 60" fill="none" stroke="#c9ced8" strokeDasharray="2 7" strokeWidth="1.6" strokeLinecap="round" />
-              <circle cx="40" cy="70" r="14" fill="none" stroke="#5657f2" strokeWidth="1.5" opacity="0.5" />
-              <circle cx="40" cy="70" r="7" fill="#5657f2" />
-              <circle cx="262" cy="60" r="15" fill="#fff" stroke="#c9ced8" strokeWidth="1.5" />
-              <path d="m255 60 4.5 4.5 8.5-9.5" fill="none" stroke="#087c5b" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
-              <text x="40" y="104" textAnchor="middle" fill="#667085" fontSize="11" fontWeight="620">BuzzRouter</text>
-              <text x="262" y="96" textAnchor="middle" fill="#667085" fontSize="11" fontWeight="620">relay · verified</text>
-            </svg>
-            <p>
-              BuzzRouter reaches this relay itself — a bounded metadata fetch and
-              a no-auth handshake.
-            </p>
-            {community.supportedNips.length > 0 ? (
-              <>
-                <div className={styles.capLabel}>Protocol support</div>
-                <div className={styles.caps}>
-                  {community.softwareVersion ? (
-                    <span className={styles.cap}>Buzz {community.softwareVersion}</span>
-                  ) : null}
-                  {community.supportedNips.slice(0, 5).map((nip) => (
-                    <span className={styles.cap} key={nip}>NIP-{nip}</span>
-                  ))}
-                  {community.supportedNips.length > 5 ? (
-                    <span className={styles.cap}>+{community.supportedNips.length - 5}</span>
-                  ) : null}
-                </div>
-              </>
-            ) : null}
-          </div>
-        </div>
 
         {similar.length > 0 ? (
           <>

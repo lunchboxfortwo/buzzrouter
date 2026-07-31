@@ -556,10 +556,6 @@
   grid-template-columns: minmax(220px, 2.4fr) minmax(140px, 1fr) 24px;
 }
 
-.indexNoFocus .indexHeader,
-.indexNoFocus .indexRow {
-  grid-template-columns: minmax(220px, 3fr) 24px;
-}
 
 .indexHeader {
   background: var(--surface-muted);
@@ -1052,10 +1048,6 @@
   background-size: 18px 18px;
   border-top: 1px solid var(--line);
   margin-top: var(--space-6);
-  .indexNoFocus .indexHeader,
-  .indexNoFocus .indexRow {
-    grid-template-columns: minmax(0, 1fr) auto 24px;
-  }
 
 }
 
@@ -1375,10 +1367,6 @@
     padding-block: 26px 30px;
     width: min(100% - 20px, 640px);
   }
-  .indexNoFocus .indexHeader,
-  .indexNoFocus .indexRow {
-    grid-template-columns: minmax(0, 1fr) minmax(80px, auto) 20px;
-  }
 
 }
 
@@ -1409,10 +1397,6 @@
 
   .indexStatusCell .statusDot {
     display: none;
-  }
-  .indexNoFocus .indexHeader,
-  .indexNoFocus .indexRow {
-    grid-template-columns: minmax(0, 1fr) auto 16px;
   }
 
 }

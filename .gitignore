@@ -10,3 +10,7 @@ config/reviewed-relays.json
 *.tsbuildinfo
 .DS_Store
 .cgstack/
+
+# Playwright artifacts
+/test-results/
+/playwright-report/

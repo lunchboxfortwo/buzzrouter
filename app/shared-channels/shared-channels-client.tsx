@@ -13,6 +13,7 @@ import type {
   SharedChannelCommunitySummary,
 } from "../../src/shared-channels/store";
 
+import { errorMessage } from "./error-message";
 import styles from "./shared-channels.module.css";
 
 type Action = "accept" | "reject" | "pause" | "resume" | "disconnect";
@@ -43,6 +44,32 @@ export function SharedChannelsClient() {
   const activeCommunity = workspace?.communities.find(
     (community) => community.id === activeCommunityId,
   );
+
+  useEffect(() => {
+    if (!install) return;
+    if (activeCommunity?.connectionState === "active") {
+      setInstall(null);
+      setMessage("Connector active.");
+      return;
+    }
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const next = await signedRequest<SharedChannelAdminWorkspace>(
+          "/api/shared-channels",
+          "GET",
+        );
+        if (!cancelled) setWorkspace(next);
+      } catch {
+        // Transient polling failures are silently retried.
+      }
+    }, 4_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeCommunity?.connectionState, install]);
+
   const channels = useMemo(
     () =>
       workspace?.channels.filter(
@@ -395,23 +422,49 @@ function InstallerCommand({
   install: InstallTokenResponse;
 }) {
   const [copied, setCopied] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function copy() {
     await navigator.clipboard.writeText(install.command);
     setCopied(true);
   }
 
+  const remainingMs = new Date(install.expiresAt).getTime() - now;
+  const expired = remainingMs <= 0;
+
   return (
     <section className={styles.installer}>
       <div>
         <span>One-time command</span>
         <code>{install.command}</code>
+        <p className={styles.notice}>
+          {expired
+            ? "This command has expired. Request a new one."
+            : `Expires in ${formatDuration(remainingMs)}. We'll refresh automatically once the connector comes online.`}
+        </p>
       </div>
-      <button className={styles.secondary} onClick={copy} type="button">
+      <button
+        className={styles.secondary}
+        disabled={expired}
+        onClick={copy}
+        type="button"
+      >
         {copied ? "Copied" : "Copy command"}
       </button>
     </section>
   );
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1_000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function ProposalForm({
@@ -652,10 +705,6 @@ function actionMessage(action: Action): string {
     reject: "Invitation rejected.",
     resume: "Your endpoint is active.",
   }[action];
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Request failed.";
 }
 
 function shortKey(pubkey: string): string {

@@ -103,3 +103,64 @@ export async function upsertSummary(
     ],
   );
 }
+
+export interface StoredCommunitySummary {
+  goals: string;
+  recentProjects: string[];
+  activityLevel: string;
+  activeMemberCount: number;
+  totalMemberCount: number | null;
+  messageCount: number;
+  channelCount: number;
+  windowDays: number;
+  lastSummarizedAt: string;
+}
+
+/**
+ * Reads the cached summary for a community by relay host, or null when the
+ * agent has joined but no summary has been computed yet (so the profile page
+ * can omit the section rather than render a half-empty one).
+ */
+export async function getCommunitySummary(
+  pool: Pool,
+  relayHost: string,
+): Promise<StoredCommunitySummary | null> {
+  const result = await pool.query<{
+    goals: string | null;
+    recent_projects: unknown;
+    activity_level: string | null;
+    active_member_count: number | null;
+    total_member_count: number | null;
+    message_count: number | null;
+    channel_count: number | null;
+    window_days: number | null;
+    last_summarized_at: Date | string;
+  }>(
+    `
+      SELECT goals, recent_projects, activity_level, active_member_count,
+             total_member_count, message_count, channel_count, window_days,
+             last_summarized_at
+      FROM presence_communities
+      WHERE relay_host = $1 AND last_summarized_at IS NOT NULL
+    `,
+    [relayHost],
+  );
+  const row = result.rows[0];
+  if (!row || row.goals === null) return null;
+  return {
+    activeMemberCount: row.active_member_count ?? 0,
+    activityLevel: row.activity_level ?? "active",
+    channelCount: row.channel_count ?? 0,
+    goals: row.goals,
+    lastSummarizedAt:
+      row.last_summarized_at instanceof Date
+        ? row.last_summarized_at.toISOString()
+        : String(row.last_summarized_at),
+    messageCount: row.message_count ?? 0,
+    recentProjects: Array.isArray(row.recent_projects)
+      ? (row.recent_projects as string[])
+      : [],
+    totalMemberCount: row.total_member_count,
+    windowDays: row.window_days ?? 7,
+  };
+}

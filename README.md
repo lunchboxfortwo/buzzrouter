@@ -37,6 +37,22 @@ require PostgreSQL and the environment described in the operations guides:
 npm run dev
 ```
 
+## Public API
+
+`GET /api/communities` returns the verified, listed directory communities as
+JSON — no auth required. It reuses the same read the directory page uses
+(`listDirectoryCommunities` in `src/db/directory.ts`), so it never exposes
+more than the public listing already does: no owner pubkeys, claim tokens, or
+connector/install secrets.
+
+- `?joinable=true` returns only communities that have an invite code or
+  public URL.
+- `?limit=N` bounds the result count (default 100, hard maximum 200).
+- Responses are cached publicly for 5 minutes
+  (`cache-control: public, max-age=300, stale-while-revalidate=3600`) since
+  the directory only changes on the discovery worker's cadence, not per
+  request.
+
 ## Discovery worker
 
 Create local environment and reviewed-relay files, then:

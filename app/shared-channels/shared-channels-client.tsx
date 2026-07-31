@@ -163,6 +163,23 @@ export function SharedChannelsClient() {
             , import the key that owns your community, and reload this page.
             BuzzRouter never asks for the private key itself &mdash; the
             extension signs requests on your behalf.
+            <br />
+            <br />
+            Prefer not to use a browser extension? Every action on this page
+            is also available from a terminal:{" "}
+            <code className={styles.commandShape}>
+              BUZZROUTER_ADMIN_KEY=nsec... npm run admin -- GET
+              /api/shared-channels
+            </code>{" "}
+            signs the same request with a local key. See{" "}
+            <a
+              href="https://github.com/lunchboxfortwo/buzzrouter/blob/main/docs/admin-without-a-browser-signer.md"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              the CLI guide
+            </a>
+            .
           </p>
         ) : null}
         {message ? <p className={styles.notice}>{message}</p> : null}

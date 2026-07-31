@@ -258,7 +258,7 @@
     17px 17px;
   content: "";
   inset: -60px -120px -20px;
-  mask-image: radial-gradient(90% 100% at 40% 45%, #000 55%, transparent 100%);
+  mask-image: radial-gradient(90% 100% at 40% 45%, var(--ink) 55%, transparent 100%);
   pointer-events: none;
   position: absolute;
   z-index: -1;

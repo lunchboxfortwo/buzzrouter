@@ -279,7 +279,7 @@ p {
     radial-gradient(rgb(68 69 216 / 9%) 1.2px, transparent 1.3px);
   background-size: auto, auto, 17px 17px;
   content: "";
-  mask-image: radial-gradient(90% 100% at 40% 45%, #000 55%, transparent 100%);
+  mask-image: radial-gradient(90% 100% at 40% 45%, var(--ink) 55%, transparent 100%);
   pointer-events: none;
 }
 
@@ -1301,7 +1301,7 @@ kbd {
     radial-gradient(rgb(68 69 216 / 9%) 1.2px, transparent 1.3px);
   background-size: auto, auto, 17px 17px;
   content: "";
-  mask-image: radial-gradient(90% 100% at 40% 45%, #000 55%, transparent 100%);
+  mask-image: radial-gradient(90% 100% at 40% 45%, var(--ink) 55%, transparent 100%);
   pointer-events: none;
 }
 

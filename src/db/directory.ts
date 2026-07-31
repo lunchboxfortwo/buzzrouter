@@ -1,10 +1,20 @@
 import type { Pool } from "pg";
 
-export const DIRECTORY_SORTS = ["evidence", "recent"] as const;
+export const DIRECTORY_SORTS = ["evidence", "recent", "reliable", "new"] as const;
 export type DirectorySort = (typeof DIRECTORY_SORTS)[number];
 
 export interface DirectoryCommunity {
+  adoptionPubkeys: number;
+  adoptionRepos: number;
   authRequired: boolean | null;
+  corroborationSources: number;
+  evidenceSufficient: boolean;
+  firstSeenAt: string;
+  focus: string | null;
+  metadataChangedAt: string | null;
+  probesSuccessful: number;
+  probesTotal: number;
+  reliabilityScore: number;
   candidateId: string;
   canonicalRelayUrl: string;
   categories: string[];
@@ -47,12 +57,28 @@ export async function listDirectoryCommunities(
     throw new Error("Directory sort is invalid.");
   }
 
-  const orderBy =
-    sort === "recent"
-      ? "last_verified_at DESC, evidence_count DESC, relay_host"
-      : "evidence_count DESC, last_verified_at DESC, relay_host";
+  let orderBy = "evidence_count DESC, last_verified_at DESC, relay_host";
+  if (sort === "recent") {
+    orderBy = "last_verified_at DESC, evidence_count DESC, relay_host";
+  } else if (sort === "reliable") {
+    orderBy =
+      "evidence_sufficient DESC, reliability_score DESC, last_verified_at DESC, relay_host";
+  } else if (sort === "new") {
+    orderBy = "first_seen_at DESC, relay_host";
+  }
   const result = await pool.query<{
+    adoption_pubkeys: number | null;
+    adoption_repos: number | null;
     auth_required: boolean | null;
+    corroboration_sources: number | null;
+    display_name_override: string | null;
+    evidence_sufficient: boolean | null;
+    first_seen_at: Date;
+    focus: string | null;
+    metadata_changed_at: Date | null;
+    probes_successful: number | null;
+    probes_total: number | null;
+    reliability_score: string | null;
     candidate_id: string;
     canonical_relay_url: string;
     categories: string[];
@@ -78,6 +104,7 @@ export async function listDirectoryCommunities(
           candidates.host AS relay_host,
           candidates.canonical_relay_url,
           COALESCE(
+            communities.display_name_override,
             CASE
               WHEN communities.visibility = 'public'
                 THEN communities.display_name
@@ -142,7 +169,18 @@ export async function listDirectoryCommunities(
           latest.auth_required,
           COALESCE(evidence.evidence_count, 0)::text AS evidence_count,
           COALESCE(evidence.source_types, '{}'::text[]) AS source_types,
-          icons.candidate_id IS NOT NULL AS has_icon
+          icons.candidate_id IS NOT NULL AS has_icon,
+          candidates.first_seen_at,
+          communities.focus,
+          communities.display_name_override,
+          COALESCE(metrics.reliability_score, 0)::text AS reliability_score,
+          COALESCE(metrics.adoption_pubkeys, 0) AS adoption_pubkeys,
+          COALESCE(metrics.adoption_repos, 0) AS adoption_repos,
+          COALESCE(metrics.corroboration_sources, 0) AS corroboration_sources,
+          COALESCE(metrics.probes_total, 0) AS probes_total,
+          COALESCE(metrics.probes_successful, 0) AS probes_successful,
+          metrics.metadata_changed_at,
+          COALESCE(metrics.evidence_sufficient, false) AS evidence_sufficient
         FROM community_candidates AS candidates
         JOIN LATERAL (
           SELECT
@@ -186,8 +224,10 @@ export async function listDirectoryCommunities(
         ) AS evidence ON true
         LEFT JOIN community_icons AS icons
           ON icons.candidate_id = candidates.id
+        LEFT JOIN community_reliability_metrics AS metrics
+          ON metrics.candidate_id = candidates.id
         WHERE candidates.state = 'verified_buzz'
-          AND latest.probed_at >= now() - interval '48 hours'
+          AND latest.probed_at >= now() - interval '7 days'
       )
       SELECT *
       FROM directory
@@ -217,6 +257,18 @@ export async function listDirectoryCommunities(
     description: row.description,
     displayName: row.display_name,
     evidenceCount: Number(row.evidence_count),
+    adoptionPubkeys: Number(row.adoption_pubkeys ?? 0),
+    adoptionRepos: Number(row.adoption_repos ?? 0),
+    corroborationSources: Number(row.corroboration_sources ?? 0),
+    evidenceSufficient: row.evidence_sufficient ?? false,
+    firstSeenAt: row.first_seen_at.toISOString(),
+    focus: row.focus,
+    metadataChangedAt: row.metadata_changed_at
+      ? row.metadata_changed_at.toISOString()
+      : null,
+    probesSuccessful: Number(row.probes_successful ?? 0),
+    probesTotal: Number(row.probes_total ?? 0),
+    reliabilityScore: Number(row.reliability_score ?? 0),
     iconUrl: row.has_icon
       ? `/api/community-icons/${row.candidate_id}`
       : null,

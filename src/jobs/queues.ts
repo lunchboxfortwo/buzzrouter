@@ -5,6 +5,7 @@ export const SCHEDULE_DUE_PROBES_QUEUE = "discovery.schedule-due-probes";
 export const SOURCE_GITHUB_QUEUE = "discovery.source-github";
 export const SOURCE_NIP66_QUEUE = "discovery.source-nip66";
 export const SOURCE_NIP65_QUEUE = "discovery.source-nip65";
+export const RELIABILITY_ROLLUP_QUEUE = "discovery.reliability-rollup";
 
 export interface ProbeCandidateJob {
   candidateId: string;
@@ -27,6 +28,14 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
     retryLimit: 2,
     retryDelay: 60,
     retryBackoff: true,
+  });
+
+  await boss.createQueue(RELIABILITY_ROLLUP_QUEUE, {
+    deleteAfterSeconds: 24 * 60 * 60,
+    expireInSeconds: 10 * 60,
+    retryBackoff: true,
+    retryDelay: 5 * 60,
+    retryLimit: 2,
   });
 
   for (const sourceQueue of [
@@ -64,6 +73,10 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
   });
   await boss.schedule(SOURCE_NIP65_QUEUE, "30 2 * * *", null, {
     key: "phase2-nip65",
+    tz: "UTC",
+  });
+  await boss.schedule(RELIABILITY_ROLLUP_QUEUE, "45 * * * *", null, {
+    key: "phase3-reliability-rollup",
     tz: "UTC",
   });
 }

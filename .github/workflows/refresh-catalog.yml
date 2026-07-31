@@ -1,0 +1,32 @@
+name: Refresh catalog
+
+# Runs the Buzzdir catalog import on demand, so the public/invite join data
+# (and the join buttons that depend on it) refresh without waiting for the
+# nightly 00:17 UTC timer or shell access to the host. Trigger from the
+# Actions tab: "Refresh catalog" -> "Run workflow".
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: catalog-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Import catalog listings
+    runs-on: buzzrouter-production
+    timeout-minutes: 10
+    permissions: {}
+
+    steps:
+      - name: Run the catalog importer
+        run: sudo --non-interactive /usr/bin/systemctl start buzzrouter-buzzdir-discovery.service
+
+      - name: Report on failure
+        if: failure()
+        run: |
+          echo "The runner could not start buzzrouter-buzzdir-discovery.service."
+          echo "If this is a sudo/permission error, the runner's sudoers is scoped"
+          echo "to the deploy unit only. A one-time host change adds this unit to"
+          echo "the same NOPASSWD allowlist; after that, this button works alone."
+          sudo --non-interactive /usr/bin/systemctl status buzzrouter-buzzdir-discovery.service --no-pager -l || true

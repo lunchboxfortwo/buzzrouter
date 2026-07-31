@@ -875,6 +875,38 @@
   margin-top: 8px;
 }
 
+.inspectorShare {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.76rem;
+  font-weight: 620;
+  gap: 6px;
+  margin-left: auto;
+  padding: 5px 10px;
+  text-decoration: none;
+}
+
+.inspectorShare svg {
+  fill: currentColor;
+  height: 13px;
+  width: 13px;
+}
+
+.inspectorShare:hover {
+  border-color: var(--line-strong);
+}
+
+@media (min-width: 921px) {
+  .inspectorShare {
+    margin-left: 0;
+  }
+}
+
 .copyButton {
   align-items: center;
   background: var(--accent);

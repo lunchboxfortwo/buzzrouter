@@ -22,6 +22,7 @@
     22px 22px;
   color: var(--ink);
   min-height: 100svh;
+  overflow-x: clip;
   font-family: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }

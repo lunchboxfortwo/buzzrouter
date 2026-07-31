@@ -17,6 +17,7 @@ import { AutoSubmitSelect } from "./AutoSubmitSelect";
 import { CommunityRowLink } from "./CommunityRowLink";
 import { JoinButton } from "./JoinButton";
 import { MobileCollapsible } from "./MobileCollapsible";
+import { ShareOnX } from "./ShareOnX";
 import { SiteMasthead } from "./SiteMasthead";
 import chrome from "./site-chrome.module.css";
 import styles from "./directory.module.css";
@@ -339,6 +340,8 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
     supportedNips: community.supportedNips,
   });
   const checks = explainChecks(facts);
+  const shareUrl = `${process.env.PUBLIC_APP_ORIGIN ?? "https://buzzrouter.com"}/communities/${encodeURIComponent(community.relayHost)}`;
+  const shareText = `${community.displayName} — a real, live Buzz community, verified by @buzzrouter`;
 
   return (
     <article aria-labelledby="inspector-title" className={styles.communityInspector}>
@@ -389,6 +392,12 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
                   Open to shared channels
                 </a>
               ) : null}
+              <ShareOnX
+                className={styles.inspectorShare}
+                label="Share"
+                text={shareText}
+                url={shareUrl}
+              />
             </div>
           </div>
         </div>

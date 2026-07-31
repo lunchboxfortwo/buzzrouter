@@ -307,7 +307,7 @@ export default async function CommunityPage({
           <span>Share</span>
           <ShareOnX
             className={styles.xbtn}
-            text={`${community.displayName} — a Buzz community, checked directly at the relay via @buzzrouter`}
+            text={`${community.displayName} — a real, live Buzz community, verified by @buzzrouter`}
             url={shareUrl}
           />
         </div>

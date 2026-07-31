@@ -5,10 +5,12 @@
  */
 export function ShareOnX({
   className,
+  label = "Share on X",
   text,
   url,
 }: {
   className?: string;
+  label?: string;
   text: string;
   url: string;
 }) {
@@ -23,7 +25,7 @@ export function ShareOnX({
       <svg aria-hidden="true" viewBox="0 0 24 24">
         <path d="M18.9 2H22l-7 8 8.2 12h-6.4l-5-7.3L6 22H2.9l7.5-8.6L2 2h6.6l4.6 6.7L18.9 2Zm-1.1 18h1.8L7.2 4H5.3l12.5 16Z" />
       </svg>
-      Share on X
+      {label}
     </a>
   );
 }

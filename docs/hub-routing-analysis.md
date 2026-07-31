@@ -111,11 +111,19 @@ stop thinking about it):
 - Stack: `/home/lunchbox/buzz-router-relay-prod` (`buzz-router-prod` compose
   project: relay, Postgres 17, Redis, MinIO; fresh secrets in `.env`, mode
   0600).
-- Public URL: `wss://relay.buzzrouter.com` — Cloudflare-proxied A record →
-  existing `buzz-prod` Caddy (site block added, `tls internal`, zone SSL
-  "full") → relay container over the shared `buzzrouter_default` network.
-- The trustysquire stack was not modified beyond the additive Caddy site and
-  network attachment; `buzz.trustysquire.ai` verified healthy afterwards.
+- Public URL: `wss://relay.buzzrouter.com` — proxied CNAME to the existing
+  `buzzrouter` Cloudflare tunnel, whose ingress gained a
+  `relay.buzzrouter.com → http://buzz-router-relay:3000` rule (config
+  version 3). The relay container joins the `buzzrouter_default` network
+  under that alias, so cloudflared reaches it directly.
+- The `buzz-prod` (trustysquire) stack is untouched: an interim Caddy site
+  block used before tunnel access was available has been reverted, and
+  `buzz.trustysquire.ai` verified healthy afterwards.
+- Cloudflare API note: the vaulted `Cloudflare/Api token` field holds a
+  **Global API Key**, which authenticates with `X-Auth-Email` +
+  `X-Auth-Key` headers, not `Authorization: Bearer`. Sent as a bearer token
+  it returns 9109 "Invalid access token". The `Access token` field is an
+  OAuth token that can read zones/DNS but not tunnel configuration.
 - Owner: `RELAY_OWNER_PUBKEY` matches the operator key used for
   `buzz.trustysquire.ai`. Membership requirement is off (open relay), matching
   the trustysquire configuration.

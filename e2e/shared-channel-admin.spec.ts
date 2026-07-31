@@ -202,7 +202,8 @@ async function seedCommunities(
           display_name,
           description,
           categories,
-          listed_at
+          listed_at,
+          open_to_shared_channels
         )
         VALUES (
           $1,
@@ -213,7 +214,8 @@ async function seedCommunities(
           $4,
           $5,
           ARRAY['research'],
-          now()
+          now(),
+          true
         )
         RETURNING id
       `,

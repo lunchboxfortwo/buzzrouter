@@ -81,6 +81,29 @@ jobs:
       - name: Start production deployment
         run: sudo --non-interactive /usr/bin/systemctl start buzzrouter-deploy.service
 
+      # The deploy unit runs on the self-hosted host, so its journal is the
+      # only record of why a deploy failed. Surface it here rather than
+      # requiring shell access to the box. Every probe tolerates failure so
+      # this step can never mask the original error.
+      - name: Collect deployment diagnostics
+        if: failure()
+        run: |
+          echo "::group::deploy service status"
+          sudo --non-interactive /usr/bin/systemctl status buzzrouter-deploy.service --no-pager -l || true
+          echo "::endgroup::"
+          echo "::group::deploy service journal"
+          sudo --non-interactive /usr/bin/journalctl -xeu buzzrouter-deploy.service --no-pager -n 200 \
+            || journalctl -xeu buzzrouter-deploy.service --no-pager -n 200 \
+            || echo "journal unavailable to the runner user"
+          echo "::endgroup::"
+          echo "::group::container state"
+          sudo --non-interactive docker ps -a --format 'table {{.Names}}\t{{.Status}}' || docker ps -a || true
+          echo "::endgroup::"
+          echo "::group::health endpoint"
+          curl --silent --show-error --max-time 10 \
+            "http://127.0.0.1:${BUZZROUTER_PORT:-13100}/api/health" || true
+          echo "::endgroup::"
+
       - name: Verify deployed revision
         shell: bash
         env:

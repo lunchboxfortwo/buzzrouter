@@ -70,7 +70,7 @@ The shipped directory provides:
 - Empty and no-result states that keep the next action explicit.
 
 The submission route accepts a public relay, HTTPS community URL, or shared Buzz
-invite URL. Invite paths, query strings, fragments, and capability tokens are
+invite URL. Invite capability tokens were formerly redacted; as of the join-links work they are retained in a labelled column so the directory can hand a joinable target to the Buzz app. Invite paths inside arbitrary source locators are
 discarded before persistence. A submission enters the normal discovery and
 verification pipeline; it does not publish immediately.
 

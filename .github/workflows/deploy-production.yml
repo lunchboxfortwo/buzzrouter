@@ -132,7 +132,7 @@ jobs:
           expected = sys.argv[2]
           valid = (
               health.get("status") == "ok"
-              and health.get("migration") == "0010_shared_channels.sql"
+              and health.get("migration") == "0011_join_targets.sql"
               and health.get("release") == expected
           )
           raise SystemExit(0 if valid else 1)

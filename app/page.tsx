@@ -15,7 +15,7 @@ import {
 import { focusLabel } from "../src/ranking/focus";
 
 import { AutoSubmitSelect } from "./AutoSubmitSelect";
-import { CopyRelayButton } from "./CopyRelayButton";
+import { JoinButton } from "./JoinButton";
 import { MobileCollapsible } from "./MobileCollapsible";
 import { SiteMasthead } from "./SiteMasthead";
 import chrome from "./site-chrome.module.css";
@@ -373,9 +373,11 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
             </div>
           </div>
         </div>
-        <CopyRelayButton
+        <JoinButton
           className={styles.copyButton}
           communityName={community.displayName}
+          inviteCode={community.inviteCode}
+          publicUrl={community.publicUrl}
           relayUrl={community.canonicalRelayUrl}
         />
       </header>

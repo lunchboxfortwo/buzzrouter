@@ -40,12 +40,25 @@ describe("normalizeCandidateSourceListing", () => {
         categories: [" Builders ", "unknown", "BUILDERS", "Privacy"],
         description: "  People\n building together. ",
         displayName: "  Buzz Builders ",
+        inviteCode: "  abc123 ",
+        publicUrl: "https://builders.example/join",
       }),
     ).toEqual({
       categories: ["builders", "privacy"],
       description: "People building together.",
       displayName: "Buzz Builders",
+      inviteCode: "abc123",
+      publicUrl: "https://builders.example/join",
     });
+  });
+
+  it("rejects a non-https public url and blank invite code", () => {
+    expect(
+      normalizeCandidateSourceListing({
+        publicUrl: "http://insecure.example",
+        inviteCode: "   ",
+      }),
+    ).toMatchObject({ inviteCode: null, publicUrl: null });
   });
 });
 

@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+
 import Image from "next/image";
 import Link from "next/link";
 
@@ -22,21 +24,16 @@ import styles from "./directory.module.css";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type SortOption = "reliable" | "new";
 
 interface Filters {
-  access: "all" | "invite";
   focus: string;
   q: string;
-  sort: SortOption;
 }
 
 interface PageSearchParams {
-  access?: string | string[];
   focus?: string | string[];
   q?: string | string[];
   selected?: string | string[];
-  sort?: string | string[];
 }
 
 export default async function DirectoryPage({
@@ -46,15 +43,11 @@ export default async function DirectoryPage({
 }) {
   const params = await searchParams;
   const search = firstValue(params.q).trim().slice(0, 100);
-  const sort: SortOption = firstValue(params.sort) === "new" ? "new" : "reliable";
   const focusFilter = firstValue(params.focus).trim();
-  const accessFilter: "all" | "invite" =
-    firstValue(params.access) === "invite" ? "invite" : "all";
-  const filters: Filters = { access: accessFilter, focus: focusFilter, q: search, sort };
+  const filters: Filters = { focus: focusFilter, q: search };
 
   const allCommunities = await listDirectoryCommunities(getDatabasePool(), {
     search,
-    sort,
   });
 
   const focusCoverage = allCommunities.length
@@ -73,7 +66,6 @@ export default async function DirectoryPage({
     : [];
 
   const communities = allCommunities.filter((community) => {
-    if (accessFilter === "invite" && community.authRequired !== true) return false;
     if (focusFilter && community.focus !== focusFilter) return false;
     return true;
   });
@@ -82,7 +74,7 @@ export default async function DirectoryPage({
   const selected =
     communities.find((community) => community.candidateId === selectedId) ??
     communities[0];
-  const filtersApplied = Boolean(search || focusFilter || accessFilter !== "all");
+  const filtersApplied = Boolean(search || focusFilter);
 
   return (
     <div className={`${chrome.siteCanvas} ${styles.page}`}>
@@ -158,7 +150,7 @@ export default async function DirectoryPage({
             </header>
 
             <MobileCollapsible label="Search options">
-            <section aria-label="Filter and sort communities" className={styles.commandBar}>
+            <section aria-label="Filter communities" className={styles.commandBar}>
               {hasFocusData ? (
                 <label className={styles.commandFilter}>
                   <span>Focus</span>
@@ -172,13 +164,6 @@ export default async function DirectoryPage({
                   </AutoSubmitSelect>
                 </label>
               ) : null}
-              <label className={styles.commandFilter}>
-                <span>Sort</span>
-                <AutoSubmitSelect defaultValue={sort} name="sort">
-                  <option value="reliable">Most active</option>
-                  <option value="new">Recently discovered</option>
-                </AutoSubmitSelect>
-              </label>
               <noscript>
                 <button className={styles.applyButton} type="submit">
                   Apply
@@ -189,25 +174,6 @@ export default async function DirectoryPage({
                 {communities.length === 1 ? "result" : "results"}
               </span>
             </section>
-
-            <div aria-label="Filter by access" className={styles.accessRail} role="group">
-              <a
-                aria-pressed={accessFilter === "all"}
-                className={styles.accessChip}
-                href={buildHref(filters, { access: "all", selected: undefined })}
-                role="button"
-              >
-                All
-              </a>
-              <a
-                aria-pressed={accessFilter === "invite"}
-                className={styles.accessChip}
-                href={buildHref(filters, { access: "invite", selected: undefined })}
-                role="button"
-              >
-                Invite-only
-              </a>
-            </div>
             </MobileCollapsible>
 
             <div className={styles.workspaceGrid}>
@@ -218,8 +184,6 @@ export default async function DirectoryPage({
                 <div aria-hidden="true" className={styles.indexHeader}>
                   <span>Community</span>
                   {hasFocusData ? <span>Focus</span> : null}
-                  <span>Status</span>
-                  <span>Freshness</span>
                   <span />
                 </div>
                 <h2 className={styles.visuallyHidden} id="directory-results-title">
@@ -234,7 +198,6 @@ export default async function DirectoryPage({
                           community={community}
                           filters={filters}
                           selected={community.candidateId === selected.candidateId}
-                          showFocus={hasFocusData}
                         />
                       </li>
                     ))}
@@ -311,15 +274,11 @@ function CommunityRow({
   community,
   filters,
   selected,
-  showFocus,
 }: {
   community: DirectoryCommunity;
   filters: Filters;
   selected: boolean;
-  showFocus: boolean;
 }) {
-  const label = reliabilityLabel(toReliabilityFacts(community));
-  const statusClass = reliabilityStatusClass(label);
   const tone = insigniaTone(community.relayHost);
 
   return (
@@ -357,20 +316,13 @@ function CommunityRow({
               </span>
             )}
           </span>
-          <small className={styles.indexSummary}>{community.relayHost}</small>
+          <small className={styles.indexSummary}>
+            {hostParts(community.relayHost)}
+          </small>
         </span>
       </span>
-      {showFocus ? (
-        <span className={styles.indexFocusCell}>
-          {community.focus ? focusLabel(community.focus) : "—"}
-        </span>
-      ) : null}
-      <span className={`${styles.indexStatusCell} ${statusClass}`}>
-        <span aria-hidden="true" className={styles.statusDot} />
-        {label}
-      </span>
-      <span className={styles.indexFreshnessCell}>
-        {relativeTime(community.lastVerifiedAt)}
+      <span className={styles.indexFocusCell}>
+        {community.focus ? focusLabel(community.focus) : "—"}
       </span>
       <svg aria-hidden="true" className={styles.indexRowArrow} viewBox="0 0 24 24">
         <path d="m9 6 6 6-6 6" />
@@ -428,6 +380,7 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
         />
       </header>
 
+      <MobileCollapsible label="More detail">
       <dl className={styles.inspectorMetrics}>
         <div className={styles.metricTile}>
           <dt>Uptime &middot; 30d</dt>
@@ -463,7 +416,6 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
       ) : null}
 
       <div className={styles.inspectorSections}>
-        <MobileCollapsible label="More detail">
         {community.claimed && work ? (
           <section className={styles.inspectorSection}>
             <h3>Current work</h3>
@@ -489,8 +441,8 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
           <p>{about.text}</p>
           <small>From the relay&rsquo;s own published details.</small>
         </section>
-        </MobileCollapsible>
       </div>
+      </MobileCollapsible>
 
       {community.slug ? (
         <footer className={styles.inspectorFooter}>
@@ -506,6 +458,21 @@ function firstValue(value: string | string[] | undefined): string {
 }
 
 
+
+/**
+ * Offers the browser a break after each dot so a wrapped host splits at label
+ * boundaries rather than mid-word.
+ */
+function hostParts(host: string) {
+  const labels = host.split(".");
+  return labels.map((label, index) => (
+    <Fragment key={`${label}-${index}`}>
+      {label}
+      {index < labels.length - 1 ? "." : null}
+      {index < labels.length - 1 ? <wbr /> : null}
+    </Fragment>
+  ));
+}
 
 function monogram(displayName: string): string {
   return displayName.trim().slice(0, 1).toUpperCase() || "B";
@@ -580,9 +547,7 @@ function buildHref(
   const merged = { ...filters, ...overrides };
   const params = new URLSearchParams();
   if (merged.q) params.set("q", merged.q);
-  if (merged.sort && merged.sort !== "reliable") params.set("sort", merged.sort);
   if (merged.focus) params.set("focus", merged.focus);
-  if (merged.access && merged.access !== "all") params.set("access", merged.access);
   if (overrides.selected) params.set("selected", overrides.selected);
   const qs = params.toString();
   return `/${qs ? `?${qs}` : ""}`;

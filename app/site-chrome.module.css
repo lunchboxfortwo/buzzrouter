@@ -215,10 +215,12 @@
 
 @media (max-width: 680px) {
   .headerInner {
-    gap: 4px 12px;
-    grid-template-columns: 1fr;
-    min-height: 58px;
+    align-items: center;
+    column-gap: 12px;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 56px;
     padding: 0 10px;
+    row-gap: 4px;
     width: 100%;
   }
 
@@ -232,15 +234,24 @@
     width: 30px;
   }
 
+  /* The masthead scrolls away on phones, so the nav can have a full row and
+     fit all three routes without a hidden sideways swipe. */
   .nav {
     grid-column: 1 / -1;
     grid-row: 2;
-    margin-inline: -4px;
-    overflow-x: auto;
+    justify-content: space-between;
+    margin-inline: -8px;
+  }
+
+  .navLink {
+    flex: 0 1 auto;
+    font-size: 0.86rem;
+    padding-inline: 8px;
   }
 
   .searchField,
   .searchForm {
+    grid-column: 1 / -1;
     grid-row: 3;
   }
 }
@@ -279,5 +290,11 @@
 @media (max-width: 920px) {
   .collapsibleToggle {
     display: flex;
+  }
+}
+
+@media (max-width: 920px) {
+  .header {
+    position: static;
   }
 }

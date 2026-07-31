@@ -553,12 +553,12 @@
   align-items: center;
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: minmax(220px, 2fr) minmax(100px, 1fr) minmax(96px, 0.9fr) minmax(72px, 0.65fr) 24px;
+  grid-template-columns: minmax(220px, 2.4fr) minmax(140px, 1fr) 24px;
 }
 
 .indexNoFocus .indexHeader,
 .indexNoFocus .indexRow {
-  grid-template-columns: minmax(220px, 3fr) minmax(96px, 0.9fr) minmax(72px, 0.65fr) 24px;
+  grid-template-columns: minmax(220px, 3fr) 24px;
 }
 
 .indexHeader {
@@ -679,16 +679,10 @@
   font-size: 0.78rem;
   line-height: 1.35;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 
 .indexFocusCell,
-.indexFreshnessCell {
-  color: var(--ink-soft);
-  font-size: 0.79rem;
-}
 
 .indexStatusCell {
   align-items: center;
@@ -1058,6 +1052,11 @@
   background-size: 18px 18px;
   border-top: 1px solid var(--line);
   margin-top: var(--space-6);
+  .indexNoFocus .indexHeader,
+  .indexNoFocus .indexRow {
+    grid-template-columns: minmax(0, 1fr) auto 24px;
+  }
+
 }
 
 .footerInner {
@@ -1125,13 +1124,10 @@
 
   .indexHeader,
   .indexRow {
-    grid-template-columns: minmax(210px, 2fr) minmax(90px, 0.9fr) minmax(88px, 0.8fr) 24px;
+    grid-template-columns: minmax(200px, 2fr) minmax(120px, 1fr) 24px;
   }
 
   .indexHeader span:nth-child(4),
-  .indexFreshnessCell {
-    display: none;
-  }
 
   .inspectorHeader {
     grid-template-columns: 1fr;
@@ -1188,7 +1184,7 @@
     position: sticky;
     top: 0;
     z-index: 5;
-    max-height: 55vh;
+    max-height: 62vh;
     overflow-y: auto;
     border-bottom: 1px solid var(--line);
     box-shadow: 0 6px 18px rgb(17 19 24 / 6%);
@@ -1196,17 +1192,12 @@
 
   .indexHeader,
   .indexRow {
-    grid-template-columns: minmax(200px, 1fr) minmax(90px, 0.42fr) 24px;
+    grid-template-columns: minmax(0, 1fr) minmax(88px, auto) 24px;
   }
 
-  .indexHeader span:nth-child(2),
-  .indexFocusCell,
-  .indexHeader span:nth-child(4),
-  .indexFreshnessCell {
-    display: none;
-  }
+  .indexHeader span:nth-child(3),
 
-  .indexHeader span:nth-child(3) {
+  .indexFocusCell {
     grid-column: 2;
   }
 
@@ -1302,13 +1293,9 @@
 
   .indexRow {
     gap: 9px;
-    grid-template-columns: minmax(0, 1fr) auto 20px;
+    grid-template-columns: minmax(0, 1fr) minmax(80px, auto) 20px;
     min-height: 82px;
     padding: 10px 12px;
-  }
-
-  .indexNameLine .accessFlag {
-    display: none;
   }
 
   .premiseBand {
@@ -1330,13 +1317,9 @@
     justify-self: end;
   }
 
-  .indexFocusCell,
-  .indexFreshnessCell {
-    display: none;
-  }
-
-  .indexSummary {
-    -webkit-line-clamp: 1;
+  .indexFocusCell {
+    justify-self: end;
+    text-align: right;
   }
 
   .indexFooter {
@@ -1392,9 +1375,32 @@
     padding-block: 26px 30px;
     width: min(100% - 20px, 640px);
   }
+  .indexNoFocus .indexHeader,
+  .indexNoFocus .indexRow {
+    grid-template-columns: minmax(0, 1fr) minmax(80px, auto) 20px;
+  }
+
 }
 
 @media (max-width: 380px) {
+  /* Row columns still totalled more than a 320px screen, so status was
+     clipped at the right edge. */
+  .indexHeader,
+  .indexRow {
+    column-gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+    padding-inline: 10px;
+  }
+
+  .indexStatusCell {
+    font-size: 0.73rem;
+  }
+
+  .indexRowArrow {
+    height: 16px;
+    width: 16px;
+  }
+
   .indexInsignia {
     flex-basis: 44px;
     height: 44px;
@@ -1404,6 +1410,11 @@
   .indexStatusCell .statusDot {
     display: none;
   }
+  .indexNoFocus .indexHeader,
+  .indexNoFocus .indexRow {
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+  }
+
 }
 
 @media (prefers-reduced-motion: reduce) {

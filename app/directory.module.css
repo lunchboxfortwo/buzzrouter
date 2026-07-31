@@ -7,6 +7,8 @@
 }
 
 .page {
+  max-width: 100%;
+  overflow-x: clip;
   --canvas: #f4f5f7;
   --surface: #ffffff;
   --surface-muted: #f8f9fb;
@@ -674,12 +676,12 @@
 
 .indexSummary {
   color: var(--ink-soft);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   font-size: 0.78rem;
   line-height: 1.35;
+  max-width: 100%;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .indexFocusCell,
@@ -1247,9 +1249,14 @@
   }
 
   .communityInspector {
-    border-top: 1px solid var(--line);
-    max-height: none;
-    position: static;
+    order: -1;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    max-height: 55vh;
+    overflow-y: auto;
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 6px 18px rgb(17 19 24 / 6%);
   }
 
   .indexHeader,

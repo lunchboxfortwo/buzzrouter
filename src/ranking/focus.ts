@@ -11,6 +11,8 @@ export const FOCUS_SLUGS = [
   "research-knowledge",
   "local-regional",
   "team-private",
+  "privacy-security",
+  "growth-gtm",
 ] as const;
 
 export type FocusSlug = (typeof FOCUS_SLUGS)[number];
@@ -23,6 +25,8 @@ export const FOCUS_LABELS: Record<FocusSlug, string> = {
   "research-knowledge": "Research & knowledge",
   "local-regional": "Local & regional",
   "team-private": "Team & private",
+  "privacy-security": "Privacy & security",
+  "growth-gtm": "Growth & GTM",
 };
 
 export function isFocusSlug(value: unknown): value is FocusSlug {

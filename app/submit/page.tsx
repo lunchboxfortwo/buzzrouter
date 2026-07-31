@@ -23,17 +23,17 @@ export default async function SubmitPage({
           <a className={styles.brand} href="/">
             <Image
               alt=""
-              height={32}
+              height={34}
               priority
               src="/assets/brand/buzzrouter-logo.png"
-              width={32}
+              width={34}
             />
             <span>BuzzRouter</span>
           </a>
           <nav aria-label="Primary navigation">
             <a href="/">Discover</a>
             <a aria-current="page" href="/submit">
-              Submit
+              List a community
             </a>
           </nav>
         </div>

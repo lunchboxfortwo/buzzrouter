@@ -6,6 +6,43 @@ const GENERIC = "Buzz — private team communication relay";
 
 describe("classifyFocus", () => {
   it.each([
+    ["builders", "building"],
+    ["bitcoin", "bitcoin-money"],
+    ["culture", "design-creative"],
+    ["gtm", "growth-gtm"],
+    ["labs", "research-knowledge"],
+    ["privacy", "privacy-security"],
+  ])("maps the catalog's own %s tag", (tag, expected) => {
+    expect(
+      classifyFocus({
+        catalogCategories: [tag],
+        description: GENERIC,
+        host: "opaque.example",
+      })?.focus,
+    ).toBe(expected);
+  });
+
+  it("lets a declared catalog tag outrank hostname keywords", () => {
+    expect(
+      classifyFocus({
+        catalogCategories: ["privacy"],
+        description: GENERIC,
+        host: "bitcoiners.example",
+      })?.focus,
+    ).toBe("privacy-security");
+  });
+
+  it("falls back to keywords when the catalog tag is unknown", () => {
+    expect(
+      classifyFocus({
+        catalogCategories: ["something-else"],
+        description: GENERIC,
+        host: "bitcoiners.example",
+      })?.focus,
+    ).toBe("bitcoin-money");
+  });
+
+  it.each([
     ["bitcoiners.communities.buzz.xyz", "bitcoin-money"],
     ["cashu.communities.buzz.xyz", "bitcoin-money"],
     ["fintech-open-source.communities.buzz.xyz", "bitcoin-money"],

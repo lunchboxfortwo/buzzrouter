@@ -8,109 +8,271 @@
         "role": "neutral",
         "displayName": "Canvas",
         "canonical": "#f5f6f8",
-        "tonalRamp": ["#17181a", "#303134", "#4b4d51", "#686a70", "#898c92", "#adb0b6", "#d2d4d9", "#f5f6f8"]
+        "tonalRamp": [
+          "#17181a",
+          "#303134",
+          "#4b4d51",
+          "#686a70",
+          "#898c92",
+          "#adb0b6",
+          "#d2d4d9",
+          "#f5f6f8"
+        ]
       },
       "surface": {
         "role": "neutral",
         "displayName": "Surface",
         "canonical": "#ffffff",
-        "tonalRamp": ["#171717", "#333333", "#505050", "#707070", "#929292", "#b7b7b7", "#dddddd", "#ffffff"]
+        "tonalRamp": [
+          "#171717",
+          "#333333",
+          "#505050",
+          "#707070",
+          "#929292",
+          "#b7b7b7",
+          "#dddddd",
+          "#ffffff"
+        ]
       },
       "field-surface": {
         "role": "neutral",
         "displayName": "Field Surface",
         "canonical": "#fafbfc",
-        "tonalRamp": ["#171819", "#313234", "#4c4d50", "#696b6e", "#8a8c90", "#afb1b5", "#d5d7da", "#fafbfc"]
+        "tonalRamp": [
+          "#171819",
+          "#313234",
+          "#4c4d50",
+          "#696b6e",
+          "#8a8c90",
+          "#afb1b5",
+          "#d5d7da",
+          "#fafbfc"
+        ]
       },
       "muted-surface": {
         "role": "neutral",
         "displayName": "Muted Surface",
         "canonical": "#f0f2f5",
-        "tonalRamp": ["#161719", "#2f3033", "#494b4f", "#66686d", "#85888e", "#aaadb3", "#cfd2d8", "#f0f2f5"]
+        "tonalRamp": [
+          "#161719",
+          "#2f3033",
+          "#494b4f",
+          "#66686d",
+          "#85888e",
+          "#aaadb3",
+          "#cfd2d8",
+          "#f0f2f5"
+        ]
       },
       "selected-surface": {
         "role": "primary",
         "displayName": "Selected Surface",
         "canonical": "#efefff",
-        "tonalRamp": ["#17172b", "#30305a", "#4b4b88", "#6868b4", "#8888d7", "#adadeb", "#d2d2f7", "#efefff"]
+        "tonalRamp": [
+          "#17172b",
+          "#30305a",
+          "#4b4b88",
+          "#6868b4",
+          "#8888d7",
+          "#adadeb",
+          "#d2d2f7",
+          "#efefff"
+        ]
       },
       "ink": {
         "role": "neutral",
         "displayName": "Ink",
         "canonical": "#111318",
-        "tonalRamp": ["#111318", "#292c33", "#424650", "#5d626e", "#7b818e", "#9fa5af", "#c5c9cf", "#eceef1"]
+        "tonalRamp": [
+          "#111318",
+          "#292c33",
+          "#424650",
+          "#5d626e",
+          "#7b818e",
+          "#9fa5af",
+          "#c5c9cf",
+          "#eceef1"
+        ]
       },
       "reading-ink": {
         "role": "neutral",
         "displayName": "Reading Ink",
         "canonical": "#414958",
-        "tonalRamp": ["#14171c", "#29303a", "#414958", "#5e6879", "#7d8797", "#a1a9b5", "#c7cbd2", "#eef0f2"]
+        "tonalRamp": [
+          "#14171c",
+          "#29303a",
+          "#414958",
+          "#5e6879",
+          "#7d8797",
+          "#a1a9b5",
+          "#c7cbd2",
+          "#eef0f2"
+        ]
       },
       "monogram-ink": {
         "role": "neutral",
         "displayName": "Monogram Ink",
         "canonical": "#384152",
-        "tonalRamp": ["#12161c", "#252c38", "#384152", "#566174", "#768092", "#9ca4b1", "#c3c8cf", "#eceef1"]
+        "tonalRamp": [
+          "#12161c",
+          "#252c38",
+          "#384152",
+          "#566174",
+          "#768092",
+          "#9ca4b1",
+          "#c3c8cf",
+          "#eceef1"
+        ]
       },
       "muted-ink": {
         "role": "neutral",
         "displayName": "Muted Ink",
         "canonical": "#667085",
-        "tonalRamp": ["#171a20", "#303642", "#495161", "#667085", "#858ea0", "#a7aeba", "#cacdd4", "#eff0f2"]
+        "tonalRamp": [
+          "#171a20",
+          "#303642",
+          "#495161",
+          "#667085",
+          "#858ea0",
+          "#a7aeba",
+          "#cacdd4",
+          "#eff0f2"
+        ]
       },
       "divider": {
         "role": "neutral",
         "displayName": "Divider",
         "canonical": "#dfe2e8",
-        "tonalRamp": ["#17191d", "#30343a", "#4a4f58", "#686e78", "#898f99", "#adb2ba", "#c8ccd3", "#dfe2e8"]
+        "tonalRamp": [
+          "#17191d",
+          "#30343a",
+          "#4a4f58",
+          "#686e78",
+          "#898f99",
+          "#adb2ba",
+          "#c8ccd3",
+          "#dfe2e8"
+        ]
       },
       "accent": {
         "role": "primary",
         "displayName": "Action Indigo",
         "canonical": "#5657f2",
-        "tonalRamp": ["#11124c", "#20228a", "#3335c5", "#5657f2", "#797af8", "#9d9efa", "#c4c4fd", "#ececff"]
+        "tonalRamp": [
+          "#11124c",
+          "#20228a",
+          "#3335c5",
+          "#5657f2",
+          "#797af8",
+          "#9d9efa",
+          "#c4c4fd",
+          "#ececff"
+        ]
       },
       "accent-strong": {
         "role": "primary",
         "displayName": "Strong Indigo",
         "canonical": "#4445d8",
-        "tonalRamp": ["#10113e", "#1f2075", "#3031ad", "#4445d8", "#6d6ee8", "#9697f0", "#c0c0f8", "#ececff"]
+        "tonalRamp": [
+          "#10113e",
+          "#1f2075",
+          "#3031ad",
+          "#4445d8",
+          "#6d6ee8",
+          "#9697f0",
+          "#c0c0f8",
+          "#ececff"
+        ]
       },
       "verified": {
         "role": "secondary",
         "displayName": "Verified Emerald",
         "canonical": "#087c5b",
-        "tonalRamp": ["#062b21", "#07513d", "#087c5b", "#1a9d78", "#48bb98", "#7bd4b6", "#afe9d3", "#e8f7f1"]
+        "tonalRamp": [
+          "#062b21",
+          "#07513d",
+          "#087c5b",
+          "#1a9d78",
+          "#48bb98",
+          "#7bd4b6",
+          "#afe9d3",
+          "#e8f7f1"
+        ]
       },
       "verified-soft": {
         "role": "secondary",
         "displayName": "Verified Wash",
         "canonical": "#e8f7f1",
-        "tonalRamp": ["#102c23", "#24513f", "#39765c", "#5b9b7e", "#83bba0", "#acd8c2", "#d0eee0", "#e8f7f1"]
+        "tonalRamp": [
+          "#102c23",
+          "#24513f",
+          "#39765c",
+          "#5b9b7e",
+          "#83bba0",
+          "#acd8c2",
+          "#d0eee0",
+          "#e8f7f1"
+        ]
       },
       "verified-border": {
         "role": "secondary",
         "displayName": "Verified Border",
         "canonical": "#b6dfcf",
-        "tonalRamp": ["#122a21", "#294c3d", "#436d59", "#618d75", "#82aa92", "#a1c7b2", "#b6dfcf", "#e8f7f1"]
+        "tonalRamp": [
+          "#122a21",
+          "#294c3d",
+          "#436d59",
+          "#618d75",
+          "#82aa92",
+          "#a1c7b2",
+          "#b6dfcf",
+          "#e8f7f1"
+        ]
       },
       "error": {
         "role": "secondary",
         "displayName": "Error Red",
         "canonical": "#9d2b22",
-        "tonalRamp": ["#3b100d", "#6a1d17", "#9d2b22", "#c1473c", "#d97469", "#e9a29a", "#f4cec9", "#fff3f2"]
+        "tonalRamp": [
+          "#3b100d",
+          "#6a1d17",
+          "#9d2b22",
+          "#c1473c",
+          "#d97469",
+          "#e9a29a",
+          "#f4cec9",
+          "#fff3f2"
+        ]
       },
       "error-soft": {
         "role": "secondary",
         "displayName": "Error Wash",
         "canonical": "#fff3f2",
-        "tonalRamp": ["#351817", "#66312e", "#954b46", "#bd6d66", "#da9690", "#edbdb9", "#f7dcda", "#fff3f2"]
+        "tonalRamp": [
+          "#351817",
+          "#66312e",
+          "#954b46",
+          "#bd6d66",
+          "#da9690",
+          "#edbdb9",
+          "#f7dcda",
+          "#fff3f2"
+        ]
       },
       "error-border": {
         "role": "secondary",
         "displayName": "Error Border",
         "canonical": "#f0c9c4",
-        "tonalRamp": ["#351613", "#66302c", "#964a43", "#bd6b63", "#d9948d", "#e9b5b0", "#f0c9c4", "#fff3f2"]
+        "tonalRamp": [
+          "#351613",
+          "#66302c",
+          "#964a43",
+          "#bd6b63",
+          "#d9948d",
+          "#e9b5b0",
+          "#f0c9c4",
+          "#fff3f2"
+        ]
       }
     },
     "typographyMeta": {
@@ -212,7 +374,7 @@
       "kind": "custom",
       "refersTo": "community-row-selected",
       "description": "The canonical scannable unit with logo, purpose, category, and trust metadata.",
-      "html": "<a class=\"ds-row\" href=\"#\"><span class=\"ds-logo\">C</span><span class=\"ds-main\"><span class=\"ds-heading\"><strong>Creator Magic</strong><span class=\"ds-tag\">Culture</span></span><span class=\"ds-blurb\">A community for creators collaborating with agents.</span></span><span class=\"ds-meta\"><b><i></i>Verified</b><span>4 evidence</span></span><span class=\"ds-chevron\">›</span></a>",
+      "html": "<a class=\"ds-row\" href=\"#\"><span class=\"ds-logo\">C</span><span class=\"ds-main\"><span class=\"ds-heading\"><strong>Creator Magic</strong><span class=\"ds-tag\">Culture</span></span><span class=\"ds-blurb\">A community for creators collaborating with agents.</span></span><span class=\"ds-meta\"><b><i></i>Verified</b><span>4 evidence</span></span><span class=\"ds-chevron\">\u203a</span></a>",
       "css": ".ds-row{align-items:center;background:#efefff;box-shadow:inset 2px 0 #5657f2;color:#111318;display:grid;font-family:Instrument Sans,ui-sans-serif,sans-serif;gap:12px;grid-template-columns:40px minmax(0,1fr) auto 14px;height:76px;padding:11px 13px;text-decoration:none}.ds-logo{align-items:center;background:#f0f2f5;border:1px solid #dfe2e8;border-radius:6px;color:#384152;display:flex;font-size:15px;font-weight:700;height:40px;justify-content:center;width:40px}.ds-main{min-width:0}.ds-heading{align-items:center;display:flex;gap:7px}.ds-heading strong{font-size:14px}.ds-tag{background:#f0f2f5;border:1px solid #dfe2e8;border-radius:4px;color:#667085;font-size:11px;line-height:18px;padding:0 5px}.ds-blurb{color:#667085;display:block;font-size:11px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-meta{align-items:flex-end;color:#667085;display:flex;flex-direction:column;font-size:11px;gap:4px}.ds-meta b{align-items:center;color:#087c5b;display:flex;font-size:12px;gap:7px}.ds-meta i{background:#087c5b;border-radius:50%;height:7px;width:7px}.ds-chevron{color:#667085;font-size:22px}.ds-row:focus-visible{outline:2px solid #5657f2;outline-offset:-2px}"
     },
     {
@@ -282,5 +444,52 @@
       "Don't turn sections into floating rounded cards or nest cards.",
       "Don't add gradients, dark-neon crypto styling, glass, or marketing heroes."
     ]
+  },
+  "typographyMeta": {
+    "scale": {
+      "0-66": "0.66rem",
+      "0-68": "0.68rem",
+      "0-72": "0.72rem",
+      "0-73": "0.73rem",
+      "0-74": "0.74rem",
+      "0-76": "0.76rem",
+      "0-77": "0.77rem",
+      "0-78": "0.78rem",
+      "0-79": "0.79rem",
+      "0-8": "0.8rem",
+      "0-82": "0.82rem",
+      "0-84": "0.84rem",
+      "0-85": "0.85rem",
+      "0-86": "0.86rem",
+      "0-87": "0.87rem",
+      "0-88": "0.88rem",
+      "0-9": "0.9rem",
+      "0-91": "0.91rem",
+      "0-92": "0.92rem",
+      "0-93": "0.93rem",
+      "0-98": "0.98rem",
+      "1": "1rem",
+      "1-05": "1.05rem",
+      "1-08": "1.08rem",
+      "1-15": "1.15rem",
+      "1-2": "1.2rem",
+      "1-25": "1.25rem",
+      "1-35": "1.35rem",
+      "1-45": "1.45rem",
+      "1-6": "1.6rem",
+      "1-65": "1.65rem",
+      "2-15": "2.15rem",
+      "2-3": "2.3rem",
+      "3-4": "3.4rem",
+      "11px": "11px",
+      "16px": "16px"
+    }
+  },
+  "rounded": {
+    "hairline": "2px",
+    "chip": "5px"
+  },
+  "colors": {
+    "verified-muted": "#316d61"
   }
 }

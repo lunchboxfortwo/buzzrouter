@@ -5,6 +5,11 @@ import {
 } from "node:crypto";
 
 import { PgBoss } from "pg-boss";
+import type { Event } from "nostr-tools/core";
+import {
+  finalizeEvent,
+  getPublicKey,
+} from "nostr-tools/pure";
 import { Pool } from "pg";
 import {
   afterAll,
@@ -23,6 +28,11 @@ import {
   BRIDGE_DELIVERY_QUEUE,
   configureQueues,
 } from "../jobs/queues";
+import {
+  ConnectorSupervisor,
+  type RelayConnection,
+  type RelayConnectionFactory,
+} from "./connector";
 import {
   acceptSharedChannel,
   activateCommunityConnection,
@@ -141,6 +151,7 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
       sharedChannelId: route.sharedChannelId,
       signedEvent: { id: hex(32), kind: 9 },
       sourceActorPubkey: hex(32),
+      sourceCreatedAt: Math.floor(Date.now() / 1_000),
       sourceEndpointId: sourceEndpoint.id,
       sourceEventId: hex(32),
     });
@@ -226,6 +237,7 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
       sharedChannelId: route.sharedChannelId,
       signedEvent: { id: sourceEventId, kind: 9 },
       sourceActorPubkey: hex(32),
+      sourceCreatedAt: Math.floor(Date.now() / 1_000),
       sourceEndpointId: sourceEndpoint.id,
       sourceEventId,
     });
@@ -242,6 +254,7 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
       sharedChannelId: route.sharedChannelId,
       signedEvent: { id: sourceEventId, kind: 9 },
       sourceActorPubkey: hex(32),
+      sourceCreatedAt: Math.floor(Date.now() / 1_000),
       sourceEndpointId: sourceEndpoint.id,
       sourceEventId,
     });
@@ -276,6 +289,7 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
         sharedChannelId: route.sharedChannelId,
         signedEvent: { id: sourceEventId, kind: 9 },
         sourceActorPubkey: hex(32),
+        sourceCreatedAt: Math.floor(Date.now() / 1_000),
         sourceEndpointId: sourceEndpoint.id,
         sourceEventId,
       }),
@@ -293,6 +307,89 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
       deliveries: "0",
       messages: "0",
     });
+  });
+
+  it("ingests and delivers through the connector supervisor", async () => {
+    const route = await createActiveRoute(pool);
+    const endpoints = await listSharedChannelEndpoints(
+      pool,
+      route.sharedChannelId,
+    );
+    const sourceEndpoint = endpoints.find(
+      (endpoint) => endpoint.role === "source",
+    );
+    if (!sourceEndpoint?.localChannelId) {
+      throw new Error("Source endpoint missing.");
+    }
+    const relayRows = await pool.query<{
+      community_id: string;
+      relay_url_snapshot: string;
+    }>(
+      `
+        SELECT community_id, relay_url_snapshot
+        FROM community_connections
+      `,
+    );
+    const sourceRelayUrl = relayRows.rows.find(
+      (row) => row.community_id === route.source.communityId,
+    )?.relay_url_snapshot;
+    const destinationRelayUrl = relayRows.rows.find(
+      (row) =>
+        row.community_id === route.destination.communityId,
+    )?.relay_url_snapshot;
+    if (!sourceRelayUrl || !destinationRelayUrl) {
+      throw new Error("Relay fixtures missing.");
+    }
+
+    const relayFactory = new FakeRelayFactory();
+    const supervisor = new ConnectorSupervisor(
+      pool,
+      boss,
+      {
+        getKey: async () => wrappingKey,
+      },
+      relayFactory,
+    );
+    await supervisor.start();
+    try {
+      const sourceEvent = finalizeEvent(
+        {
+          content: "Deliver this through the bridge.",
+          created_at: Math.floor(Date.now() / 1_000),
+          kind: 9,
+          tags: [["h", sourceEndpoint.localChannelId]],
+        },
+        randomBytes(32),
+      );
+      relayFactory.get(sourceRelayUrl).emit(sourceEvent);
+      await waitFor(async () => {
+        const result = await pool.query<{ count: string }>(
+          "SELECT count(*)::text AS count FROM bridge_deliveries",
+        );
+        return result.rows[0].count === "1";
+      });
+
+      const delivery = await pool.query<{ id: string }>(
+        "SELECT id FROM bridge_deliveries",
+      );
+      await supervisor.deliver(delivery.rows[0].id);
+
+      const destinationRelay = relayFactory.get(destinationRelayUrl);
+      expect(destinationRelay.published).toHaveLength(1);
+      expect(destinationRelay.published[0].tags).toContainEqual([
+        "h",
+        endpoints.find(
+          (endpoint) => endpoint.role === "destination",
+        )?.localChannelId,
+      ]);
+      const state = await pool.query<{ state: string }>(
+        "SELECT state FROM bridge_deliveries WHERE id = $1",
+        [delivery.rows[0].id],
+      );
+      expect(state.rows[0].state).toBe("delivered_to_relay");
+    } finally {
+      await supervisor.stop();
+    }
   });
 });
 
@@ -367,11 +464,12 @@ async function createConnectedCommunity(
   );
   const communityId = community.rows[0].id;
   const tokenHash = hex(32);
+  const privateKey = randomBytes(32);
   await beginCommunityConnectionInstall(pool, {
-    bridgePubkey: hex(32),
+    bridgePubkey: getPublicKey(privateKey),
     communityId,
     ownerPubkey,
-    privateKey: randomBytes(32),
+    privateKey,
     tokenHash,
     wrappingKey,
     wrappingKeyVersion: 1,
@@ -388,4 +486,64 @@ function hex(bytes: number): string {
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+class FakeRelayFactory implements RelayConnectionFactory {
+  private readonly relays = new Map<string, FakeRelayConnection>();
+
+  async connect(
+    relayUrl: string,
+    _privateKey: Uint8Array,
+  ): Promise<RelayConnection> {
+    const relay = new FakeRelayConnection();
+    this.relays.set(relayUrl, relay);
+    return relay;
+  }
+
+  get(relayUrl: string): FakeRelayConnection {
+    const relay = this.relays.get(relayUrl);
+    if (!relay) throw new Error(`Fake relay unavailable: ${relayUrl}`);
+    return relay;
+  }
+}
+
+class FakeRelayConnection implements RelayConnection {
+  private onEvent: ((event: Event) => void) | undefined;
+  readonly published: Event[] = [];
+
+  close(): void {
+    this.onEvent = undefined;
+  }
+
+  emit(event: Event): void {
+    this.onEvent?.(event);
+  }
+
+  async hasEvent(eventId: string): Promise<boolean> {
+    return this.published.some((event) => event.id === eventId);
+  }
+
+  async publish(event: Event): Promise<void> {
+    this.published.push(event);
+  }
+
+  subscribe(
+    _routes: unknown[],
+    onEvent: (event: Event) => void,
+    _onClose: (reason: string) => void,
+  ): void {
+    this.onEvent = onEvent;
+  }
+}
+
+async function waitFor(
+  predicate: () => Promise<boolean>,
+  timeoutMs = 2_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Timed out waiting for integration state.");
 }

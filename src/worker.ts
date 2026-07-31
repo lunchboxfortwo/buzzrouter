@@ -10,6 +10,11 @@ import { registerReliabilityRollupWorker } from "./jobs/reliability-rollup";
 import { configureQueues } from "./jobs/queues";
 import { registerDueProbeScheduler } from "./jobs/schedule-due-probes";
 import { registerSourceWorkers } from "./jobs/source-workers";
+import {
+  ConnectorSupervisor,
+  createFileWrappingKeyProvider,
+  registerBridgeDeliveryWorker,
+} from "./shared-channels/connector";
 
 const pool = getDatabasePool();
 const boss = new PgBoss(
@@ -21,6 +26,7 @@ boss.on("error", (error) => {
 });
 
 let bossStarted = false;
+let connectorSupervisor: ConnectorSupervisor | undefined;
 try {
   await assertDiscoveryDatabaseReady(pool);
   await boss.start();
@@ -30,7 +36,15 @@ try {
   await registerDueProbeScheduler(boss, pool);
   await registerSourceWorkers(boss, pool);
   await registerReliabilityRollupWorker(boss, pool);
+  connectorSupervisor = new ConnectorSupervisor(
+    pool,
+    boss,
+    createFileWrappingKeyProvider(),
+  );
+  await connectorSupervisor.start();
+  await registerBridgeDeliveryWorker(boss, connectorSupervisor);
 } catch (error) {
+  await connectorSupervisor?.stop();
   if (bossStarted) {
     await boss.stop();
   }
@@ -39,6 +53,7 @@ try {
 }
 
 async function shutdown(): Promise<void> {
+  await connectorSupervisor?.stop();
   await boss.stop({ graceful: true, timeout: 30_000 });
   await pool.end();
 }

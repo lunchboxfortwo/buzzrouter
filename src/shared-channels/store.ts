@@ -5,6 +5,8 @@ import {
 } from "node:crypto";
 
 import type { PgBoss } from "pg-boss";
+import type { Event } from "nostr-tools/core";
+import { getPublicKey } from "nostr-tools/pure";
 import type { Pool, PoolClient } from "pg";
 
 import { ApiError } from "../http/api-error";
@@ -110,6 +112,7 @@ export interface IngestBridgeMessageInput {
   sharedChannelId: string;
   signedEvent: unknown;
   sourceActorPubkey: string;
+  sourceCreatedAt: number;
   sourceEndpointId: string;
   sourceEventId: string;
   sourceParentEventId?: string;
@@ -119,6 +122,45 @@ export interface IngestBridgeMessageResult {
   created: boolean;
   deliveryId: string;
   messageId: string;
+}
+
+export interface ConnectorRouteConfig {
+  lastEventCreatedAt: number;
+  localChannelId: string;
+  sharedChannelId: string;
+  sourceEndpointId: string;
+}
+
+export interface ActiveConnectorConfig
+  extends CommunityConnectionRecord,
+    EncryptedConnectorKey {
+  routes: ConnectorRouteConfig[];
+}
+
+export interface BridgeDeliveryContext {
+  attempts: number;
+  body: string;
+  deliveryId: string;
+  destinationChannelId: string;
+  destinationConnectionId: string;
+  destinationEndpointId: string;
+  destinationEvent: Event | null;
+  localParentEventId: string | null;
+  messageId: string;
+  routeActive: boolean;
+  sharedChannelId: string;
+  sourceActorPubkey: string;
+  sourceCommunityId: string;
+  sourceCommunityName: string;
+  sourceEventId: string;
+  sourceParentEventId: string | null;
+  state:
+    | "queued"
+    | "delivering"
+    | "retry"
+    | "delivered_to_relay"
+    | "failed"
+    | "cancelled";
 }
 
 interface SharedChannelRow {
@@ -238,6 +280,12 @@ export async function beginCommunityConnectionInstall(
     throw new ApiError(
       "invalid_input",
       "Wrapping key version is invalid.",
+    );
+  }
+  if (getPublicKey(input.privateKey) !== input.bridgePubkey) {
+    throw new ApiError(
+      "connector_key_mismatch",
+      "The connector key pair is invalid.",
     );
   }
 
@@ -510,12 +558,37 @@ export async function createSharedChannel(
           relay_url_snapshot,
           local_channel_id,
           local_channel_name_snapshot,
+          last_event_created_at,
           accepted_by,
           accepted_at
         )
         VALUES
-          ($1, $2, $3, 'source', 'active', $4, $5, $6, $7, now()),
-          ($1, $8, NULL, 'destination', 'pending', NULL, NULL, NULL, NULL, NULL)
+          (
+            $1,
+            $2,
+            $3,
+            'source',
+            'active',
+            $4,
+            $5,
+            $6,
+            floor(extract(epoch FROM now()))::bigint,
+            $7,
+            now()
+          ),
+          (
+            $1,
+            $8,
+            NULL,
+            'destination',
+            'pending',
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL
+          )
       `,
       [
         channel.id,
@@ -581,6 +654,7 @@ export async function acceptSharedChannel(
               relay_url_snapshot = $4,
               local_channel_id = $5,
               local_channel_name_snapshot = $6,
+              last_event_created_at = floor(extract(epoch FROM now()))::bigint,
               accepted_by = $7,
               accepted_at = now(),
               updated_at = now()
@@ -849,13 +923,14 @@ export async function ingestBridgeMessage(
           source_endpoint_id,
           source_event_id,
           source_actor_pubkey,
+          source_created_at,
           source_signed_event,
           source_parent_event_id,
           parent_bridge_message_id,
           body,
           body_sha256
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT (
           shared_channel_id,
           source_endpoint_id,
@@ -869,6 +944,7 @@ export async function ingestBridgeMessage(
         input.sourceEndpointId,
         input.sourceEventId,
         input.sourceActorPubkey,
+        input.sourceCreatedAt,
         input.signedEvent,
         input.sourceParentEventId ?? null,
         input.parentBridgeMessageId ?? null,
@@ -912,6 +988,38 @@ export async function ingestBridgeMessage(
         messageId: row.message_id,
       };
     }
+
+    await client.query(
+      `
+        INSERT INTO bridge_event_mappings (
+          shared_channel_id,
+          endpoint_id,
+          bridge_message_id,
+          local_event_id,
+          local_parent_event_id
+        )
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      [
+        input.sharedChannelId,
+        input.sourceEndpointId,
+        input.messageId,
+        input.sourceEventId,
+        input.sourceParentEventId ?? null,
+      ],
+    );
+    await client.query(
+      `
+        UPDATE shared_channel_endpoints
+        SET last_event_created_at = GREATEST(
+              COALESCE(last_event_created_at, 0),
+              $2
+            ),
+            updated_at = now()
+        WHERE id = $1
+      `,
+      [input.sourceEndpointId, input.sourceCreatedAt],
+    );
 
     const deliveryResult = await client.query<{ id: string }>(
       `
@@ -977,6 +1085,425 @@ export async function listSharedChannelEndpoints(
     [sharedChannelId],
   );
   return result.rows.map(mapEndpoint);
+}
+
+export async function listActiveConnectorConfigs(
+  pool: Pool,
+): Promise<ActiveConnectorConfig[]> {
+  const connections = await pool.query<
+    CommunityConnectionRow & {
+      encrypted_private_key: Buffer;
+      private_key_auth_tag: Buffer;
+      private_key_nonce: Buffer;
+    }
+  >(
+    `
+      SELECT
+        id,
+        community_id,
+        relay_url_snapshot,
+        bridge_pubkey,
+        encrypted_private_key,
+        private_key_nonce,
+        private_key_auth_tag,
+        wrapping_key_version,
+        state,
+        health
+      FROM community_connections
+      WHERE state = 'active'
+      ORDER BY id
+    `,
+  );
+  if (connections.rows.length === 0) return [];
+
+  const routes = await pool.query<{
+    connection_id: string;
+    last_event_created_at: string | number | null;
+    local_channel_id: string;
+    shared_channel_id: string;
+    source_endpoint_id: string;
+  }>(
+    `
+      SELECT
+        endpoints.connection_id,
+        endpoints.id AS source_endpoint_id,
+        endpoints.shared_channel_id,
+        endpoints.local_channel_id,
+        endpoints.last_event_created_at
+      FROM shared_channel_endpoints AS endpoints
+      JOIN shared_channels AS channels
+        ON channels.id = endpoints.shared_channel_id
+      WHERE endpoints.connection_id = ANY($1::uuid[])
+        AND endpoints.state = 'active'
+        AND channels.state = 'active'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM shared_channel_endpoints AS peer
+          WHERE peer.shared_channel_id = endpoints.shared_channel_id
+            AND peer.state <> 'active'
+        )
+      ORDER BY endpoints.connection_id, endpoints.id
+    `,
+    [connections.rows.map((row) => row.id)],
+  );
+  const routesByConnection = new Map<string, ConnectorRouteConfig[]>();
+  for (const route of routes.rows) {
+    const connectionRoutes =
+      routesByConnection.get(route.connection_id) ?? [];
+    connectionRoutes.push({
+      lastEventCreatedAt: Number(route.last_event_created_at ?? 0),
+      localChannelId: route.local_channel_id,
+      sharedChannelId: route.shared_channel_id,
+      sourceEndpointId: route.source_endpoint_id,
+    });
+    routesByConnection.set(route.connection_id, connectionRoutes);
+  }
+
+  return connections.rows.map((row) => ({
+    ...mapConnection(row),
+    authTag: row.private_key_auth_tag,
+    ciphertext: row.encrypted_private_key,
+    nonce: row.private_key_nonce,
+    routes: routesByConnection.get(row.id) ?? [],
+  }));
+}
+
+export async function recordConnectionHealth(
+  pool: Pool,
+  connectionId: string,
+  health: CommunityConnectionRecord["health"],
+  error?: string,
+): Promise<void> {
+  await pool.query(
+    `
+      UPDATE community_connections
+      SET health = $2,
+          last_health_error = $3,
+          last_health_at = now(),
+          updated_at = now()
+      WHERE id = $1
+        AND state = 'active'
+    `,
+    [connectionId, health, error?.slice(0, 500) ?? null],
+  );
+}
+
+export async function getBridgeDeliveryContext(
+  pool: Pool,
+  deliveryId: string,
+): Promise<BridgeDeliveryContext | null> {
+  const result = await pool.query<{
+    attempts: number;
+    body: string | null;
+    delivery_id: string;
+    destination_channel_id: string | null;
+    destination_connection_id: string | null;
+    destination_endpoint_id: string;
+    destination_signed_event: Event | null;
+    destination_state: SharedChannelEndpointRecord["state"];
+    local_parent_event_id: string | null;
+    message_id: string;
+    route_state: SharedChannelRecord["state"];
+    shared_channel_id: string;
+    source_actor_pubkey: string;
+    source_community_id: string;
+    source_community_name: string;
+    source_event_id: string;
+    source_parent_event_id: string | null;
+    source_state: SharedChannelEndpointRecord["state"];
+    state: BridgeDeliveryContext["state"];
+  }>(
+    `
+      SELECT
+        deliveries.id AS delivery_id,
+        deliveries.state,
+        deliveries.attempts,
+        deliveries.destination_signed_event,
+        messages.id AS message_id,
+        messages.shared_channel_id,
+        messages.source_actor_pubkey,
+        messages.source_event_id,
+        messages.source_parent_event_id,
+        messages.body,
+        source_endpoint.community_id AS source_community_id,
+        source_endpoint.state AS source_state,
+        COALESCE(
+          source_community.display_name,
+          source_community.slug,
+          source_candidate.host
+        ) AS source_community_name,
+        destination_endpoint.id AS destination_endpoint_id,
+        destination_endpoint.connection_id AS destination_connection_id,
+        destination_endpoint.local_channel_id AS destination_channel_id,
+        destination_endpoint.state AS destination_state,
+        channels.state AS route_state,
+        destination_parent.local_event_id AS local_parent_event_id
+      FROM bridge_deliveries AS deliveries
+      JOIN bridge_messages AS messages
+        ON messages.id = deliveries.bridge_message_id
+      JOIN shared_channels AS channels
+        ON channels.id = messages.shared_channel_id
+      JOIN shared_channel_endpoints AS source_endpoint
+        ON source_endpoint.id = messages.source_endpoint_id
+      JOIN communities AS source_community
+        ON source_community.id = source_endpoint.community_id
+      JOIN community_candidates AS source_candidate
+        ON source_candidate.id = source_community.candidate_id
+      JOIN shared_channel_endpoints AS destination_endpoint
+        ON destination_endpoint.id = deliveries.destination_endpoint_id
+      LEFT JOIN bridge_event_mappings AS source_parent
+        ON source_parent.endpoint_id = source_endpoint.id
+        AND source_parent.local_event_id = messages.source_parent_event_id
+      LEFT JOIN bridge_event_mappings AS destination_parent
+        ON destination_parent.endpoint_id = destination_endpoint.id
+        AND destination_parent.bridge_message_id = COALESCE(
+          messages.parent_bridge_message_id,
+          source_parent.bridge_message_id
+        )
+      WHERE deliveries.id = $1
+    `,
+    [deliveryId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  if (
+    !row.body ||
+    !row.destination_connection_id ||
+    !row.destination_channel_id
+  ) {
+    throw new ApiError(
+      "delivery_context_invalid",
+      "The bridge delivery is incomplete.",
+      500,
+    );
+  }
+
+  return {
+    attempts: row.attempts,
+    body: row.body,
+    deliveryId: row.delivery_id,
+    destinationChannelId: row.destination_channel_id,
+    destinationConnectionId: row.destination_connection_id,
+    destinationEndpointId: row.destination_endpoint_id,
+    destinationEvent: row.destination_signed_event,
+    localParentEventId: row.local_parent_event_id,
+    messageId: row.message_id,
+    routeActive:
+      row.route_state === "active" &&
+      row.source_state === "active" &&
+      row.destination_state === "active",
+    sharedChannelId: row.shared_channel_id,
+    sourceActorPubkey: row.source_actor_pubkey,
+    sourceCommunityId: row.source_community_id,
+    sourceCommunityName: row.source_community_name,
+    sourceEventId: row.source_event_id,
+    sourceParentEventId: row.source_parent_event_id,
+    state: row.state,
+  };
+}
+
+export async function markBridgeDeliveryDelivering(
+  pool: Pool,
+  deliveryId: string,
+): Promise<boolean> {
+  const result = await pool.query<{ id: string }>(
+    `
+      UPDATE bridge_deliveries
+      SET state = 'delivering',
+          attempts = attempts + 1,
+          updated_at = now()
+      WHERE id = $1
+        AND state IN ('queued', 'retry', 'delivering')
+      RETURNING id
+    `,
+    [deliveryId],
+  );
+  return Boolean(result.rows[0]);
+}
+
+export async function isBridgeDeliveryRouteActive(
+  pool: Pool,
+  deliveryId: string,
+): Promise<boolean> {
+  const result = await pool.query<{ active: boolean }>(
+    `
+      SELECT (
+        channels.state = 'active' AND
+        source_endpoint.state = 'active' AND
+        destination_endpoint.state = 'active'
+      ) AS active
+      FROM bridge_deliveries AS deliveries
+      JOIN bridge_messages AS messages
+        ON messages.id = deliveries.bridge_message_id
+      JOIN shared_channels AS channels
+        ON channels.id = messages.shared_channel_id
+      JOIN shared_channel_endpoints AS source_endpoint
+        ON source_endpoint.id = messages.source_endpoint_id
+      JOIN shared_channel_endpoints AS destination_endpoint
+        ON destination_endpoint.id = deliveries.destination_endpoint_id
+      WHERE deliveries.id = $1
+        AND deliveries.state = 'delivering'
+    `,
+    [deliveryId],
+  );
+  return result.rows[0]?.active === true;
+}
+
+export async function persistDestinationEvent(
+  pool: Pool,
+  deliveryId: string,
+  event: Event,
+): Promise<Event> {
+  return withTransaction(pool, async (client) => {
+    const current = await client.query<{
+      destination_signed_event: Event | null;
+      state: BridgeDeliveryContext["state"];
+    }>(
+      `
+        SELECT destination_signed_event, state
+        FROM bridge_deliveries
+        WHERE id = $1
+        FOR UPDATE
+      `,
+      [deliveryId],
+    );
+    const delivery = current.rows[0];
+    if (!delivery) {
+      throw new ApiError(
+        "delivery_not_found",
+        "The bridge delivery is unavailable.",
+        404,
+      );
+    }
+    if (
+      delivery.state === "cancelled" ||
+      delivery.state === "failed"
+    ) {
+      throw new ApiError(
+        "delivery_terminal",
+        "The bridge delivery is terminal.",
+        409,
+      );
+    }
+    if (delivery.destination_signed_event) {
+      return delivery.destination_signed_event;
+    }
+
+    await client.query(
+      `
+        UPDATE bridge_deliveries
+        SET destination_signed_event = $2,
+            destination_event_id = $3,
+            updated_at = now()
+        WHERE id = $1
+      `,
+      [deliveryId, event, event.id],
+    );
+    return event;
+  });
+}
+
+export async function completeBridgeDelivery(
+  pool: Pool,
+  deliveryId: string,
+  event: Event,
+): Promise<void> {
+  await withTransaction(pool, async (client) => {
+    const result = await client.query<{
+      bridge_message_id: string;
+      destination_endpoint_id: string;
+      shared_channel_id: string;
+    }>(
+      `
+        UPDATE bridge_deliveries AS deliveries
+        SET state = 'delivered_to_relay',
+            delivered_at = now(),
+            terminal_error_code = NULL,
+            updated_at = now()
+        FROM bridge_messages AS messages
+        WHERE deliveries.id = $1
+          AND deliveries.bridge_message_id = messages.id
+          AND deliveries.destination_event_id = $2
+          AND deliveries.state <> 'cancelled'
+        RETURNING
+          deliveries.bridge_message_id,
+          deliveries.destination_endpoint_id,
+          messages.shared_channel_id
+      `,
+      [deliveryId, event.id],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw new ApiError(
+        "delivery_completion_conflict",
+        "The bridge delivery could not be completed.",
+        409,
+      );
+    }
+    await client.query(
+      `
+        INSERT INTO bridge_event_mappings (
+          shared_channel_id,
+          endpoint_id,
+          bridge_message_id,
+          local_event_id
+        )
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (endpoint_id, bridge_message_id) DO NOTHING
+      `,
+      [
+        row.shared_channel_id,
+        row.destination_endpoint_id,
+        row.bridge_message_id,
+        event.id,
+      ],
+    );
+  });
+}
+
+export async function markBridgeDeliveryRetry(
+  pool: Pool,
+  deliveryId: string,
+  errorCode: string,
+  terminal = false,
+): Promise<void> {
+  await pool.query(
+    `
+      UPDATE bridge_deliveries
+      SET state = $2,
+          terminal_error_code = $3,
+          next_attempt_at = CASE
+            WHEN $2 = 'retry'
+              THEN now() + make_interval(
+                secs => LEAST(900, 15 * (2 ^ LEAST(attempts, 6)))
+              )
+            ELSE next_attempt_at
+          END,
+          updated_at = now()
+      WHERE id = $1
+        AND state <> 'delivered_to_relay'
+        AND state <> 'cancelled'
+    `,
+    [deliveryId, terminal ? "failed" : "retry", errorCode.slice(0, 80)],
+  );
+}
+
+export async function cancelBridgeDelivery(
+  pool: Pool,
+  deliveryId: string,
+  reason = "route_inactive",
+): Promise<void> {
+  await pool.query(
+    `
+      UPDATE bridge_deliveries
+      SET state = 'cancelled',
+          terminal_error_code = $2,
+          updated_at = now()
+      WHERE id = $1
+        AND state <> 'delivered_to_relay'
+    `,
+    [deliveryId, reason.slice(0, 80)],
+  );
 }
 
 async function changeEndpointState(

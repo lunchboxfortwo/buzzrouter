@@ -154,6 +154,7 @@ CREATE TABLE shared_channel_endpoints (
   relay_url_snapshot text,
   local_channel_id text,
   local_channel_name_snapshot text,
+  last_event_created_at bigint,
   accepted_by text,
   accepted_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -178,6 +179,11 @@ CREATE TABLE shared_channel_endpoints (
     ),
   CONSTRAINT shared_channel_endpoints_accepted_by
     CHECK (accepted_by IS NULL OR accepted_by ~ '^[a-f0-9]{64}$'),
+  CONSTRAINT shared_channel_endpoints_cursor
+    CHECK (
+      last_event_created_at IS NULL OR
+      last_event_created_at >= 0
+    ),
   CONSTRAINT shared_channel_endpoints_active_complete
     CHECK (
       state = 'pending' OR
@@ -196,6 +202,10 @@ CREATE TABLE shared_channel_endpoints (
 CREATE INDEX shared_channel_endpoints_community_idx
   ON shared_channel_endpoints (community_id, state, updated_at DESC);
 
+CREATE UNIQUE INDEX shared_channel_endpoints_local_channel_idx
+  ON shared_channel_endpoints (community_id, local_channel_id)
+  WHERE state IN ('active', 'paused');
+
 CREATE INDEX shared_channels_invitation_idx
   ON shared_channels (state, created_at DESC)
   WHERE state = 'proposed';
@@ -210,6 +220,8 @@ CREATE TABLE bridge_messages (
     CHECK (source_event_id ~ '^[a-f0-9]{64}$'),
   source_actor_pubkey text NOT NULL
     CHECK (source_actor_pubkey ~ '^[a-f0-9]{64}$'),
+  source_created_at bigint NOT NULL
+    CHECK (source_created_at >= 0),
   source_signed_event jsonb,
   source_parent_event_id text,
   parent_bridge_message_id uuid

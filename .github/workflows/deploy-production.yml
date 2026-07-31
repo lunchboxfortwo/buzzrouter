@@ -115,6 +115,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Derived, never hard-coded: a pinned name goes stale the moment a
+          # migration lands, which reports a false failure for a deploy that
+          # actually succeeded.
+          EXPECTED_MIGRATION="$(ls migrations | sort | tail -1)"
+          echo "Expecting migration ${EXPECTED_MIGRATION}."
+
           for attempt in $(seq 1 30); do
             if health="$(
               curl \
@@ -130,13 +136,14 @@ jobs:
 
           health = json.loads(sys.argv[1])
           expected = sys.argv[2]
+          expected_migration = sys.argv[3]
           valid = (
               health.get("status") == "ok"
-              and health.get("migration") == "0011_join_targets.sql"
+              and health.get("migration") == expected_migration
               and health.get("release") == expected
           )
           raise SystemExit(0 if valid else 1)
-          ' "${health}" "${EXPECTED_RELEASE}"; then
+          ' "${health}" "${EXPECTED_RELEASE}" "${EXPECTED_MIGRATION}"; then
               echo "Production is serving ${EXPECTED_RELEASE}."
               exit 0
             fi

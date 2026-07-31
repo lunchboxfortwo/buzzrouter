@@ -58,6 +58,7 @@ compose=(
   worker \
   tunnel
 
+expected_migration="$(ls "${source_dir}/migrations" | sort | tail -1)"
 release_ready=false
 for attempt in $(seq 1 30); do
   if health="$(
@@ -67,12 +68,13 @@ for attempt in $(seq 1 30); do
     node -e '
       const health = JSON.parse(process.argv[1]);
       const expectedRelease = process.argv[2];
+      const expectedMigration = process.argv[3];
       const valid =
         health.status === "ok" &&
-        health.migration === "0012_shared_channel_openness.sql" &&
+        health.migration === expectedMigration &&
         health.release === expectedRelease;
       process.exit(valid ? 0 : 1);
-    ' "${health}" "${target_revision}"; then
+    ' "${health}" "${target_revision}" "${expected_migration}"; then
     release_ready=true
     break
   fi

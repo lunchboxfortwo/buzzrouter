@@ -327,3 +327,36 @@ function normalizeCategory(category: string | undefined): string {
   const normalized = (category ?? "").trim().toLowerCase();
   return /^[a-z0-9-]{0,50}$/.test(normalized) ? normalized : "";
 }
+
+/**
+ * A single community's full profile, keyed by relay host, for the shareable
+ * `/communities/<host>` page. Reuses the directory read so the profile shows
+ * exactly the evidence the directory already trusts.
+ */
+export async function getCommunityByHost(
+  pool: Pool,
+  host: string,
+): Promise<DirectoryCommunity | null> {
+  const all = await listDirectoryCommunities(pool, { limit: 200 });
+  return all.find((community) => community.relayHost === host) ?? null;
+}
+
+/**
+ * Up to `limit` other communities sharing a focus, for the "Similar
+ * communities" section. Empty when the community has no focus.
+ */
+export async function listSimilarCommunities(
+  pool: Pool,
+  focus: string | null,
+  excludeHost: string,
+  limit = 3,
+): Promise<DirectoryCommunity[]> {
+  if (!focus) return [];
+  const all = await listDirectoryCommunities(pool, { limit: 200 });
+  return all
+    .filter(
+      (community) =>
+        community.focus === focus && community.relayHost !== excludeHost,
+    )
+    .slice(0, limit);
+}

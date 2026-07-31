@@ -819,12 +819,42 @@
   width: 52px;
 }
 
+.inspectorNameRow {
+  align-items: baseline;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
 .inspectorTitle {
   font-size: clamp(1.35rem, 1.55vw, 1.6rem);
   font-weight: 740;
   letter-spacing: -0.03em;
   line-height: 1.1;
   margin: 1px 0 4px;
+  min-width: 0;
+}
+
+.inspectorProfileInline {
+  align-items: center;
+  color: var(--accent-strong);
+  display: none;
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 620;
+  gap: 4px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.inspectorProfileInline svg {
+  fill: none;
+  height: 13px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.1;
+  width: 13px;
 }
 
 .inspectorSummary {
@@ -1038,7 +1068,14 @@
 }
 
 @media (max-width: 920px) {
+  .inspectorProfileInline {
+    display: inline-flex;
   }
+
+  .inspectorFooter {
+    display: none;
+  }
+}
 
 /* Footer */
 

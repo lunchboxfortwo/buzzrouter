@@ -7,6 +7,7 @@ export const SOURCE_NIP66_QUEUE = "discovery.source-nip66";
 export const SOURCE_NIP65_QUEUE = "discovery.source-nip65";
 export const RELIABILITY_ROLLUP_QUEUE = "discovery.reliability-rollup";
 export const REFRESH_SUMMARIES_QUEUE = "presence.refresh-summaries";
+export const AUTO_JOIN_QUEUE = "presence.auto-join";
 export const BRIDGE_DELIVERY_QUEUE = "shared-channels.deliver";
 
 export interface ProbeCandidateJob {
@@ -58,6 +59,14 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
     retryLimit: 2,
   });
 
+  await boss.createQueue(AUTO_JOIN_QUEUE, {
+    deleteAfterSeconds: 24 * 60 * 60,
+    expireInSeconds: 30 * 60,
+    retryBackoff: true,
+    retryDelay: 5 * 60,
+    retryLimit: 2,
+  });
+
   for (const sourceQueue of [
     SOURCE_GITHUB_QUEUE,
     SOURCE_NIP66_QUEUE,
@@ -102,6 +111,11 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
   // Refresh the cached directory summary of every joined community every 4h.
   await boss.schedule(REFRESH_SUMMARIES_QUEUE, "0 */4 * * *", null, {
     key: "presence-refresh-summaries",
+    tz: "UTC",
+  });
+  // Auto-join any newly-listed joinable communities once a day.
+  await boss.schedule(AUTO_JOIN_QUEUE, "0 3 * * *", null, {
+    key: "presence-auto-join",
     tz: "UTC",
   });
 }

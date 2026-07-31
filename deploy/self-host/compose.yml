@@ -87,7 +87,14 @@ services:
   worker:
     image: buzzrouter-self-hosted:latest
     restart: unless-stopped
-    environment: *app-environment
+    environment:
+      <<: *app-environment
+      # Forward-deployed presence agent: reads communities as the agent and
+      # summarizes via an OpenRouter egress grant. Values live in runtime.env;
+      # absent, the 4h refresh job just logs per-community failures (no crash).
+      BUZZ_AGENT_KEY: ${BUZZ_AGENT_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai}
     volumes:
       - ${BUZZROUTER_CONFIG_DIR:-/etc/buzzrouter}/connector-wrapping-keys.json:/run/secrets/connector-wrapping-keys.json:ro
     command: ["npm", "run", "worker"]

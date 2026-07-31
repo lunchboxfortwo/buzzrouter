@@ -297,15 +297,15 @@ function CommunityRow({
         <span className={styles.indexCommunityCopy}>
           <span className={styles.indexNameLine}>
             <strong className={styles.indexName}>{community.displayName}</strong>
-            {community.authRequired ? (
-              <span className={`${styles.accessFlag} ${styles.accessFlagInvite}`}>
-                Invite-only
-              </span>
-            ) : (
+            {accessKind(community) === "open" ? (
               <span className={`${styles.accessFlag} ${styles.accessFlagOpen}`}>
                 Open to join
               </span>
-            )}
+            ) : accessKind(community) === "invite" ? (
+              <span className={`${styles.accessFlag} ${styles.accessFlagInvite}`}>
+                Invite-only
+              </span>
+            ) : null}
           </span>
           <small className={styles.indexSummary}>
             {hostParts(community.relayHost)}
@@ -356,7 +356,11 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
                 {label}
               </span>
               <span>Checked {relativeTime(community.lastVerifiedAt)}</span>
-              {community.authRequired ? (
+              {accessKind(community) === "open" ? (
+                <span className={`${styles.accessFlag} ${styles.accessFlagOpen}`}>
+                  Open to join
+                </span>
+              ) : accessKind(community) === "invite" ? (
                 <span className={`${styles.accessFlag} ${styles.accessFlagInvite}`}>
                   Invite-only
                 </span>
@@ -465,6 +469,19 @@ function hostParts(host: string) {
       {index < labels.length - 1 ? <wbr /> : null}
     </Fragment>
   ));
+}
+
+/**
+ * Joinability from observed catalog data, never from the relay's NIP-42 auth
+ * flag. Returns null when we have no join signal, so the row claims nothing
+ * rather than mislabelling.
+ */
+function accessKind(
+  community: DirectoryCommunity,
+): "open" | "invite" | null {
+  if (community.publicUrl) return "open";
+  if (community.inviteCode) return "invite";
+  return null;
 }
 
 function monogram(displayName: string): string {

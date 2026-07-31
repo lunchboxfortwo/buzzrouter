@@ -646,9 +646,22 @@ Coverage target: every listed branch has a behavior, edge, and error assertion.
 No LLM evaluation is required.
 ```
 
-One focused browser workflow was considered. It is deferred for v0.2 to avoid a
-new Playwright stack; route/component integration tests and post-deploy browser
-canary checks cover the initial release.
+Add one focused Playwright workflow using deterministic test signers:
+
+```text
+Owner A proposes
+  -> Owner B accepts
+  -> route becomes active
+  -> Owner A pauses
+  -> Owner B cannot resume Owner A's endpoint
+  -> Owner A resumes
+  -> Owner B disconnects
+  -> both views remain disconnected
+```
+
+This is the complete browser-test scope for v0.2. It runs in CI against the
+existing PostgreSQL service. Relay delivery remains covered by the fake-relay
+Vitest integration suite.
 
 ## 16. Performance and Retention
 
@@ -732,10 +745,10 @@ decision.
   - Surfaced by: Architecture review - relay credentials must remain on the community host.
   - Files: connector package, `.github/workflows/`, installation documentation.
   - Verify: clean-host install, expired token, replay, partial setup, and successful round trip.
-- [ ] **T7 (P1, human: ~2 days / CC: ~1 day)** - Verification - Complete database, fake-relay, route, component, and release checks.
+- [ ] **T7 (P1, human: ~2 days / CC: ~1 day)** - Verification - Complete database, fake-relay, route, component, focused Playwright, and release checks.
   - Surfaced by: Test review - transaction and bilateral flows require real integration coverage.
-  - Files: `src/shared-channels/*.test.ts`, shared-channel API tests, CI workflow.
-  - Verify: `npm run typecheck && npm test && npm run build`.
+  - Files: `src/shared-channels/*.test.ts`, shared-channel API tests, `e2e/shared-channel-admin.spec.ts`, Playwright configuration, CI workflow.
+  - Verify: `npm run typecheck && npm test && npx playwright test && npm run build`.
 
 ## 20. NOT in Scope
 
@@ -749,8 +762,8 @@ decision.
   retry is sufficient for v0.2.
 - Cloud KMS or one secret file per community: encrypted PostgreSQL keys plus one
   host wrapping key fit the current deployment.
-- Playwright CI: deferred until route/component coverage or production canaries
-  show a browser-regression gap.
+- Broad browser coverage beyond the single bilateral administration workflow:
+  route, component, and fake-relay tests cover the remaining branches.
 - Attachments, reactions, edits, deletes, DMs, huddles, public senders, groups
   larger than two communities, payments, and protocol federation: unchanged
   from the product exclusions.
@@ -765,7 +778,7 @@ exist.
 - Architecture review: nine issues resolved.
 - Code quality review: one issue resolved.
 - Test review: coverage diagram produced; two gaps resolved through PostgreSQL,
-  fake-relay, route, component, and canary coverage.
+  fake-relay, route, component, focused Playwright, and canary coverage.
 - Performance review: one issue resolved through indexes, limits, batch loading,
   and bounded retention.
 - Failure modes: ten evaluated; zero silent critical gaps.

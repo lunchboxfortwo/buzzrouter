@@ -1,9 +1,11 @@
 
+import { isUuid } from "../../src/claims/http";
 import chrome from "../site-chrome.module.css";
 import { SiteMasthead } from "../SiteMasthead";
 import styles from "./submit.module.css";
 
 interface SubmitSearchParams {
+  candidate?: string | string[];
   host?: string | string[];
   status?: string | string[];
 }
@@ -16,6 +18,7 @@ export default async function SubmitPage({
   const params = await searchParams;
   const status = firstValue(params.status);
   const host = firstValue(params.host);
+  const candidateId = firstValue(params.candidate);
 
   return (
     <div className={chrome.siteCanvas}>
@@ -41,6 +44,13 @@ export default async function SubmitPage({
                   ? `${host} is now in the verification pipeline.`
                   : "The community is now in the verification pipeline."}
               </span>
+              {isUuid(candidateId) ? (
+                <span>
+                  Once verification succeeds, come back to{" "}
+                  <a href={`/claim/${candidateId}`}>this claim link</a> to
+                  prove ownership.
+                </span>
+              ) : null}
             </div>
           ) : null}
           {status === "invalid" ? (

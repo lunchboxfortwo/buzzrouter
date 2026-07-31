@@ -40,6 +40,13 @@ export interface ClaimWorkspace {
   visibility: string;
 }
 
+export interface ClaimableCandidateMatch {
+  candidateId: string;
+  canonicalRelayUrl: string;
+  displayName: string | null;
+  host: string;
+}
+
 export interface PublicCommunity {
   canonicalRelayUrl: string;
   categories: string[];
@@ -467,6 +474,70 @@ export async function getClaimWorkspace(
         visibility: row.visibility ?? "internal",
       }
     : null;
+}
+
+/**
+ * Verified, unclaimed candidates matching a host or display-name search —
+ * the only way a normal user can find their own community's claim page
+ * without the internal review password. Read-only; exposes nothing beyond
+ * what the public directory already shows.
+ */
+export async function searchClaimableCandidates(
+  pool: Pool,
+  search: string,
+  limit = 20,
+): Promise<ClaimableCandidateMatch[]> {
+  const trimmed = search.trim().slice(0, 100);
+  if (!trimmed) {
+    return [];
+  }
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+    throw new Error("Claimable candidate limit must be between 1 and 50.");
+  }
+
+  const result = await pool.query<{
+    candidate_id: string;
+    canonical_relay_url: string;
+    display_name: string | null;
+    host: string;
+  }>(
+    `
+      SELECT
+        candidates.id AS candidate_id,
+        candidates.canonical_relay_url,
+        candidates.host,
+        COALESCE(communities.display_name, catalog.source_display_name)
+          AS display_name
+      FROM community_candidates AS candidates
+      LEFT JOIN communities
+        ON communities.candidate_id = candidates.id
+      LEFT JOIN LATERAL (
+        SELECT source_display_name
+        FROM community_sources
+        WHERE candidate_id = candidates.id
+          AND source_display_name IS NOT NULL
+        ORDER BY source_observed_at DESC
+        LIMIT 1
+      ) AS catalog ON true
+      WHERE candidates.state = 'verified_buzz'
+        AND communities.owner_pubkey IS NULL
+        AND (
+          candidates.host ILIKE '%' || $1 || '%'
+          OR COALESCE(communities.display_name, catalog.source_display_name, '')
+            ILIKE '%' || $1 || '%'
+        )
+      ORDER BY candidates.host
+      LIMIT $2
+    `,
+    [trimmed, limit],
+  );
+
+  return result.rows.map((row) => ({
+    candidateId: row.candidate_id,
+    canonicalRelayUrl: row.canonical_relay_url,
+    displayName: row.display_name,
+    host: row.host,
+  }));
 }
 
 export async function getPublicCommunity(

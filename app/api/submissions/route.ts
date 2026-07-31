@@ -46,14 +46,14 @@ export async function POST(request: Request): Promise<Response> {
     const rawUrl = form.get("relayUrl");
     const relay = parseRelaySubmission(rawUrl);
     const inviteCode = extractInviteCode(rawUrl);
-    await upsertCandidate(getDatabasePool(), relay, {
+    const candidate = await upsertCandidate(getDatabasePool(), relay, {
       evidenceId: relay.canonicalRelayUrl,
       listing: inviteCode ? { inviteCode } : undefined,
       locator: `${publicOrigin}/submit`,
       type: "submission",
     });
 
-    return redirectToSubmission(publicOrigin, "queued", relay.host);
+    return redirectToSubmission(publicOrigin, "queued", relay.host, candidate.id);
   } catch (error) {
     if (
       error instanceof SubmissionValidationError ||
@@ -98,11 +98,15 @@ function redirectToSubmission(
   origin: string,
   status: "failed" | "invalid" | "queued",
   host?: string,
+  candidateId?: string,
 ): Response {
   const url = new URL("/submit", origin);
   url.searchParams.set("status", status);
   if (host) {
     url.searchParams.set("host", host);
+  }
+  if (candidateId) {
+    url.searchParams.set("candidate", candidateId);
   }
   return Response.redirect(url, 303);
 }

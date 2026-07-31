@@ -117,8 +117,10 @@ jobs:
 
           # Derived, never hard-coded: a pinned name goes stale the moment a
           # migration lands, which reports a false failure for a deploy that
-          # actually succeeded.
-          EXPECTED_MIGRATION="$(ls migrations | sort | tail -1)"
+          # actually succeeded. This job has no checkout, so read the tree the
+          # deploy service just checked out at the target revision.
+          SOURCE_DIR="${BUZZROUTER_SOURCE_DIR:-/opt/buzzrouter/source}"
+          EXPECTED_MIGRATION="$(ls "${SOURCE_DIR}/migrations" | sort | tail -1)"
           echo "Expecting migration ${EXPECTED_MIGRATION}."
 
           for attempt in $(seq 1 30); do

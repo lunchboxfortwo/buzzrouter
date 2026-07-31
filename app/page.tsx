@@ -14,6 +14,7 @@ import { focusLabel } from "../src/ranking/focus";
 
 import { AutoSubmitSelect } from "./AutoSubmitSelect";
 import { CopyRelayButton } from "./CopyRelayButton";
+import { MobileCollapsible } from "./MobileCollapsible";
 import { SiteMasthead } from "./SiteMasthead";
 import chrome from "./site-chrome.module.css";
 import styles from "./directory.module.css";
@@ -156,6 +157,7 @@ export default async function DirectoryPage({
               </svg>
             </header>
 
+            <MobileCollapsible label="Search options">
             <section aria-label="Filter and sort communities" className={styles.commandBar}>
               {hasFocusData ? (
                 <label className={styles.commandFilter}>
@@ -206,6 +208,7 @@ export default async function DirectoryPage({
                 Invite-only
               </a>
             </div>
+            </MobileCollapsible>
 
             <div className={styles.workspaceGrid}>
               <section
@@ -320,10 +323,11 @@ function CommunityRow({
   const tone = insigniaTone(community.relayHost);
 
   return (
-    <a
+    <Link
       aria-current={selected ? "true" : undefined}
       className={styles.indexRow}
       href={buildHref(filters, { selected: community.candidateId })}
+      scroll={false}
     >
       <span className={styles.indexCommunityCell}>
         {community.iconUrl ? (
@@ -371,7 +375,7 @@ function CommunityRow({
       <svg aria-hidden="true" className={styles.indexRowArrow} viewBox="0 0 24 24">
         <path d="m9 6 6 6-6 6" />
       </svg>
-    </a>
+    </Link>
   );
 }
 
@@ -459,6 +463,7 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
       ) : null}
 
       <div className={styles.inspectorSections}>
+        <MobileCollapsible label="More detail">
         {community.claimed && work ? (
           <section className={styles.inspectorSection}>
             <h3>Current work</h3>
@@ -484,6 +489,7 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
           <p>{about.text}</p>
           <small>From the relay&rsquo;s own published details.</small>
         </section>
+        </MobileCollapsible>
       </div>
 
       {community.slug ? (

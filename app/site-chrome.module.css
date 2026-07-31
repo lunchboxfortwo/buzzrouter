@@ -244,3 +244,40 @@
     grid-row: 3;
   }
 }
+
+.collapsible {
+  display: contents;
+}
+
+.collapsibleToggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--accent-strong);
+  cursor: pointer;
+  display: none;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 620;
+  gap: 6px;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 0 20px;
+  width: 100%;
+}
+
+.collapsibleToggle svg {
+  fill: none;
+  height: 16px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 16px;
+}
+
+@media (max-width: 920px) {
+  .collapsibleToggle {
+    display: flex;
+  }
+}

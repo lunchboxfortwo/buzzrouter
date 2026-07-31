@@ -34,7 +34,13 @@ export default function SharedChannelsPage() {
           <li>
             <strong>Install the connector.</strong>{" "}
             Run the one-time command on your community&apos;s host to link
-            your relay to BuzzRouter.
+            your relay to BuzzRouter. It looks like{" "}
+            <code className={styles.commandShape}>
+              npx --yes --package=@buzzrouter/connect buzzrouter-connect
+              &lt;token&gt;
+            </code>{" "}
+            &mdash; the exact command, with your single-use token filled in,
+            is generated below once your key is connected.
           </li>
           <li>
             <strong>Propose a channel.</strong> Pick a community from the

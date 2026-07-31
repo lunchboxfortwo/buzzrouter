@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   getBrowserNostrProvider,
@@ -33,6 +33,11 @@ export function SharedChannelsClient() {
   const [install, setInstall] = useState<InstallTokenResponse | null>(
     null,
   );
+  const [signerPresent, setSignerPresent] = useState(true);
+
+  useEffect(() => {
+    setSignerPresent(getBrowserNostrProvider() !== null);
+  }, []);
 
   const activeCommunity = workspace?.communities.find(
     (community) => community.id === activeCommunityId,
@@ -133,9 +138,33 @@ export function SharedChannelsClient() {
           <h2>Connect your owner key</h2>
           <p>Manage invitations and active routes for verified communities.</p>
         </div>
-        <button disabled={busy} onClick={connect} type="button">
+        <button
+          disabled={busy || !signerPresent}
+          onClick={connect}
+          type="button"
+        >
           {busy ? "Connecting..." : "Connect signer"}
         </button>
+        {!signerPresent ? (
+          <p className={styles.signerHelp}>
+            No Nostr signer was detected in this browser. Install a NIP-07
+            signer extension such as{" "}
+            <a href="https://getalby.com" rel="noopener noreferrer" target="_blank">
+              Alby
+            </a>{" "}
+            or{" "}
+            <a
+              href="https://github.com/fiatjaf/nos2x"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              nos2x
+            </a>
+            , import the key that owns your community, and reload this page.
+            BuzzRouter never asks for the private key itself &mdash; the
+            extension signs requests on your behalf.
+          </p>
+        ) : null}
         {message ? <p className={styles.notice}>{message}</p> : null}
       </section>
     );

@@ -111,6 +111,28 @@
   font-weight: 600;
 }
 
+.commandShape {
+  background: #f6f8fa;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  padding: 1px 5px;
+}
+
+.signerHelp {
+  background: #fff8c5;
+  border: 1px solid #d4a72c66;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  grid-column: 1 / -1;
+  line-height: 1.55;
+  margin: 0;
+  padding: 10px 12px;
+}
+
 .connectPanel,
 .empty {
   border: 1px solid var(--border);

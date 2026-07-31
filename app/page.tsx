@@ -182,7 +182,6 @@ export default async function DirectoryPage({
                 <div aria-hidden="true" className={styles.indexHeader}>
                   <span>Community</span>
                   {hasFocusData ? <span>Focus</span> : null}
-                  <span>Freshness</span>
                   <span />
                 </div>
                 <h2 className={styles.visuallyHidden} id="directory-results-title">
@@ -320,9 +319,6 @@ function CommunityRow({
       </span>
       <span className={styles.indexFocusCell}>
         {community.focus ? focusLabel(community.focus) : "—"}
-      </span>
-      <span className={styles.indexFreshnessCell}>
-        {relativeTime(community.lastVerifiedAt)}
       </span>
       <svg aria-hidden="true" className={styles.indexRowArrow} viewBox="0 0 24 24">
         <path d="m9 6 6 6-6 6" />

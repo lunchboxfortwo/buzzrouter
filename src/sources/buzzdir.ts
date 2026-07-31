@@ -28,7 +28,9 @@ const ALLOWED_CATEGORIES = new Set([
 export interface BuzzdirCatalogEntry {
   category: string;
   description: string;
+  inviteCode: string | null;
   name: string;
+  publicUrl: string | null;
   relay: string;
 }
 
@@ -66,6 +68,8 @@ export async function runBuzzdirSource(
             categories: [entry.category],
             description: entry.description,
             displayName: entry.name,
+            inviteCode: entry.inviteCode,
+            publicUrl: entry.publicUrl,
           },
           locator: CATALOG_SOURCE_URL,
           type: "buzzdir",
@@ -158,6 +162,10 @@ export function parseBuzzdirCatalog(sourceText: string): BuzzdirCatalogEntry[] {
     const description = readStringProperty(value, "description");
     const category = readStringProperty(value, "category").toLowerCase();
     const relay = readStringProperty(value, "relay");
+    const publicUrl = readOptionalStringProperty(value, "publicUrl");
+    const inviteCode = extractInviteCode(
+      readOptionalStringProperty(value, "inviteUrl"),
+    );
     if (
       Array.from(name).length < 2 ||
       Array.from(name).length > 80 ||
@@ -168,13 +176,43 @@ export function parseBuzzdirCatalog(sourceText: string): BuzzdirCatalogEntry[] {
       throw new Error("Buzzdir catalog entry is outside accepted bounds.");
     }
 
-    return { category, description, name, relay };
+    return { category, description, inviteCode, name, publicUrl, relay };
   });
   if (new Set(entries.map((entry) => entry.relay)).size !== entries.length) {
     throw new Error("Buzzdir catalog contains duplicate relays.");
   }
 
   return entries;
+}
+
+function readOptionalStringProperty(
+  object: ts.ObjectLiteralExpression,
+  propertyName: string,
+): string | null {
+  const property = object.properties.find(
+    (candidate) =>
+      ts.isPropertyAssignment(candidate) &&
+      propertyText(candidate.name) === propertyName,
+  );
+  if (!property || !ts.isPropertyAssignment(property)) {
+    return null;
+  }
+  const value = unwrapExpression(property.initializer);
+  if (!ts.isStringLiteralLike(value)) {
+    return null;
+  }
+  const text = value.text.replace(/\s+/gu, " ").trim();
+  return text.length > 0 ? text : null;
+}
+
+/**
+ * Canonical invite links are `https://<relay>/invite/<code>`. Only the code is
+ * kept; the code is what the Buzz app's `buzz://join` handoff needs.
+ */
+function extractInviteCode(inviteUrl: string | null): string | null {
+  if (!inviteUrl) return null;
+  const match = /\/invite\/([^/?#]+)/u.exec(inviteUrl);
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 function readStringProperty(

@@ -23,6 +23,8 @@ export interface DirectoryCommunity {
   displayName: string;
   evidenceCount: number;
   iconUrl: string | null;
+  publicUrl: string | null;
+  inviteCode: string | null;
   joinMode: string | null;
   joinUrl: string | null;
   lastVerifiedAt: string;
@@ -87,6 +89,8 @@ export async function listDirectoryCommunities(
     display_name: string;
     evidence_count: string;
     has_icon: boolean;
+    public_url: string | null;
+    invite_code: string | null;
     join_mode: string | null;
     join_url: string | null;
     last_verified_at: Date;
@@ -170,6 +174,8 @@ export async function listDirectoryCommunities(
           COALESCE(evidence.evidence_count, 0)::text AS evidence_count,
           COALESCE(evidence.source_types, '{}'::text[]) AS source_types,
           icons.candidate_id IS NOT NULL AS has_icon,
+          catalog.source_public_url AS public_url,
+          catalog.source_invite_code AS invite_code,
           candidates.first_seen_at,
           communities.focus,
           communities.display_name_override,
@@ -204,7 +210,9 @@ export async function listDirectoryCommunities(
           SELECT
             source_display_name,
             source_description,
-            source_categories
+            source_categories,
+            source_public_url,
+            source_invite_code
           FROM community_sources
           WHERE candidate_id = candidates.id
             AND source_type = 'buzzdir'
@@ -269,6 +277,8 @@ export async function listDirectoryCommunities(
     probesSuccessful: Number(row.probes_successful ?? 0),
     probesTotal: Number(row.probes_total ?? 0),
     reliabilityScore: Number(row.reliability_score ?? 0),
+    publicUrl: row.public_url,
+    inviteCode: row.invite_code,
     iconUrl: row.has_icon
       ? `/api/community-icons/${row.candidate_id}`
       : null,

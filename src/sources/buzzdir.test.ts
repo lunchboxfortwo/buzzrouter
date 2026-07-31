@@ -20,8 +20,35 @@ describe("parseBuzzdirCatalog", () => {
       {
         category: "builders",
         description: "People building on Buzz.",
+        inviteCode: "secret",
         name: "Builders",
+        publicUrl: null,
         relay: "wss://builders.communities.buzz.xyz",
+      },
+    ]);
+  });
+
+  it("keeps a public URL and leaves the invite code null", () => {
+    const source = `
+      export const communities = [
+        {
+          name: "Bitcoiners",
+          description: "Bitcoin builders.",
+          category: "Bitcoin",
+          relay: "wss://bitcoiners.communities.buzz.xyz",
+          publicUrl: "https://bitcoiners.example/join"
+        }
+      ] as const;
+    `;
+
+    expect(parseBuzzdirCatalog(source)).toEqual([
+      {
+        category: "bitcoin",
+        description: "Bitcoin builders.",
+        inviteCode: null,
+        name: "Bitcoiners",
+        publicUrl: "https://bitcoiners.example/join",
+        relay: "wss://bitcoiners.communities.buzz.xyz",
       },
     ]);
   });

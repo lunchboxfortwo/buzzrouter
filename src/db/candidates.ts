@@ -33,6 +33,8 @@ export interface CandidateSourceListing {
   categories?: string[];
   description?: string;
   displayName?: string;
+  inviteCode?: string | null;
+  publicUrl?: string | null;
 }
 
 export interface CandidateRecord {
@@ -97,9 +99,11 @@ export async function upsertCandidate(
           evidence_hash,
           source_display_name,
           source_description,
-          source_categories
+          source_categories,
+          source_public_url,
+          source_invite_code
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT (candidate_id, source_type, evidence_hash) DO UPDATE
           SET last_seen_at = now(),
               source_observed_at = GREATEST(
@@ -108,7 +112,9 @@ export async function upsertCandidate(
               ),
               source_display_name = EXCLUDED.source_display_name,
               source_description = EXCLUDED.source_description,
-              source_categories = EXCLUDED.source_categories
+              source_categories = EXCLUDED.source_categories,
+              source_public_url = EXCLUDED.source_public_url,
+              source_invite_code = EXCLUDED.source_invite_code
       `,
       [
         row.id,
@@ -120,6 +126,8 @@ export async function upsertCandidate(
         listing.displayName,
         listing.description,
         listing.categories,
+        listing.publicUrl,
+        listing.inviteCode,
       ],
     );
     await client.query("COMMIT");
@@ -143,9 +151,19 @@ export function normalizeCandidateSourceListing(
   categories: string[];
   description: string | null;
   displayName: string | null;
+  inviteCode: string | null;
+  publicUrl: string | null;
 } {
   const displayName = normalizePublicRelayText(listing?.displayName, 80);
   const description = normalizePublicRelayText(listing?.description, 500);
+  const publicUrl =
+    typeof listing?.publicUrl === "string" && /^https:\/\//i.test(listing.publicUrl)
+      ? listing.publicUrl.slice(0, 500)
+      : null;
+  const inviteCode =
+    typeof listing?.inviteCode === "string" && listing.inviteCode.trim()
+      ? listing.inviteCode.trim().slice(0, 200)
+      : null;
   const categories = [
     ...new Set(
       (listing?.categories ?? [])
@@ -170,6 +188,8 @@ export function normalizeCandidateSourceListing(
       displayName && Array.from(displayName).length >= 2
         ? displayName
         : null,
+    inviteCode,
+    publicUrl,
   };
 }
 

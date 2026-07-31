@@ -2,37 +2,33 @@ import type { PgBoss } from "pg-boss";
 import type { Pool } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { CandidateRecord } from "../db/candidates";
+import type { NormalizedRelay } from "../discovery/normalize";
 import type { PresenceMessage } from "../presence/reader";
-import type {
-  JoinCommunityOptions,
-  JoinCommunityResult,
-} from "../presence/policy";
 import {
   harvestInvites,
   registerHarvestInvitesWorker,
+  type InjectCandidateFn,
   type ReadCommunityFn,
 } from "./harvest-invites";
-import { HARVEST_INVITES_QUEUE, REFRESH_SUMMARIES_QUEUE } from "./queues";
+import { HARVEST_INVITES_QUEUE } from "./queues";
 
 // Mock the default dependency modules so the real worker handler (which calls
-// `harvestInvites({ pool })` with no injected deps) never touches the network.
-vi.mock("../presence/identity", () => ({
-  loadAgentIdentity: () => ({
-    npub: "npub-test",
-    privateKey: Uint8Array.from([9, 8, 7]),
-    publicKeyHex: "pub-test",
-  }),
-}));
+// `harvestInvites({ pool })` with no injected deps) never touches the network
+// or a real Postgres connection.
 const mockReadCommunity = vi.fn();
 vi.mock("../presence/reader", () => ({
   readCommunity: (...args: unknown[]) => mockReadCommunity(...args),
 }));
-const mockJoinCommunity = vi.fn();
-vi.mock("../presence/policy", () => ({
-  joinCommunity: (...args: unknown[]) => mockJoinCommunity(...args),
+const mockUpsertCandidate = vi.fn();
+vi.mock("../db/candidates", () => ({
+  upsertCandidate: (...args: unknown[]) => mockUpsertCandidate(...args),
 }));
 
-const KEY = Uint8Array.from([9, 8, 7]);
+/** A CandidateRecord an ingestion returns for a given relay. */
+function candidateRecord(host: string): CandidateRecord {
+  return { canonicalRelayUrl: `wss://${host}`, id: `cand-${host}`, state: "discovered" };
+}
 
 /**
  * A pool whose SELECT returns the given already-joined rows and whose
@@ -78,11 +74,11 @@ function insertsInto(
 afterEach(() => {
   vi.restoreAllMocks();
   mockReadCommunity.mockReset();
-  mockJoinCommunity.mockReset();
+  mockUpsertCandidate.mockReset();
 });
 
 describe("harvestInvites", () => {
-  it("joins a NEW community with acceptTerms:true and records membership", async () => {
+  it("INGESTS a NEW community as a directory candidate instead of joining", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     // Agent is a member of home.example; a message there advertises new.example.
     const { pool, query } = poolWith([
@@ -93,50 +89,39 @@ describe("harvestInvites", () => {
         message("welcome! buzz://join?relay=wss://new.example&code=INV-NEW"),
       ],
     });
-    const joinImpl = vi.fn(
-      async (options: JoinCommunityOptions): Promise<JoinCommunityResult> => ({
-        body: { community_id: `cid-${options.host}` },
-        ok: true,
-        status: 200,
-      }),
+    const injectImpl: InjectCandidateFn = vi.fn(
+      async (_pool, relay: NormalizedRelay): Promise<CandidateRecord> =>
+        candidateRecord(relay.host),
     );
 
-    const result = await harvestInvites({
-      joinImpl,
-      pool,
-      privateKey: KEY,
-      readCommunity,
-    });
+    const result = await harvestInvites({ injectImpl, pool, readCommunity });
 
     expect(result).toEqual({
       candidatesForExisting: 0,
       failed: 0,
       invitesFound: 1,
-      newCommunitiesJoined: 1,
+      newCommunitiesIngested: 1,
       scannedCommunities: 1,
     });
-    expect(joinImpl).toHaveBeenCalledTimes(1);
-    expect(joinImpl).toHaveBeenCalledWith({
-      acceptTerms: true,
-      code: "INV-NEW",
-      host: "new.example",
-      privateKey: KEY,
-    });
-    // Membership upserted for the new community with the parsed community_id.
-    const membershipInserts = insertsInto(query, /INSERT INTO presence_communities/);
-    expect(membershipInserts).toHaveLength(1);
-    expect(membershipInserts[0]?.[1]).toEqual([
-      "new.example",
-      "wss://new.example",
-      "cid-new.example",
-    ]);
-    // Nothing recorded as a candidate.
+    // Ingested via upsertCandidate with source_type harvest + the invite code,
+    // canonicalized to wss://new.example. No join, no membership row.
+    expect(injectImpl).toHaveBeenCalledTimes(1);
+    expect(injectImpl).toHaveBeenCalledWith(
+      pool,
+      { canonicalRelayUrl: "wss://new.example", host: "new.example", port: null },
+      {
+        evidenceId: "new.example",
+        listing: { inviteCode: "INV-NEW" },
+        type: "harvest",
+      },
+    );
+    expect(insertsInto(query, /INSERT INTO presence_communities/)).toHaveLength(0);
     expect(insertsInto(query, /INSERT INTO harvested_invite_candidates/)).toHaveLength(
       0,
     );
   });
 
-  it("records a candidate (no join) when the invite is for a community we're in", async () => {
+  it("records a candidate (no ingest) when the invite is for a community we're in", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     // Member of both home.example and existing.example; home advertises existing.
     const { pool, query } = poolWith([
@@ -149,24 +134,19 @@ describe("harvestInvites", () => {
       ],
       "wss://existing.example": [],
     });
-    const joinImpl = vi.fn();
+    const injectImpl = vi.fn();
 
-    const result = await harvestInvites({
-      joinImpl,
-      pool,
-      privateKey: KEY,
-      readCommunity,
-    });
+    const result = await harvestInvites({ injectImpl, pool, readCommunity });
 
     expect(result).toEqual({
       candidatesForExisting: 1,
       failed: 0,
       invitesFound: 1,
-      newCommunitiesJoined: 0,
+      newCommunitiesIngested: 0,
       scannedCommunities: 2,
     });
-    // No join attempted for an already-joined community.
-    expect(joinImpl).not.toHaveBeenCalled();
+    // No ingest for an already-joined community.
+    expect(injectImpl).not.toHaveBeenCalled();
     // Candidate recorded with the harvested code + source host.
     const candidateInserts = insertsInto(
       query,
@@ -178,59 +158,42 @@ describe("harvestInvites", () => {
       "FRESH-CODE",
       "home.example",
     ]);
-    // And no membership row written.
-    expect(insertsInto(query, /INSERT INTO presence_communities/)).toHaveLength(0);
   });
 
-  it("isolates a per-invite failure so the rest still process", async () => {
+  it("isolates a per-invite ingest failure so the rest still process", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const { pool, query } = poolWith([
+    const { pool } = poolWith([
       { community_id: null, relay_host: "home.example", relay_url: "wss://home.example" },
     ]);
     const readCommunity = readerReturning({
       "wss://home.example": [
         message("buzz://join?relay=wss://good.example&code=code-good"),
         message("buzz://join?relay=wss://bad.example&code=code-bad"),
-        message("buzz://join?relay=wss://throw.example&code=code-throw"),
       ],
     });
-    const joinImpl = vi.fn(
-      async (options: JoinCommunityOptions): Promise<JoinCommunityResult> => {
-        if (options.host === "bad.example") {
-          return { ok: false, reason: "expired", status: 410 };
+    const injectImpl: InjectCandidateFn = vi.fn(
+      async (_pool, relay: NormalizedRelay): Promise<CandidateRecord> => {
+        if (relay.host === "bad.example") {
+          throw new Error("ingest exploded");
         }
-        if (options.host === "throw.example") {
-          throw new Error("network exploded");
-        }
-        return { body: { community_id: "id-good" }, ok: true, status: 200 };
+        return candidateRecord(relay.host);
       },
     );
 
-    const result = await harvestInvites({
-      joinImpl,
-      pool,
-      privateKey: KEY,
-      readCommunity,
-    });
+    const result = await harvestInvites({ injectImpl, pool, readCommunity });
 
     expect(result).toEqual({
       candidatesForExisting: 0,
-      failed: 2,
-      invitesFound: 3,
-      newCommunitiesJoined: 1,
+      failed: 1,
+      invitesFound: 2,
+      newCommunitiesIngested: 1,
       scannedCommunities: 1,
     });
-    // Only the healthy community produced a membership row.
-    const membershipInserts = insertsInto(query, /INSERT INTO presence_communities/);
-    expect(membershipInserts).toHaveLength(1);
-    expect(membershipInserts[0]?.[1]?.[0]).toBe("good.example");
-    // Both failures logged with the host; the invite code never appears.
+    // The failure is logged with the host; the invite code never appears.
     const logged = errorSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(logged).toContain("bad.example");
-    expect(logged).toContain("throw.example");
     expect(logged).not.toContain("code-bad");
-    expect(logged).not.toContain("code-throw");
   });
 
   it("isolates a community whose read fails and counts it as failed", async () => {
@@ -246,26 +209,18 @@ describe("harvestInvites", () => {
       }
       return [message("buzz://join?relay=wss://new.example&code=NEW")];
     }) as unknown as ReadCommunityFn;
-    const joinImpl = vi.fn(
-      async (): Promise<JoinCommunityResult> => ({
-        body: {},
-        ok: true,
-        status: 200,
-      }),
+    const injectImpl: InjectCandidateFn = vi.fn(
+      async (_pool, relay: NormalizedRelay): Promise<CandidateRecord> =>
+        candidateRecord(relay.host),
     );
 
-    const result = await harvestInvites({
-      joinImpl,
-      pool,
-      privateKey: KEY,
-      readCommunity,
-    });
+    const result = await harvestInvites({ injectImpl, pool, readCommunity });
 
     expect(result).toEqual({
       candidatesForExisting: 0,
       failed: 1,
       invitesFound: 1,
-      newCommunitiesJoined: 1,
+      newCommunitiesIngested: 1,
       scannedCommunities: 2,
     });
     const logged = errorSpy.mock.calls.map((c) => String(c[0])).join("\n");
@@ -283,24 +238,16 @@ describe("harvestInvites", () => {
       "wss://a.example": [message("buzz://join?relay=wss://new.example&code=DUP")],
       "wss://b.example": [message("https://new.example/invite/DUP")],
     });
-    const joinImpl = vi.fn(
-      async (): Promise<JoinCommunityResult> => ({
-        body: {},
-        ok: true,
-        status: 200,
-      }),
+    const injectImpl: InjectCandidateFn = vi.fn(
+      async (_pool, relay: NormalizedRelay): Promise<CandidateRecord> =>
+        candidateRecord(relay.host),
     );
 
-    const result = await harvestInvites({
-      joinImpl,
-      pool,
-      privateKey: KEY,
-      readCommunity,
-    });
+    const result = await harvestInvites({ injectImpl, pool, readCommunity });
 
     expect(result.invitesFound).toBe(1);
-    expect(result.newCommunitiesJoined).toBe(1);
-    expect(joinImpl).toHaveBeenCalledTimes(1);
+    expect(result.newCommunitiesIngested).toBe(1);
+    expect(injectImpl).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -340,7 +287,7 @@ describe("registerHarvestInvitesWorker", () => {
     );
   });
 
-  it("runs the real handler and chains a refresh when a new community joined", async () => {
+  it("runs the real handler and ingests a harvested new community", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     // Member of home.example, whose channel advertises a NEW community.
     const { pool } = poolWith([
@@ -350,18 +297,21 @@ describe("registerHarvestInvitesWorker", () => {
     mockReadCommunity.mockResolvedValue([
       message("buzz://join?relay=wss://new.example&code=NEW"),
     ]);
-    mockJoinCommunity.mockResolvedValue({ body: {}, ok: true, status: 200 });
+    mockUpsertCandidate.mockResolvedValue(candidateRecord("new.example"));
 
     await registerHarvestInvitesWorker(boss, pool);
     await run();
 
-    expect(mockJoinCommunity).toHaveBeenCalledWith(
-      expect.objectContaining({ acceptTerms: true, host: "new.example" }),
+    expect(mockUpsertCandidate).toHaveBeenCalledWith(
+      pool,
+      { canonicalRelayUrl: "wss://new.example", host: "new.example", port: null },
+      expect.objectContaining({ type: "harvest" }),
     );
-    expect(send).toHaveBeenCalledWith(REFRESH_SUMMARIES_QUEUE, null);
+    // Ingested candidates are not joined, so nothing is chained.
+    expect(send).not.toHaveBeenCalled();
   });
 
-  it("runs the real handler and does not chain a refresh when nothing joined", async () => {
+  it("runs the real handler and ingests nothing when no invites are seen", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     const { pool } = poolWith([
       { community_id: null, relay_host: "home.example", relay_url: "wss://home.example" },
@@ -372,7 +322,7 @@ describe("registerHarvestInvitesWorker", () => {
     await registerHarvestInvitesWorker(boss, pool);
     await run();
 
-    expect(mockJoinCommunity).not.toHaveBeenCalled();
+    expect(mockUpsertCandidate).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });
 });

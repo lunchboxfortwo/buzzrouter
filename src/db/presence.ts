@@ -138,6 +138,100 @@ export async function recordInviteCandidate(
   );
 }
 
+export interface DirectoryInvite {
+  /** `community_candidates.id` whose source rows carry the directory invite. */
+  candidateId: string;
+  /** The invite code the directory currently serves for this community. */
+  code: string;
+}
+
+/**
+ * The invite code the public directory currently serves for a community,
+ * resolved by relay host. Joins `community_sources.source_invite_code` to its
+ * `community_candidates` row on `canonical_relay_url = 'wss://'||relayHost` and
+ * returns the newest non-null code (with its candidate id), or null when the
+ * directory has no invite for that host to keep fresh.
+ */
+export async function getDirectoryInvite(
+  pool: Pool,
+  relayHost: string,
+): Promise<DirectoryInvite | null> {
+  const result = await pool.query<{ candidate_id: string; code: string }>(
+    `
+      SELECT cs.candidate_id, cs.source_invite_code AS code
+      FROM community_sources cs
+      JOIN community_candidates cc ON cc.id = cs.candidate_id
+      WHERE cc.canonical_relay_url = $1
+        AND cs.source_invite_code IS NOT NULL
+      ORDER BY cs.last_seen_at DESC
+      LIMIT 1
+    `,
+    [`wss://${relayHost}`],
+  );
+  const row = result.rows[0];
+  return row ? { candidateId: row.candidate_id, code: row.code } : null;
+}
+
+/**
+ * Lists the harvested fresh-invite candidates for a community, newest `seen_at`
+ * first, so the freshness swap can probe them in recency order.
+ */
+export async function listInviteCandidates(
+  pool: Pool,
+  relayHost: string,
+): Promise<{ code: string }[]> {
+  const result = await pool.query<{ code: string }>(
+    `
+      SELECT code
+      FROM harvested_invite_candidates
+      WHERE relay_host = $1
+      ORDER BY seen_at DESC
+    `,
+    [relayHost],
+  );
+  return result.rows.map((row) => ({ code: row.code }));
+}
+
+/**
+ * Swaps the directory's stale invite for a fresh one by updating
+ * `source_invite_code` on every source row of the candidate. The code lives
+ * only in `source_invite_code`; it is never written to `source_locator` (the
+ * `community_sources_no_invites` CHECK forbids a code there).
+ */
+export async function replaceDirectoryInvite(
+  pool: Pool,
+  candidateId: string,
+  newCode: string,
+): Promise<void> {
+  await pool.query(
+    `
+      UPDATE community_sources
+      SET source_invite_code = $2,
+          last_seen_at = now()
+      WHERE candidate_id = $1
+    `,
+    [candidateId, newCode],
+  );
+}
+
+/**
+ * Clears a harvested candidate once it has been consumed (swapped into the
+ * directory) so it is not re-probed on the next pass.
+ */
+export async function deleteInviteCandidate(
+  pool: Pool,
+  relayHost: string,
+  code: string,
+): Promise<void> {
+  await pool.query(
+    `
+      DELETE FROM harvested_invite_candidates
+      WHERE relay_host = $1 AND code = $2
+    `,
+    [relayHost, code],
+  );
+}
+
 export interface StoredCommunitySummary {
   goals: string;
   recentProjects: string[];

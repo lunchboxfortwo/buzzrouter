@@ -9,11 +9,13 @@ import { registerAutoJoinWorker } from "./jobs/auto-join-communities";
 import { registerHarvestInvitesWorker } from "./jobs/harvest-invites";
 import { registerProbeCandidateWorker } from "./jobs/probe-candidate";
 import { registerRefreshSummariesWorker } from "./jobs/refresh-community-summaries";
+import { registerRefreshInvitesWorker } from "./jobs/refresh-invites";
 import { registerReliabilityRollupWorker } from "./jobs/reliability-rollup";
 import {
   AUTO_JOIN_QUEUE,
   configureQueues,
   HARVEST_INVITES_QUEUE,
+  REFRESH_INVITES_QUEUE,
   REFRESH_SUMMARIES_QUEUE,
 } from "./jobs/queues";
 import { registerDueProbeScheduler } from "./jobs/schedule-due-probes";
@@ -47,6 +49,7 @@ try {
   await registerRefreshSummariesWorker(boss, pool);
   await registerAutoJoinWorker(boss, pool);
   await registerHarvestInvitesWorker(boss, pool);
+  await registerRefreshInvitesWorker(boss, pool);
   // Kick one summary refresh on startup so a redeploy/restart populates
   // community summaries right away instead of waiting for the next 4h tick.
   // Best-effort: the job itself is per-community fault-tolerant, and a failed
@@ -71,6 +74,14 @@ try {
     await boss.send(HARVEST_INVITES_QUEUE, null);
   } catch (error) {
     console.error("initial invite harvest enqueue failed", error);
+  }
+  // Kick one invite-freshness pass on startup so a redeploy re-probes every
+  // directory invite and swaps in a live candidate immediately. Best-effort for
+  // the same reasons as the other presence kicks above.
+  try {
+    await boss.send(REFRESH_INVITES_QUEUE, null);
+  } catch (error) {
+    console.error("initial invite freshness refresh enqueue failed", error);
   }
   connectorSupervisor = new ConnectorSupervisor(
     pool,

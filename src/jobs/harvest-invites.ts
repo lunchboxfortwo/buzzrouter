@@ -2,23 +2,19 @@ import type { PgBoss } from "pg-boss";
 import type { Pool } from "pg";
 
 import {
-  listJoinedCommunities,
-  recordInviteCandidate,
-  upsertMembership,
-} from "../db/presence";
+  upsertCandidate as defaultUpsertCandidate,
+  type CandidateRecord,
+  type CandidateSource,
+} from "../db/candidates";
+import { listJoinedCommunities, recordInviteCandidate } from "../db/presence";
+import { normalizeRelayUrl, type NormalizedRelay } from "../discovery/normalize";
 import { extractInvites } from "../presence/extract-invites";
-import { loadAgentIdentity } from "../presence/identity";
-import {
-  joinCommunity as defaultJoinCommunity,
-  type JoinCommunityOptions,
-  type JoinCommunityResult,
-} from "../presence/policy";
 import {
   readCommunity as defaultReadCommunity,
   type PresenceMessage,
   type ReadCommunityOptions,
 } from "../presence/reader";
-import { HARVEST_INVITES_QUEUE, REFRESH_SUMMARIES_QUEUE } from "./queues";
+import { HARVEST_INVITES_QUEUE } from "./queues";
 
 /**
  * Harvests community invite links out of the channels the BuzzRouter Agent can
@@ -29,12 +25,14 @@ import { HARVEST_INVITES_QUEUE, REFRESH_SUMMARIES_QUEUE } from "./queues";
  * job reads recent messages from every joined community, extracts those invites,
  * and classifies each one against the set of communities we're already in:
  *
- *   - NOT already joined  → claim the invite (explicitly accepting Block's Terms
- *     of Service + the 18+ age attestation, `acceptTerms: true`, which is
- *     authorized/counsel-approved) and record the new membership. COVERAGE.
+ *   - NOT already joined  → INGEST it as a directory candidate (source type
+ *     `"harvest"`, carrying the invite code) rather than joining directly, so
+ *     the existing discovery/probe/verification pipeline vets it before it is
+ *     ever joined or displayed. Once verified it becomes joinable and the
+ *     auto-join job picks it up. This closes the injection/orphaned-summary gap.
  *   - ALREADY joined       → record the code as a fresh-invite CANDIDATE. The
  *     actual stale-invite replacement/swap is intentionally NOT done here — it
- *     is gated on a separate health-check spike. We only collect candidates.
+ *     runs in the separate `refreshStaleInvites` job. We only collect candidates.
  *
  * Every invite is processed under its own try/catch so one failure never aborts
  * the batch, and only the bare relay host (never a key, receipt, or invite code)
@@ -45,16 +43,18 @@ export type ReadCommunityFn = (
   options: ReadCommunityOptions,
 ) => Promise<PresenceMessage[]>;
 
-export type JoinCommunityFn = (
-  options: JoinCommunityOptions,
-) => Promise<JoinCommunityResult>;
+export type InjectCandidateFn = (
+  pool: Pool,
+  relay: NormalizedRelay,
+  source: CandidateSource,
+) => Promise<CandidateRecord>;
 
 export interface HarvestInvitesDeps {
   pool: Pool;
   /** Injectable community reader; defaults to the real NIP-42 relay read. */
   readCommunity?: ReadCommunityFn;
-  /** Injectable join implementation; defaults to the real policy handshake. */
-  joinImpl?: JoinCommunityFn;
+  /** Injectable candidate ingestion; defaults to the real `upsertCandidate`. */
+  injectImpl?: InjectCandidateFn;
   /** Agent private key; defaults to the loaded agent identity's key. */
   privateKey?: Uint8Array;
   /** Recent-message read cap per community. Defaults to the reader's own. */
@@ -64,17 +64,9 @@ export interface HarvestInvitesDeps {
 export interface HarvestInvitesResult {
   scannedCommunities: number;
   invitesFound: number;
-  newCommunitiesJoined: number;
+  newCommunitiesIngested: number;
   candidatesForExisting: number;
   failed: number;
-}
-
-function communityIdFromBody(body: unknown): string | undefined {
-  if (typeof body === "object" && body !== null) {
-    const value = (body as Record<string, unknown>).community_id;
-    if (typeof value === "string" && value.length > 0) return value;
-  }
-  return undefined;
 }
 
 interface Harvested {
@@ -136,14 +128,13 @@ export async function harvestInvites(
   deps: HarvestInvitesDeps,
 ): Promise<HarvestInvitesResult> {
   const readCommunity = deps.readCommunity ?? defaultReadCommunity;
-  const joinImpl = deps.joinImpl ?? defaultJoinCommunity;
-  const privateKey = deps.privateKey ?? loadAgentIdentity().privateKey;
+  const injectImpl = deps.injectImpl ?? defaultUpsertCandidate;
 
   const result: HarvestInvitesResult = {
     candidatesForExisting: 0,
     failed: 0,
     invitesFound: 0,
-    newCommunitiesJoined: 0,
+    newCommunitiesIngested: 0,
     scannedCommunities: 0,
   };
 
@@ -157,7 +148,7 @@ export async function harvestInvites(
     try {
       if (joinedHosts.has(invite.relayHost)) {
         // Already a member — collect the fresh code as a candidate only. The
-        // live-invite swap is gated on the health-check spike; do NOT swap here.
+        // live-invite swap runs in `refreshStaleInvites`; do NOT swap here.
         await recordInviteCandidate(deps.pool, {
           code: invite.code,
           relayHost: invite.relayHost,
@@ -167,32 +158,17 @@ export async function harvestInvites(
         continue;
       }
 
-      // A community we're not in yet — claim the invite for coverage.
-      const outcome = await joinImpl({
-        acceptTerms: true,
-        code: invite.code,
-        host: invite.relayHost,
-        privateKey,
+      // A community we're not in yet — INGEST it as a directory candidate,
+      // carrying the invite code, so discovery/probing/verification vets it
+      // before it is ever joined or displayed. It is deliberately NOT joined
+      // here; once verified the auto-join job claims it.
+      await injectImpl(deps.pool, normalizeRelayUrl(invite.relayUrl), {
+        evidenceId: invite.relayHost,
+        listing: { inviteCode: invite.code },
+        type: "harvest",
       });
-
-      if (outcome.ok) {
-        await upsertMembership(deps.pool, {
-          communityId: communityIdFromBody(outcome.body),
-          relayHost: invite.relayHost,
-          relayUrl: invite.relayUrl,
-        });
-        // Track it as joined so a second invite for the same host this pass is
-        // treated as a candidate rather than re-claimed.
-        joinedHosts.add(invite.relayHost);
-        result.newCommunitiesJoined += 1;
-        console.log(`${HARVEST_INVITES_QUEUE}: joined ${invite.relayHost}`);
-        continue;
-      }
-
-      result.failed += 1;
-      console.error(
-        `${HARVEST_INVITES_QUEUE}: join failed ${invite.relayHost}: ${outcome.reason}`,
-      );
+      result.newCommunitiesIngested += 1;
+      console.log(`${HARVEST_INVITES_QUEUE}: ingested ${invite.relayHost}`);
     } catch (error) {
       result.failed += 1;
       const reason = error instanceof Error ? error.message : String(error);
@@ -208,9 +184,9 @@ export async function harvestInvites(
 /**
  * Registers the pg-boss worker that drains the invite-harvest schedule. Mirrors
  * `registerAutoJoinWorker`: a single-batch worker that runs one harvest pass per
- * fired job, and — when it joined at least one new community — enqueues a summary
- * refresh so the freshly joined communities get summarized right away instead of
- * waiting for the next tick.
+ * fired job. Harvested new communities are ingested as directory candidates
+ * (not joined), so there is no summary to refresh here — the discovery pipeline
+ * verifies them and the auto-join job claims them once they are joinable.
  */
 export async function registerHarvestInvitesWorker(
   boss: PgBoss,
@@ -221,12 +197,9 @@ export async function registerHarvestInvitesWorker(
       const tally = await harvestInvites({ pool });
       console.log(
         `${HARVEST_INVITES_QUEUE}: scanned=${tally.scannedCommunities} ` +
-          `found=${tally.invitesFound} joined=${tally.newCommunitiesJoined} ` +
+          `found=${tally.invitesFound} ingested=${tally.newCommunitiesIngested} ` +
           `candidates=${tally.candidatesForExisting} failed=${tally.failed}`,
       );
-      if (tally.newCommunitiesJoined > 0) {
-        await boss.send(REFRESH_SUMMARIES_QUEUE, null);
-      }
     }
   });
 }

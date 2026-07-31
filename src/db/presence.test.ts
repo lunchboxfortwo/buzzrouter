@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { CommunitySummary } from "../presence/summarize";
 import {
+  deleteInviteCandidate,
+  getDirectoryInvite,
+  listInviteCandidates,
   listJoinedCommunities,
+  replaceDirectoryInvite,
   upsertMembership,
   upsertSummary,
 } from "./presence";
@@ -76,6 +80,78 @@ describe("listJoinedCommunities", () => {
       },
     ]);
     expect(query.mock.calls[0]?.[0]).toContain("ORDER BY joined_at ASC");
+  });
+});
+
+describe("getDirectoryInvite", () => {
+  it("resolves the newest non-null directory invite by relay host", async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [{ candidate_id: "cand-1", code: "INV-CODE" }],
+    });
+    const pool = { query } as unknown as Pool;
+
+    await expect(getDirectoryInvite(pool, "builders.example")).resolves.toEqual({
+      candidateId: "cand-1",
+      code: "INV-CODE",
+    });
+    const [sql, params] = query.mock.calls[0] as [string, unknown[]];
+    // Matched against the canonical wss:// relay URL, newest source first.
+    expect(sql).toContain("cc.canonical_relay_url = $1");
+    expect(sql).toContain("cs.source_invite_code IS NOT NULL");
+    expect(sql).toContain("ORDER BY cs.last_seen_at DESC");
+    expect(params).toEqual(["wss://builders.example"]);
+  });
+
+  it("returns null when the directory has no invite for the host", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const pool = { query } as unknown as Pool;
+    await expect(getDirectoryInvite(pool, "builders.example")).resolves.toBeNull();
+  });
+});
+
+describe("listInviteCandidates", () => {
+  it("lists harvested candidate codes newest seen_at first", async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [{ code: "C2" }, { code: "C1" }],
+    });
+    const pool = { query } as unknown as Pool;
+
+    await expect(
+      listInviteCandidates(pool, "builders.example"),
+    ).resolves.toEqual([{ code: "C2" }, { code: "C1" }]);
+    const [sql, params] = query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("FROM harvested_invite_candidates");
+    expect(sql).toContain("ORDER BY seen_at DESC");
+    expect(params).toEqual(["builders.example"]);
+  });
+});
+
+describe("replaceDirectoryInvite", () => {
+  it("updates only source_invite_code for the candidate's source rows", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const pool = { query } as unknown as Pool;
+
+    await replaceDirectoryInvite(pool, "cand-1", "FRESH");
+
+    const [sql, params] = query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("UPDATE community_sources");
+    expect(sql).toContain("source_invite_code = $2");
+    // The code must never land in source_locator (the no-invites CHECK).
+    expect(sql).not.toContain("source_locator");
+    expect(params).toEqual(["cand-1", "FRESH"]);
+  });
+});
+
+describe("deleteInviteCandidate", () => {
+  it("deletes the consumed candidate by (relay_host, code)", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const pool = { query } as unknown as Pool;
+
+    await deleteInviteCandidate(pool, "builders.example", "FRESH");
+
+    const [sql, params] = query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("DELETE FROM harvested_invite_candidates");
+    expect(params).toEqual(["builders.example", "FRESH"]);
   });
 });
 

@@ -22,6 +22,7 @@ import {
 import {
   cancelBridgeDelivery,
   completeBridgeDelivery,
+  confirmSharedChannelBinding,
   decryptConnectorPrivateKey,
   getBridgeDeliveryContext,
   ingestBridgeMessage,
@@ -33,15 +34,26 @@ import {
   recordConnectionHealth,
   type ActiveConnectorConfig,
   type ConnectorRouteConfig,
+  type PendingConfirmationConfig,
 } from "./store";
 
 const RECONCILE_INTERVAL_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 5_000;
 const EVENT_LOOKUP_TIMEOUT_MS = 3_000;
 const GROUP_LIST_TIMEOUT_MS = 4_000;
+const ROSTER_LIST_TIMEOUT_MS = 4_000;
 const GROUP_METADATA_KIND = 39_000;
+const ROSTER_KIND = 13_534;
 const MAX_WEBSOCKET_MESSAGE_BYTES = 512 * 1_024;
 const AUTH_REQUIRED_PATTERN = /auth-required/i;
+
+/** A community roster keyed by member pubkey, value is the lowercased role. */
+export type CommunityRoster = Map<string, string>;
+
+export interface ConfirmationSubscription {
+  localChannelId: string;
+  since: number;
+}
 
 class ConnectorWebSocket extends NodeWebSocket {
   constructor(address: string | URL, protocols?: string | string[]) {
@@ -68,8 +80,14 @@ export interface RelayConnection {
   hasEvent(eventId: string): Promise<boolean>;
   listGroups(): Promise<RelayGroup[]>;
   publish(event: Event): Promise<void>;
+  /**
+   * Read the community's relay-signed kind-13534 roster, or `null` if it cannot
+   * be read. Callers MUST treat `null` as "no authority" (fail closed).
+   */
+  readRoster(): Promise<CommunityRoster | null>;
   subscribe(
     routes: ConnectorRouteConfig[],
+    confirmations: ConfirmationSubscription[],
     onEvent: (event: Event) => void,
     onClose: (reason: string) => void,
   ): void;
@@ -293,6 +311,10 @@ export class ConnectorSupervisor {
       this.failures.delete(config.id);
       relay.subscribe(
         config.routes,
+        config.pendingConfirmations.map((confirmation) => ({
+          localChannelId: confirmation.localChannelId,
+          since: confirmation.since,
+        })),
         (event) => {
           void this.handleSourceEvent(session, event);
         },
@@ -334,6 +356,20 @@ export class ConnectorSupervisor {
     event: Event,
   ): Promise<void> {
     const channelId = event.tags.find((tag) => tag[0] === "h")?.[1];
+    if (!channelId) return;
+
+    // A kind-9 that carries a live confirmation code for this channel is a
+    // binding proof, not a message to bridge — verify and consume it first.
+    const confirmation = session.config.pendingConfirmations.find(
+      (candidate) =>
+        candidate.localChannelId === channelId &&
+        contentCarriesCode(event.content, candidate.code),
+    );
+    if (confirmation) {
+      await this.handleConfirmationEvent(session, event, confirmation);
+      return;
+    }
+
     const route = session.config.routes.find(
       (candidate) => candidate.localChannelId === channelId,
     );
@@ -376,6 +412,60 @@ export class ConnectorSupervisor {
         safeErrorMessage(error),
       );
       console.error("Shared-channel event ingestion failed", error);
+    }
+  }
+
+  /**
+   * The typed code proves nothing on its own: authority to bind THIS community
+   * comes only from its relay-signed roster. Read the roster, refuse unless the
+   * author is owner/admin, and fail closed if the roster cannot be read. Only
+   * then consume the single-use code and activate the route.
+   */
+  private async handleConfirmationEvent(
+    session: ConnectorSession,
+    event: Event,
+    confirmation: PendingConfirmationConfig,
+  ): Promise<void> {
+    try {
+      const roster = await session.relay.readRoster();
+      if (!roster) {
+        console.warn(
+          "Refused shared-channel confirmation: roster unreadable (fail closed)",
+        );
+        return;
+      }
+      if (!isPrivilegedRole(resolveRosterRole(roster, event.pubkey))) {
+        console.warn(
+          "Refused shared-channel confirmation: author is not owner or admin",
+        );
+        return;
+      }
+
+      const result = await confirmSharedChannelBinding(this.pool, {
+        actorCreatedAt: event.created_at,
+        actorEventId: event.id,
+        actorPubkey: event.pubkey,
+        confirmationId: confirmation.confirmationId,
+      });
+      if (result.activated) {
+        await recordConnectionHealth(
+          this.pool,
+          session.config.id,
+          "healthy",
+        );
+      } else {
+        console.warn(
+          "Refused shared-channel confirmation: code expired or already used",
+        );
+      }
+    } catch (error) {
+      await recordConnectionHealth(
+        this.pool,
+        session.config.id,
+        "degraded",
+        safeErrorMessage(error),
+      );
+      console.error("Shared-channel confirmation failed", error);
     }
   }
 }
@@ -645,25 +735,99 @@ export class NostrRelayConnection implements RelayConnection {
 
   subscribe(
     routes: ConnectorRouteConfig[],
+    confirmations: ConfirmationSubscription[],
     onEvent: (event: Event) => void,
     onClose: (reason: string) => void,
   ): void {
     this.subscription?.close("routes changed");
-    if (routes.length === 0) {
+
+    // Active routes and pending confirmations use different `since` cursors, so
+    // they are SEPARATE array elements (an OR). Merging them into one Filter
+    // object would AND their keys and match nothing.
+    const filters: Filter[] = [];
+    if (routes.length > 0) {
+      filters.push({
+        "#h": [...new Set(routes.map((route) => route.localChannelId))],
+        kinds: [9],
+        since: Math.min(...routes.map((route) => route.lastEventCreatedAt)),
+      });
+    }
+    if (confirmations.length > 0) {
+      filters.push({
+        "#h": [
+          ...new Set(
+            confirmations.map((confirmation) => confirmation.localChannelId),
+          ),
+        ],
+        kinds: [9],
+        since: Math.min(
+          ...confirmations.map((confirmation) => confirmation.since),
+        ),
+      });
+    }
+    if (filters.length === 0) {
       this.subscription = undefined;
       return;
     }
 
-    const filter: Filter = {
-      "#h": [...new Set(routes.map((route) => route.localChannelId))],
-      kinds: [9],
-      since: Math.min(
-        ...routes.map((route) => route.lastEventCreatedAt),
-      ),
-    };
-    this.subscription = this.relay.subscribe([filter], {
+    this.subscription = this.relay.subscribe(filters, {
       onevent: onEvent,
       onclose: onClose,
+    });
+  }
+
+  /**
+   * Read the community's kind-13534 roster. A REQ filtered to 13534 alone is
+   * readable by any member; the newest matching event is authoritative. Returns
+   * `null` on any failure so callers fail closed. Mirrors {@link listGroups}:
+   * re-authenticate and retry once if the REQ is closed auth-required.
+   */
+  async readRoster(): Promise<CommunityRoster | null> {
+    try {
+      return await this.collectRoster();
+    } catch (error) {
+      if (!isAuthRequired(error)) return null;
+      try {
+        await this.authenticate();
+        return await this.collectRoster();
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  private collectRoster(): Promise<CommunityRoster | null> {
+    return new Promise((resolve, reject) => {
+      let latest: Event | undefined;
+      let settled = false;
+      let subscription: Subscription | undefined;
+      const finish = (complete: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        subscription?.close("roster read complete");
+        complete();
+      };
+      const done = () =>
+        resolve(latest ? parseRoster(latest) : null);
+      const timeout = setTimeout(() => finish(done), ROSTER_LIST_TIMEOUT_MS);
+      subscription = this.relay.subscribe(
+        [{ kinds: [ROSTER_KIND] }],
+        {
+          onclose: (reason: string) =>
+            finish(() =>
+              AUTH_REQUIRED_PATTERN.test(reason)
+                ? reject(new Error(reason))
+                : done(),
+            ),
+          oneose: () => finish(done),
+          onevent: (event: Event) => {
+            if (!latest || event.created_at > latest.created_at) {
+              latest = event;
+            }
+          },
+        },
+      );
     });
   }
 }
@@ -676,6 +840,42 @@ function toRelayGroup(event: Event): RelayGroup | null {
     id,
     name: name && name.trim().length > 0 ? name.trim() : id,
   };
+}
+
+/**
+ * Parse a kind-13534 roster event into pubkey -> role. Roles are inline on each
+ * member tag: `["p", <pubkey>, <role>]` (a trailing role element is also
+ * accepted, e.g. `["p", <pubkey>, <relay>, <role>]`). Unknown/absent roles
+ * default to "member", i.e. unprivileged.
+ */
+export function parseRoster(event: Event): CommunityRoster {
+  const roster: CommunityRoster = new Map();
+  for (const tag of event.tags) {
+    if (tag[0] !== "p" && tag[0] !== "member") continue;
+    const pubkey = tag[1];
+    if (typeof pubkey !== "string" || !/^[a-f0-9]{64}$/.test(pubkey)) {
+      continue;
+    }
+    const role = (tag[3] ?? tag[2] ?? "member").toString().toLowerCase();
+    roster.set(pubkey, role || "member");
+  }
+  return roster;
+}
+
+export function resolveRosterRole(
+  roster: CommunityRoster | null,
+  pubkey: string,
+): string | null {
+  return roster?.get(pubkey) ?? null;
+}
+
+export function isPrivilegedRole(role: string | null): boolean {
+  return role === "owner" || role === "admin";
+}
+
+function contentCarriesCode(content: unknown, code: string): boolean {
+  if (typeof content !== "string") return false;
+  return content.toUpperCase().includes(code.toUpperCase());
 }
 
 function parseErrorCode(error: unknown): string {
@@ -712,6 +912,10 @@ function safeErrorMessage(error: unknown): string {
 function connectionFingerprint(config: ActiveConnectorConfig): string {
   return JSON.stringify({
     bridgePubkey: config.bridgePubkey,
+    pendingConfirmations: config.pendingConfirmations.map((confirmation) => ({
+      channel: confirmation.localChannelId,
+      confirmation: confirmation.confirmationId,
+    })),
     relayUrl: config.relayUrl,
     routes: config.routes.map((route) => ({
       channel: route.localChannelId,

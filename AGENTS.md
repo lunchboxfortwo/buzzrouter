@@ -61,6 +61,28 @@ Key routing rules:
 - E2E that mints a token needs `BUZZROUTER_CONNECTOR_WRAPPING_KEYS_FILE` (set
   in `playwright.config.ts` → `e2e/fixtures/connector-wrapping-keys.json`).
 
+## Shared-channel binding is chat-proof, not click-proof
+
+- Accepting a shared channel is two steps. The web "Accept" only ARMS: it pins
+  the chosen local channel onto the still-pending destination endpoint and mints
+  a single-use code (`armSharedChannelConfirmation` in
+  `src/shared-channels/store.ts`, `POST /api/shared-channels/[id]/accept`). It
+  does NOT activate — a forwarded/leaked link or web click grants nothing.
+- The bridge activates the route only when it hears that code typed as a kind-9
+  in the chosen channel from a pubkey the community's relay-signed **kind-13534
+  roster** marks owner/admin (`ConnectorSupervisor.handleConfirmationEvent`,
+  then `confirmSharedChannelBinding`). It FAILS CLOSED if the roster can't be
+  read. Roster format assumed: member tags `["p", <pubkey>, <role>]` (see
+  `parseRoster`) — bespoke to Buzz relays, not re-derivable from this repo.
+- So the bridge must subscribe to a pending endpoint's channel BEFORE the code
+  is typed: `listActiveConnectorConfigs` returns `pendingConfirmations`, and
+  `NostrRelayConnection.subscribe` adds them as a SECOND filter element (never a
+  second key on one Filter — keys AND).
+- The app server does NOT run the connector (that's `src/worker.ts`), so e2e for
+  the confirmation runs a `ConnectorSupervisor` in the test process against the
+  fake relay; the auth branches (owner ok / member / unreadable roster / replay
+  / expired) are covered in `store.integration.test.ts`.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

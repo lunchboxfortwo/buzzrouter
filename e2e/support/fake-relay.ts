@@ -9,6 +9,7 @@ import { finalizeEvent, generateSecretKey } from "nostr-tools/pure";
 import { WebSocketServer, type WebSocket } from "ws";
 
 const GROUP_METADATA_KIND = 39_000;
+const ROSTER_KIND = 13_534;
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "../fixtures");
 const tlsCert = readFileSync(join(fixturesDir, "fake-relay-cert.pem"));
@@ -19,10 +20,26 @@ export interface FakeRelayGroup {
   name: string;
 }
 
+export interface FakeRosterMember {
+  pubkey: string;
+  role: string;
+}
+
 export interface FakeRelay {
-  /** ws:// URL to store as a candidate's canonical_relay_url. */
+  /** wss:// URL to store as a candidate's canonical_relay_url. */
   url: string;
   close(): Promise<void>;
+  /**
+   * Push an already-signed event to every open subscription whose filters match
+   * (and remember it for later REQs). This is how a test simulates a member
+   * typing a message into a channel the connector is listening to.
+   */
+  injectEvent(event: Event): void;
+  /**
+   * Publish (or replace) the community's kind-13534 roster with inline member
+   * roles, so the connector's readRoster() can resolve who is owner/admin.
+   */
+  setRoster(members: FakeRosterMember[]): void;
 }
 
 interface RelayFilter {
@@ -37,15 +54,18 @@ interface RelayFilter {
 /**
  * A minimal in-process Nostr relay for the e2e harness. It is deliberately NOT
  * a production dependency: it only implements the slice of the protocol the
- * BuzzRouter connector actually exercises during install/activation and the
- * relay-backed channel picker —
+ * BuzzRouter connector actually exercises during install/activation, the
+ * relay-backed channel picker, and the chat-proof confirmation flow —
  *
  *   - accept EVENT, store it, ACK with `["OK", id, true]`
  *     (so connector activation's publish + hasEvent round trip succeeds against
  *     a real WebSocket rather than a stubbed relay factory);
- *   - answer REQ from stored events + EOSE
- *     (so hasEvent finds the just-published verification event, and the picker's
- *     listGroups() finds the seeded kind-39000 group metadata);
+ *   - answer REQ from stored events + EOSE, then KEEP the subscription open so
+ *     later injected events reach it live
+ *     (so hasEvent finds the just-published verification event, the picker's
+ *     listGroups() finds the seeded kind-39000 group metadata, readRoster()
+ *     finds the kind-13534 roster, and a confirmation kind-9 injected after the
+ *     connector subscribes is actually delivered);
  *   - never send an AUTH challenge, so the connector's best-effort NIP-42
  *     `authenticate()` no-ops exactly as it does against a relay that doesn't
  *     require auth.
@@ -64,11 +84,14 @@ export async function startFakeRelay(
   groups: FakeRelayGroup[],
 ): Promise<FakeRelay> {
   const stored = new Map<string, Event>();
-
-  // Seed the relay's advertised channels as validly-signed kind-39000 group
-  // metadata events; nostr-tools verifies signatures on receipt, so these must
-  // be real events, not hand-built JSON.
+  // subscriptionId -> filters, per connected socket, so injected events can be
+  // pushed live to whatever the connector is currently listening for.
+  const subscriptions = new Map<WebSocket, Map<string, RelayFilter[]>>();
+  // The relay signs its own metadata/roster; nostr-tools verifies signatures on
+  // receipt, so these must be real events, not hand-built JSON.
   const relayKey = generateSecretKey();
+  let rosterEventId: string | undefined;
+
   for (const group of groups) {
     const event = finalizeEvent(
       {
@@ -88,8 +111,12 @@ export async function startFakeRelay(
   const server: Server = createServer({ cert: tlsCert, key: tlsKey });
   const wss = new WebSocketServer({ server });
   wss.on("connection", (socket: WebSocket) => {
+    subscriptions.set(socket, new Map());
     socket.on("message", (raw) => {
-      handleMessage(socket, raw.toString(), stored);
+      handleMessage(socket, raw.toString(), stored, subscriptions);
+    });
+    socket.on("close", () => {
+      subscriptions.delete(socket);
     });
   });
 
@@ -111,6 +138,24 @@ export async function startFakeRelay(
         server.close(() => resolve());
       });
     },
+    injectEvent(event: Event) {
+      stored.set(event.id, event);
+      pushToSubscribers(event, subscriptions);
+    },
+    setRoster(members: FakeRosterMember[]) {
+      if (rosterEventId) stored.delete(rosterEventId);
+      const event = finalizeEvent(
+        {
+          content: "",
+          created_at: 1_700_000_100,
+          kind: ROSTER_KIND,
+          tags: members.map((member) => ["p", member.pubkey, member.role]),
+        },
+        relayKey,
+      );
+      stored.set(event.id, event);
+      rosterEventId = event.id;
+    },
   };
 }
 
@@ -118,6 +163,7 @@ function handleMessage(
   socket: WebSocket,
   raw: string,
   stored: Map<string, Event>,
+  subscriptions: Map<WebSocket, Map<string, RelayFilter[]>>,
 ): void {
   let message: unknown;
   try {
@@ -134,6 +180,7 @@ function handleMessage(
     const event = message[1] as Event;
     stored.set(event.id, event);
     socket.send(JSON.stringify(["OK", event.id, true, ""]));
+    pushToSubscribers(event, subscriptions);
     return;
   }
   if (type === "REQ") {
@@ -145,10 +192,28 @@ function handleMessage(
       }
     }
     socket.send(JSON.stringify(["EOSE", subscriptionId]));
+    // Keep the subscription open so events injected later are delivered live.
+    subscriptions.get(socket)?.set(subscriptionId, filters);
     return;
   }
-  // CLOSE and anything else: nostr-tools manages its own subscription lifecycle,
-  // so there is nothing to reply with.
+  if (type === "CLOSE") {
+    const subscriptionId = message[1] as string;
+    subscriptions.get(socket)?.delete(subscriptionId);
+    return;
+  }
+}
+
+function pushToSubscribers(
+  event: Event,
+  subscriptions: Map<WebSocket, Map<string, RelayFilter[]>>,
+): void {
+  for (const [socket, subs] of subscriptions) {
+    for (const [subscriptionId, filters] of subs) {
+      if (filters.some((filter) => matchFilter(filter, event))) {
+        socket.send(JSON.stringify(["EVENT", subscriptionId, event]));
+      }
+    }
+  }
 }
 
 function matchFilter(filter: RelayFilter, event: Event): boolean {

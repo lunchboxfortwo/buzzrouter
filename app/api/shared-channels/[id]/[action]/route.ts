@@ -8,7 +8,7 @@ import {
   sharedChannelErrorResponse,
 } from "../../../../../src/shared-channels/http";
 import {
-  acceptSharedChannel,
+  armSharedChannelConfirmation,
   disconnectSharedChannel,
   pauseSharedChannelEndpoint,
   rejectSharedChannel,
@@ -49,28 +49,35 @@ export async function POST(
       sharedChannelId,
     };
 
+    // `accept` no longer activates: it arms a chat-proof confirmation and
+    // returns the one-time code the owner must type into the chosen channel.
+    if (action === "accept") {
+      const confirmation = await armSharedChannelConfirmation(pool, {
+        ...common,
+        localChannelId: requireText(
+          body.localChannelId,
+          200,
+          "Local channel",
+        ),
+        localChannelName: requireText(
+          body.localChannelName,
+          80,
+          "Local channel name",
+        ),
+      });
+      return Response.json(confirmation, {
+        headers: { "cache-control": "no-store" },
+      });
+    }
+
     const channel =
-      action === "accept"
-        ? await acceptSharedChannel(pool, {
-            ...common,
-            localChannelId: requireText(
-              body.localChannelId,
-              200,
-              "Local channel",
-            ),
-            localChannelName: requireText(
-              body.localChannelName,
-              80,
-              "Local channel name",
-            ),
-          })
-        : action === "reject"
-          ? await rejectSharedChannel(pool, common)
-          : action === "pause"
-            ? await pauseSharedChannelEndpoint(pool, common)
-            : action === "resume"
-              ? await resumeSharedChannelEndpoint(pool, common)
-              : await disconnectSharedChannel(pool, common);
+      action === "reject"
+        ? await rejectSharedChannel(pool, common)
+        : action === "pause"
+          ? await pauseSharedChannelEndpoint(pool, common)
+          : action === "resume"
+            ? await resumeSharedChannelEndpoint(pool, common)
+            : await disconnectSharedChannel(pool, common);
 
     return Response.json(channel, {
       headers: { "cache-control": "no-store" },

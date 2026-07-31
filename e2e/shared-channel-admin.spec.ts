@@ -6,6 +6,11 @@ import {
 } from "nostr-tools/pure";
 import { Pool } from "pg";
 
+import {
+  armSharedChannelConfirmation,
+  confirmSharedChannelBinding,
+} from "../src/shared-channels/store";
+
 interface Owner {
   communityId: string;
   privateKey: Uint8Array;
@@ -88,10 +93,19 @@ test("owners control their side of a shared-channel route", async ({
   let route = page.locator("article").filter({
     hasText: "benchmark-review",
   });
-  await route.getByLabel("Local channel ID").fill("channel-owner-b");
-  await route.getByLabel("Local channel name").fill("external-benchmark");
-  await route.getByRole("button", { name: "Accept" }).click();
-  await expect(page.getByText("Shared channel active.")).toBeVisible();
+
+  // Accept is chat-proof now: the web click only arms a one-time code, and the
+  // bridge binds the route only after reading the code from a roster owner/admin
+  // over the relay. This spec's relays are unreachable stubs, so that relay
+  // round trip is exercised by shared-channel-unseeded-journey.spec.ts and the
+  // store integration tests; here we drive the same store path directly to reach
+  // an active route for the endpoint-control assertions below.
+  await bindDestinationViaConfirmation(pool, ownerB);
+  await page.getByRole("button", { name: "Refresh" }).click();
+  route = page.locator("article").filter({
+    hasText: "benchmark-review",
+  });
+  await expect(route).toContainText("active");
 
   activeOwner = ownerA;
   await page.getByRole("button", { name: "Refresh" }).click();
@@ -157,6 +171,58 @@ function createOwner(marker: number): Owner {
   };
 }
 
+/**
+ * Bind the destination endpoint the way the bridge would after the roster check
+ * passes: arm the pending endpoint, then consume its code. Kept at the store
+ * layer because this spec's relays are unreachable stubs.
+ */
+async function bindDestinationViaConfirmation(
+  database: Pool,
+  owner: Owner,
+): Promise<void> {
+  const channel = await database.query<{ id: string }>(
+    `
+      SELECT channels.id
+      FROM shared_channels AS channels
+      JOIN shared_channel_endpoints AS endpoints
+        ON endpoints.shared_channel_id = channels.id
+      WHERE endpoints.community_id = $1
+        AND endpoints.role = 'destination'
+        AND channels.state = 'proposed'
+      ORDER BY channels.created_at DESC
+      LIMIT 1
+    `,
+    [owner.communityId],
+  );
+  const sharedChannelId = channel.rows[0].id;
+  await armSharedChannelConfirmation(database, {
+    communityId: owner.communityId,
+    idempotencyKey: `admin-arm-${sharedChannelId}`,
+    localChannelId: "channel-owner-b",
+    localChannelName: "external-benchmark",
+    ownerPubkey: owner.pubkey,
+    sharedChannelId,
+  });
+  const confirmation = await database.query<{ id: string }>(
+    `
+      SELECT id
+      FROM shared_channel_confirmations
+      WHERE shared_channel_id = $1
+        AND state = 'pending'
+    `,
+    [sharedChannelId],
+  );
+  const result = await confirmSharedChannelBinding(database, {
+    actorCreatedAt: Math.floor(Date.now() / 1_000),
+    actorEventId: "f".repeat(64),
+    actorPubkey: owner.pubkey,
+    confirmationId: confirmation.rows[0].id,
+  });
+  if (!result.activated) {
+    throw new Error("Admin route activation failed.");
+  }
+}
+
 async function seedCommunities(
   database: Pool,
   ...owners: Owner[]
@@ -164,6 +230,7 @@ async function seedCommunities(
   await database.query(`
     TRUNCATE
       shared_channel_audit_events,
+      shared_channel_confirmations,
       bridge_event_mappings,
       bridge_deliveries,
       bridge_messages,

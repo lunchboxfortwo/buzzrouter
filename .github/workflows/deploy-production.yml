@@ -72,12 +72,18 @@ jobs:
     needs: verify
     runs-on: buzzrouter-production
     timeout-minutes: 12
-    permissions: {}
+    permissions:
+      contents: read
     environment:
       name: production
       url: https://buzzrouter.com
 
     steps:
+      # Only so the verify step can derive the expected migration from the
+      # revision being deployed; the deploy itself uses the host's own tree.
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
       - name: Start production deployment
         run: sudo --non-interactive /usr/bin/systemctl start buzzrouter-deploy.service
 
@@ -117,10 +123,8 @@ jobs:
 
           # Derived, never hard-coded: a pinned name goes stale the moment a
           # migration lands, which reports a false failure for a deploy that
-          # actually succeeded. This job has no checkout, so read the tree the
-          # deploy service just checked out at the target revision.
-          SOURCE_DIR="${BUZZROUTER_SOURCE_DIR:-/opt/buzzrouter/source}"
-          EXPECTED_MIGRATION="$(ls "${SOURCE_DIR}/migrations" | sort | tail -1)"
+          # actually succeeded.
+          EXPECTED_MIGRATION="$(ls migrations | sort | tail -1)"
           echo "Expecting migration ${EXPECTED_MIGRATION}."
 
           for attempt in $(seq 1 30); do

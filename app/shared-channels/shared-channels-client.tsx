@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   getBrowserNostrProvider,
   signedRequest,
 } from "../../src/http/nostr-client";
+import type { ClaimableCandidateMatch } from "../../src/claims/store";
 import type {
   SharedChannelAdminRecord,
   SharedChannelAdminWorkspace,
@@ -192,6 +193,7 @@ export function SharedChannelsClient() {
       <section className={styles.empty}>
         <h2>No owned communities</h2>
         <p>This signer is not the verified owner of a Buzz community.</p>
+        <ClaimLookup />
       </section>
     );
   }
@@ -277,6 +279,84 @@ export function SharedChannelsClient() {
       ) : null}
     </div>
   );
+}
+
+export function ClaimLookup() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ClaimableCandidateMatch[] | null>(
+    null,
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function search(event: FormEvent) {
+    event.preventDefault();
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setError("");
+    try {
+      setResults(await fetchClaimableCandidates(trimmed));
+    } catch {
+      setError("Search failed. Try again.");
+      setResults(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={styles.claimLookup}>
+      <p>
+        Find the community you want to claim by its relay host or name.
+      </p>
+      <form className={styles.claimForm} onSubmit={search}>
+        <input
+          aria-label="Search communities to claim"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="communities.buzz.xyz or community name"
+          value={query}
+        />
+        <button disabled={busy || !query.trim()} type="submit">
+          {busy ? "Searching..." : "Search"}
+        </button>
+      </form>
+      {error ? <p className={styles.notice}>{error}</p> : null}
+      {results && results.length > 0 ? (
+        <ul className={styles.claimResults}>
+          {results.map((candidate) => (
+            <li key={candidate.candidateId}>
+              <a href={`/claim/${candidate.candidateId}`}>
+                {candidate.displayName ?? candidate.host}
+              </a>
+              <span>{candidate.host}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {results && results.length === 0 ? (
+        <p className={styles.claimEmpty}>
+          No matching unclaimed, verified community found.{" "}
+          <a href="/submit">Submit it</a> to start verification.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export async function fetchClaimableCandidates(
+  query: string,
+): Promise<ClaimableCandidateMatch[]> {
+  const response = await fetch(
+    `/api/claimable-candidates?q=${encodeURIComponent(query)}`,
+  );
+  if (!response.ok) {
+    throw new Error("Claimable candidate search failed.");
+  }
+  const data = (await response.json()) as {
+    candidates: ClaimableCandidateMatch[];
+  };
+  return data.candidates;
 }
 
 function ConnectionStatus({

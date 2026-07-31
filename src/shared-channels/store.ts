@@ -1258,9 +1258,11 @@ export async function getSharedChannelAdminWorkspace(
       FROM communities
       JOIN community_candidates AS candidates
         ON candidates.id = communities.candidate_id
-      LEFT JOIN community_connections AS connections
+      JOIN community_connections AS connections
         ON connections.community_id = communities.id
       WHERE communities.claim_state = ANY($1::text[])
+        AND communities.open_to_shared_channels = true
+        AND connections.state = 'active'
       ORDER BY featured DESC, display_name, communities.id
     `,
     [VERIFIED_CLAIM_STATES, homeCommunityHost()],

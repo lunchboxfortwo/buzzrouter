@@ -250,7 +250,9 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
 
   it("flags and ranks the home community as the canonical destination", async () => {
     const owner = await createConnectedCommunity(pool, "owner");
-    const home = await createVerifiedCommunity(pool, "home");
+    await setOpenToSharedChannels(pool, owner.communityId, true);
+    const home = await createConnectedCommunity(pool, "home");
+    await setOpenToSharedChannels(pool, home.communityId, true);
     await pool.query(
       "UPDATE community_candidates SET host = $2 WHERE id = (SELECT candidate_id FROM communities WHERE id = $1)",
       [home.communityId, "home.buzzrouter.test"],
@@ -279,6 +281,34 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
         process.env.BUZZROUTER_HOME_COMMUNITY_HOST = previous;
       }
     }
+  });
+
+  it("excludes destinations that cannot accept a shared channel", async () => {
+    const owner = await createConnectedCommunity(pool, "owner");
+    await setOpenToSharedChannels(pool, owner.communityId, true);
+
+    const notOpen = await createConnectedCommunity(pool, "not-open");
+    // Left at the default: open_to_shared_channels = false.
+
+    const notConnected = await createVerifiedCommunity(
+      pool,
+      "not-connected",
+    );
+    await setOpenToSharedChannels(pool, notConnected.communityId, true);
+
+    const eligible = await createConnectedCommunity(pool, "eligible");
+    await setOpenToSharedChannels(pool, eligible.communityId, true);
+
+    const workspace = await getSharedChannelAdminWorkspace(
+      pool,
+      owner.ownerPubkey,
+    );
+    const destinationIds = workspace.destinations.map(
+      (community) => community.id,
+    );
+    expect(destinationIds).toContain(eligible.communityId);
+    expect(destinationIds).not.toContain(notOpen.communityId);
+    expect(destinationIds).not.toContain(notConnected.communityId);
   });
 
   it("does not accept an expired invitation", async () => {
@@ -585,6 +615,17 @@ async function createVerifiedCommunity(
   );
   const communityId = community.rows[0].id;
   return { communityId, ownerPubkey, relayUrl };
+}
+
+async function setOpenToSharedChannels(
+  pool: Pool,
+  communityId: string,
+  open: boolean,
+): Promise<void> {
+  await pool.query(
+    "UPDATE communities SET open_to_shared_channels = $2 WHERE id = $1",
+    [communityId, open],
+  );
 }
 
 function hex(bytes: number): string {

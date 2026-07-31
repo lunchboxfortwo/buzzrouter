@@ -6,12 +6,14 @@ import {
 } from "./db/pool";
 import { assertDiscoveryDatabaseReady } from "./db/readiness";
 import { registerAutoJoinWorker } from "./jobs/auto-join-communities";
+import { registerHarvestInvitesWorker } from "./jobs/harvest-invites";
 import { registerProbeCandidateWorker } from "./jobs/probe-candidate";
 import { registerRefreshSummariesWorker } from "./jobs/refresh-community-summaries";
 import { registerReliabilityRollupWorker } from "./jobs/reliability-rollup";
 import {
   AUTO_JOIN_QUEUE,
   configureQueues,
+  HARVEST_INVITES_QUEUE,
   REFRESH_SUMMARIES_QUEUE,
 } from "./jobs/queues";
 import { registerDueProbeScheduler } from "./jobs/schedule-due-probes";
@@ -44,6 +46,7 @@ try {
   await registerReliabilityRollupWorker(boss, pool);
   await registerRefreshSummariesWorker(boss, pool);
   await registerAutoJoinWorker(boss, pool);
+  await registerHarvestInvitesWorker(boss, pool);
   // Kick one summary refresh on startup so a redeploy/restart populates
   // community summaries right away instead of waiting for the next 4h tick.
   // Best-effort: the job itself is per-community fault-tolerant, and a failed
@@ -60,6 +63,14 @@ try {
     await boss.send(AUTO_JOIN_QUEUE, null);
   } catch (error) {
     console.error("initial community auto-join enqueue failed", error);
+  }
+  // Kick one invite-harvest pass on startup so a redeploy scans channels for
+  // fresh invites immediately. Best-effort for the same reasons; the worker
+  // itself chains a summary refresh when it joins anything new.
+  try {
+    await boss.send(HARVEST_INVITES_QUEUE, null);
+  } catch (error) {
+    console.error("initial invite harvest enqueue failed", error);
   }
   connectorSupervisor = new ConnectorSupervisor(
     pool,

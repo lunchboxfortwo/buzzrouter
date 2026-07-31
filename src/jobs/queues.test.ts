@@ -7,6 +7,7 @@ import {
   BRIDGE_DELIVERY_QUEUE,
   configureQueues,
   enqueueCandidateProbe,
+  HARVEST_INVITES_QUEUE,
   PROBE_CANDIDATE_QUEUE,
   SCHEDULE_DUE_PROBES_QUEUE,
   SOURCE_GITHUB_QUEUE,
@@ -111,6 +112,25 @@ describe("configureQueues", () => {
       key: "presence-auto-join",
       tz: "UTC",
     });
+  });
+
+  it("creates the harvest-invites queue on its 6-hourly cadence", async () => {
+    const createQueue = vi.fn().mockResolvedValue(undefined);
+    const schedule = vi.fn().mockResolvedValue(undefined);
+    const boss = { createQueue, schedule } as unknown as PgBoss;
+
+    await configureQueues(boss);
+
+    expect(createQueue).toHaveBeenCalledWith(
+      HARVEST_INVITES_QUEUE,
+      expect.objectContaining({ retryLimit: 2 }),
+    );
+    expect(schedule).toHaveBeenCalledWith(
+      HARVEST_INVITES_QUEUE,
+      "30 */6 * * *",
+      null,
+      { key: "presence-harvest-invites", tz: "UTC" },
+    );
   });
 
   it("deduplicates candidate jobs within the scheduler lease window", async () => {

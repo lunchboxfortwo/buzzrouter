@@ -104,6 +104,40 @@ export async function upsertSummary(
   );
 }
 
+export interface RecordInviteCandidateInput {
+  /** Bare relay host the harvested invite is FOR (already a joined community). */
+  relayHost: string;
+  /** The harvested invite code. */
+  code: string;
+  /** Relay host of the community whose channel the invite was seen in. */
+  sourceRelayHost?: string | null;
+}
+
+/**
+ * Records a fresh invite code harvested for a community the agent is already in,
+ * as a candidate for a future freshness swap (which is deliberately NOT done
+ * here — see `harvestInvites`). Idempotent on `(relay_host, code)`: a repeat
+ * harvest only bumps `seen_at` and refreshes the source, never duplicates.
+ */
+export async function recordInviteCandidate(
+  pool: Pool,
+  input: RecordInviteCandidateInput,
+): Promise<void> {
+  await pool.query(
+    `
+      INSERT INTO harvested_invite_candidates
+        (relay_host, code, source_relay_host)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (relay_host, code) DO UPDATE
+        SET seen_at = now(),
+            source_relay_host =
+              COALESCE(EXCLUDED.source_relay_host,
+                       harvested_invite_candidates.source_relay_host)
+    `,
+    [input.relayHost, input.code, input.sourceRelayHost ?? null],
+  );
+}
+
 export interface StoredCommunitySummary {
   goals: string;
   recentProjects: string[];

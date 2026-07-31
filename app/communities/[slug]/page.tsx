@@ -240,7 +240,7 @@ export default async function CommunityPage({
             </svg>
             <p>
               BuzzRouter reaches this relay itself — a bounded metadata fetch and
-              a no-auth handshake — rather than trusting a submitted form.
+              a no-auth handshake.
             </p>
             {community.supportedNips.length > 0 ? (
               <>

@@ -41,6 +41,28 @@ Key routing rules:
   claim-proof network hop (DNS/HTTPS/hosted-icon), is skipped explicitly and
   documented in that spec — do not add live-path proof bypasses to make it run.
 
+## Migrations & the deploy verification gate
+
+- The runner (`src/db/migrations.ts`) records applied migrations BY FILENAME
+  (primary key `name`) and applies pending files in sorted order. So renumbering
+  or renaming a migration that production already applied makes the runner treat
+  the new name as pending and re-run its DDL — which fails on the next deploy
+  unless the file is idempotent (`IF NOT EXISTS`/`IF EXISTS` throughout, so the
+  reconciling re-run is a no-op that just records the new name). Prefer numbering
+  uniquely on the way in; two concurrent same-number migrations already happened
+  once (see `0013_presence_communities.sql` +
+  `0015_shared_channel_confirmations.sql`, renumbered from 0013).
+- Verify a renumber by running `npm run db:migrate` TWICE against a scratch DB
+  seeded to production state (apply the committed tree first, then the working
+  tree); the second run must print "Database schema is current."
+- The deploy gate (`.github/workflows/deploy-production.yml` and
+  `deploy/self-host/deploy.sh`) asserts that EVERY migration file in the
+  deploying revision appears in `/api/health`'s `migrations[]` (the full applied
+  set, from `src/db/readiness.ts`). Do NOT go back to comparing only the single
+  newest name against `migration`: under concurrency production's newest applied
+  migration legitimately runs ahead of the deploying revision's newest file, and
+  a newest-to-newest compare reports that good deploy as a false failure.
+
 ## Shared-channel bot admission
 
 - Owners admit the BuzzRouter bridge to their community three ways, in

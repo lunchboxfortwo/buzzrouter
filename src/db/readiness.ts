@@ -21,6 +21,7 @@ const REQUIRED_TABLES = [
 
 export interface DiscoveryDatabaseReadiness {
   migration: string;
+  migrations: string[];
   tables: string[];
 }
 
@@ -94,15 +95,18 @@ export async function assertDiscoveryDatabaseReady(
     );
   }
 
+  // The deploy gate asserts every migration file in the deploying revision has
+  // been applied here, so expose the full applied set — not just the newest
+  // name, which goes stale the moment a concurrent commit lands a higher one.
   const migrationResult = await pool.query<{ name: string }>(
     `
       SELECT name
       FROM buzzrouter_schema_migrations
-      ORDER BY name DESC
-      LIMIT 1
+      ORDER BY name ASC
     `,
   );
-  const migration = migrationResult.rows[0]?.name;
+  const migrations = migrationResult.rows.map((row) => row.name);
+  const migration = migrations.at(-1);
   if (!migration) {
     throw new Error(
       "Discovery database has no applied migration. Run npm run db:migrate.",
@@ -111,6 +115,7 @@ export async function assertDiscoveryDatabaseReady(
 
   return {
     migration,
+    migrations,
     tables: [...REQUIRED_TABLES],
   };
 }

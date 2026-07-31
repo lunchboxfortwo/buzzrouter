@@ -39,10 +39,34 @@ const MANUAL_CHANNEL_VALUE = "__manual__";
 type Action = "accept" | "reject" | "pause" | "resume" | "disconnect";
 
 interface InstallTokenResponse {
+  bridgeNpub: string;
   bridgePubkey: string;
-  command: string;
+  command: string | null;
   expiresAt: string;
   relayUrl: string;
+  token: string;
+}
+
+// The install-token and activation endpoints are authorized by the single-use
+// token in the body, not a NIP-98 signature, so they use a plain fetch. The
+// error body is the shared `{ error: <code> }` shape errorMessage() maps.
+async function postInstallerAction<T>(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<T> {
+  const response = await fetch(path, {
+    body: JSON.stringify(body),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  const result = (await response.json()) as T & {
+    error?: string;
+    message?: string;
+  };
+  if (!response.ok) {
+    throw new Error(result.message ?? result.error ?? "Request failed.");
+  }
+  return result;
 }
 
 export function SharedChannelsClient() {
@@ -71,12 +95,26 @@ export function SharedChannelsClient() {
     if (!install) return;
     if (connectorActive) {
       setInstall(null);
-      setMessage("Connector active.");
+      setMessage("Your community is connected — the bot is admitted.");
       return;
     }
     let cancelled = false;
-    const interval = setInterval(async () => {
+    let inFlight = false;
+    // While the owner is admitting the bot (invite link, npub, or self-host
+    // command), poll the unchanged activation round trip. It only succeeds once
+    // the bridge is genuinely admitted; a refresh then flips connectorActive.
+    const tick = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
+        try {
+          await postInstallerAction(
+            "/api/community-connections/activate",
+            { token: install.token },
+          );
+        } catch {
+          // The bridge is not admitted yet; retry on the next tick.
+        }
         const next = await signedRequest<SharedChannelAdminWorkspace>(
           "/api/shared-channels",
           "GET",
@@ -84,8 +122,11 @@ export function SharedChannelsClient() {
         if (!cancelled) setWorkspace(next);
       } catch {
         // Transient polling failures are silently retried.
+      } finally {
+        inFlight = false;
       }
-    }, 4_000);
+    };
+    const interval = setInterval(tick, 4_000);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -173,12 +214,44 @@ export function SharedChannelsClient() {
         { communityId: activeCommunityId },
       );
       setInstall(result);
-      setMessage("Install command ready.");
+      setMessage("Ready — admit the bot to connect your community.");
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
       setBusy(false);
     }
+  }
+
+  // PRIMARY path: the bridge redeems a pasted invite link itself. Returns null
+  // on success (the card unmounts once the refresh flips connectorActive) or a
+  // plain-language error to show inline.
+  async function redeemInvite(invite: string): Promise<string | null> {
+    if (!install) return "This connection session is no longer available.";
+    try {
+      await postInstallerAction("/api/community-connections/redeem-invite", {
+        invite,
+        token: install.token,
+      });
+    } catch (error) {
+      return errorMessage(error);
+    }
+    await refresh();
+    return null;
+  }
+
+  // SECONDARY/TERTIARY paths: the owner admitted the bot out of band (npub or
+  // self-host command); run the activation round trip on demand.
+  async function checkBotAdded(): Promise<boolean> {
+    if (!install) return false;
+    try {
+      await postInstallerAction("/api/community-connections/activate", {
+        token: install.token,
+      });
+    } catch {
+      return false;
+    }
+    await refresh();
+    return true;
   }
 
   if (!workspace) {
@@ -281,7 +354,13 @@ export function SharedChannelsClient() {
         />
       ) : null}
 
-      {install ? <InstallerCommand install={install} /> : null}
+      {install ? (
+        <InstallerCommand
+          install={install}
+          onCheckAdded={checkBotAdded}
+          onRedeem={redeemInvite}
+        />
+      ) : null}
 
       {activeCommunity?.connectionState === "active" ? (
         <ProposalForm
@@ -425,7 +504,7 @@ function ConnectionStatus({
       <div>
         <span className={connected ? styles.goodDot : styles.mutedDot} />
         <div>
-          <strong>{connected ? "Connector active" : "Connector required"}</strong>
+          <strong>{connected ? "Bot connected" : "Bot not added yet"}</strong>
           <p>{community.relayUrl}</p>
         </div>
       </div>
@@ -433,7 +512,7 @@ function ConnectionStatus({
         <span className={styles.state}>{community.connectionHealth}</span>
       ) : (
         <button disabled={busy} onClick={onConnect} type="button">
-          Connect Buzz
+          Add the bot
         </button>
       )}
     </section>
@@ -442,10 +521,140 @@ function ConnectionStatus({
 
 function InstallerCommand({
   install,
+  onCheckAdded,
+  onRedeem,
 }: {
   install: InstallTokenResponse;
+  onCheckAdded: () => Promise<boolean>;
+  onRedeem: (invite: string) => Promise<string | null>;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [invite, setInvite] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [checkFailed, setCheckFailed] = useState(false);
+  const [copiedNpub, setCopiedNpub] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState(false);
+
+  async function redeem(event: FormEvent) {
+    event.preventDefault();
+    const trimmed = invite.trim();
+    if (!trimmed) return;
+    setRedeeming(true);
+    setInviteError("");
+    const error = await onRedeem(trimmed);
+    setRedeeming(false);
+    // On success this card unmounts as the community goes active.
+    if (error) setInviteError(error);
+  }
+
+  async function check() {
+    setChecking(true);
+    setCheckFailed(false);
+    const ok = await onCheckAdded();
+    setChecking(false);
+    setCheckFailed(!ok);
+  }
+
+  async function copyNpub() {
+    await navigator.clipboard.writeText(install.bridgeNpub);
+    setCopiedNpub(true);
+  }
+
+  async function copyCommand() {
+    if (!install.command) return;
+    await navigator.clipboard.writeText(install.command);
+    setCopiedCommand(true);
+  }
+
+  return (
+    <section className={styles.botAdmission}>
+      <div className={styles.botHeader}>
+        <span>Connect your community</span>
+        <strong>Add the BuzzRouter bot to {install.relayUrl}</strong>
+        <p>
+          BuzzRouter mirrors messages through a bot in your community. Admit it
+          once and this page connects automatically &mdash; no key handling and
+          no server access required.
+        </p>
+      </div>
+
+      <form className={styles.botPrimary} onSubmit={redeem}>
+        <span className={styles.botStep}>Recommended</span>
+        <label>
+          Paste an invite link from your Buzz app
+          <input
+            aria-label="Buzz invite link"
+            onChange={(event) => setInvite(event.target.value)}
+            placeholder="https://your-relay/invite/…"
+            value={invite}
+          />
+        </label>
+        <p className={styles.botHint}>
+          In Buzz, open your community&apos;s invite and choose{" "}
+          <strong>Copy link</strong>, then paste it here. The bot redeems the
+          link itself and joins as a member &mdash; you never touch a key.
+        </p>
+        <button disabled={redeeming || !invite.trim()} type="submit">
+          {redeeming ? "Connecting…" : "Add the bot with this link"}
+        </button>
+        {inviteError ? <p className={styles.notice}>{inviteError}</p> : null}
+      </form>
+
+      <ExpiryNotice expiresAt={install.expiresAt} />
+
+      <details className={styles.botAlt}>
+        <summary>Prefer to add a member by key?</summary>
+        <p className={styles.botHint}>
+          If your Buzz app offers Settings &rarr; Invites &rarr; Add member,
+          paste this bridge key (npub), choose <strong>Add</strong>, then
+          confirm below.
+        </p>
+        <div className={styles.botKeyRow}>
+          <code>{install.bridgeNpub}</code>
+          <button
+            className={styles.secondary}
+            onClick={copyNpub}
+            type="button"
+          >
+            {copiedNpub ? "Copied" : "Copy key"}
+          </button>
+        </div>
+        <button disabled={checking} onClick={check} type="button">
+          {checking ? "Checking…" : "I’ve added the bot"}
+        </button>
+        {checkFailed ? (
+          <p className={styles.notice}>
+            We can&apos;t see the bot in your community yet. Make sure you added
+            the key, then try again &mdash; we also keep checking automatically.
+          </p>
+        ) : null}
+      </details>
+
+      {install.command ? (
+        <details className={styles.botAlt}>
+          <summary>Run your own relay? Use the connector command</summary>
+          <p className={styles.botHint}>
+            If you self-host this community&apos;s relay, admit the bridge from
+            a shell instead:
+          </p>
+          <div className={styles.botKeyRow}>
+            <code>{install.command}</code>
+            <button
+              className={styles.secondary}
+              onClick={copyCommand}
+              type="button"
+            >
+              {copiedCommand ? "Copied" : "Copy command"}
+            </button>
+          </div>
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
+function ExpiryNotice({ expiresAt }: { expiresAt: string }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -453,34 +662,13 @@ function InstallerCommand({
     return () => clearInterval(interval);
   }, []);
 
-  async function copy() {
-    await navigator.clipboard.writeText(install.command);
-    setCopied(true);
-  }
-
-  const remainingMs = new Date(install.expiresAt).getTime() - now;
-  const expired = remainingMs <= 0;
-
+  const remainingMs = new Date(expiresAt).getTime() - now;
   return (
-    <section className={styles.installer}>
-      <div>
-        <span>One-time command</span>
-        <code>{install.command}</code>
-        <p className={styles.notice}>
-          {expired
-            ? "This command has expired. Request a new one."
-            : `Expires in ${formatDuration(remainingMs)}. We'll refresh automatically once the connector comes online.`}
-        </p>
-      </div>
-      <button
-        className={styles.secondary}
-        disabled={expired}
-        onClick={copy}
-        type="button"
-      >
-        {copied ? "Copied" : "Copy command"}
-      </button>
-    </section>
+    <p className={styles.notice}>
+      {remainingMs <= 0
+        ? "This connection session has expired. Refresh to start over."
+        : `This bridge key is valid for ${formatDuration(remainingMs)}. Once the bot is admitted we connect automatically.`}
+    </p>
   );
 }
 

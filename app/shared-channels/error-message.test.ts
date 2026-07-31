@@ -15,7 +15,7 @@ describe("errorMessage", () => {
     ],
     [
       "install_token_unavailable",
-      "That install command has expired or was already used. Request a new one.",
+      "That connection session has expired or was already used. Request a new one.",
     ],
     ["authentication_invalid", "The signed request was not accepted."],
     [

@@ -177,14 +177,19 @@ test("a new owner completes the whole shared-channel journey through real UI and
   // ── Step 3: admit the bridge / activate the connector.
   await page.goto("/shared-channels");
   await page.getByRole("button", { name: "Connect signer" }).click();
-  await expect(page.getByText("Connector required")).toBeVisible();
-  await page.getByRole("button", { name: "Connect Buzz" }).click();
+  await expect(page.getByText("Bot not added yet")).toBeVisible();
+  await page.getByRole("button", { name: "Add the bot", exact: true }).click();
 
-  // The one-time install command carries the connector's single-use token. We
-  // act as the connector CLI would: POST it to the REAL activate endpoint,
-  // which runs the production relay round trip (publish + hasEvent) against the
-  // fake relay. The connector binary itself is external, but the server-side
-  // activation path is fully exercised.
+  // The self-host connector command (demoted behind a disclosure) still carries
+  // the single-use token. We act as the connector CLI would: POST it to the
+  // REAL activate endpoint, which runs the production relay round trip (publish
+  // + hasEvent) against the fake relay. The bot-admission page now ALSO polls
+  // this same endpoint itself, so the token may already be consumed by the time
+  // our explicit call lands — both hit the same production activation, so we
+  // accept either a fresh success or an already-consumed token.
+  await page
+    .getByText("Run your own relay? Use the connector command")
+    .click();
   const command = await page
     .locator("code", { hasText: "--router" })
     .innerText();
@@ -193,10 +198,10 @@ test("a new owner completes the whole shared-channel journey through real UI and
     "/api/community-connections/activate",
     { data: { token } },
   );
-  expect(activation.ok()).toBe(true);
+  expect([200, 409]).toContain(activation.status());
 
   await page.getByRole("button", { name: "Refresh" }).click();
-  await expect(page.getByText("Connector active")).toBeVisible();
+  await expect(page.getByText("Bot connected")).toBeVisible();
 
   // ── Step 4: reach the proposal form and pick a channel from the relay-backed
   // picker (PR #24) rather than typing an id.

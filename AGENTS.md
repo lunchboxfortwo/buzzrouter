@@ -41,6 +41,26 @@ Key routing rules:
   claim-proof network hop (DNS/HTTPS/hosted-icon), is skipped explicitly and
   documented in that spec — do not add live-path proof bypasses to make it run.
 
+## Shared-channel bot admission
+
+- Owners admit the BuzzRouter bridge to their community three ways, in
+  priority order: **invite link** (the bridge redeems it itself), **paste the
+  bridge npub** in the Buzz app, then the **self-host npx command**. UI is
+  `app/shared-channels/shared-channels-client.tsx` (`InstallerCommand`); server
+  is `src/shared-channels/installer.ts`.
+- The invite-claim contract lives on the **Buzz relay**, not this repo:
+  `POST https://<relay-host>/api/invites/claim`, NIP-98 signed by the bridge
+  key (the joining pubkey), body `{"code":"<code>"}`, exempt from the
+  membership gate, pins role=member. Invite links are
+  `https://<relay-host>/invite/<code>`. Verified empirically against a real
+  relay — the relay source is a separate repo, so do not expect to find or
+  re-derive this contract here. `resolveInviteClaimTarget` pins the claim URL
+  to the community's on-record relay (SSRF guard).
+- Activation is unchanged proof-of-admission: the bridge publishes a kind-0 and
+  confirms the relay returns it (`verifyAndActivateCommunityConnection`).
+- E2E that mints a token needs `BUZZROUTER_CONNECTOR_WRAPPING_KEYS_FILE` (set
+  in `playwright.config.ts` → `e2e/fixtures/connector-wrapping-keys.json`).
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

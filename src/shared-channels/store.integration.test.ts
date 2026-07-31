@@ -38,6 +38,8 @@ import { listCommunityLocalChannels } from "./local-channels";
 import {
   getCommunityInstallDescriptor,
   hashInstallToken,
+  type InviteClaimTarget,
+  redeemInviteAndActivate,
   verifyAndActivateCommunityConnection,
 } from "./installer";
 import {
@@ -134,6 +136,90 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
         relays,
       ),
     ).rejects.toMatchObject({ code: "install_token_unavailable" });
+  });
+
+  it("redeems a pasted invite link then activates over the round trip", async () => {
+    const community = await createVerifiedCommunity(pool, "invite");
+    const token = randomBytes(32).toString("base64url");
+    const privateKey = randomBytes(32);
+    const bridgePubkey = getPublicKey(privateKey);
+    await beginCommunityConnectionInstall(pool, {
+      bridgePubkey,
+      communityId: community.communityId,
+      ownerPubkey: community.ownerPubkey,
+      privateKey,
+      tokenHash: hashInstallToken(token),
+      wrappingKey,
+      wrappingKeyVersion: 1,
+    });
+
+    const host = new URL(community.relayUrl).host;
+    const claims: InviteClaimTarget[] = [];
+    const relays = new FakeRelayFactory();
+    const connection = await redeemInviteAndActivate(
+      pool,
+      token,
+      `https://${host}/invite/opaque-code-123`,
+      { getKey: async () => wrappingKey },
+      relays,
+      async (_privateKey, target) => {
+        claims.push(target);
+      },
+    );
+
+    // The bridge redeems against its own community relay, code parsed out.
+    expect(claims).toEqual([
+      {
+        claimUrl: `https://${host}/api/invites/claim`,
+        code: "opaque-code-123",
+      },
+    ]);
+    // The unchanged kind-0 round trip still proves real admission.
+    expect(connection.state).toBe("active");
+    expect(relays.get(community.relayUrl).published).toMatchObject([
+      { kind: 0, pubkey: bridgePubkey },
+    ]);
+  });
+
+  it("leaves the token reusable when invite redemption fails", async () => {
+    const community = await createVerifiedCommunity(pool, "invite-fail");
+    const token = randomBytes(32).toString("base64url");
+    const privateKey = randomBytes(32);
+    const bridgePubkey = getPublicKey(privateKey);
+    await beginCommunityConnectionInstall(pool, {
+      bridgePubkey,
+      communityId: community.communityId,
+      ownerPubkey: community.ownerPubkey,
+      privateKey,
+      tokenHash: hashInstallToken(token),
+      wrappingKey,
+      wrappingKeyVersion: 1,
+    });
+    const host = new URL(community.relayUrl).host;
+
+    await expect(
+      redeemInviteAndActivate(
+        pool,
+        token,
+        `https://${host}/invite/opaque-code-123`,
+        { getKey: async () => wrappingKey },
+        new FakeRelayFactory(),
+        async () => {
+          throw new Error("relay rejected the invite");
+        },
+      ),
+    ).rejects.toThrow("relay rejected the invite");
+
+    // A failed claim must not consume the token — the owner can retry.
+    const connection = await redeemInviteAndActivate(
+      pool,
+      token,
+      `https://${host}/invite/opaque-code-123`,
+      { getKey: async () => wrappingKey },
+      new FakeRelayFactory(),
+      async () => {},
+    );
+    expect(connection.state).toBe("active");
   });
 
   it("enforces endpoint-owned pause and immediate disconnect", async () => {

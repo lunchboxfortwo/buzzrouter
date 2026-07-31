@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
+import { npubEncode } from "nostr-tools/nip19";
 import {
   finalizeEvent,
   generateSecretKey,
@@ -7,7 +8,9 @@ import {
 } from "nostr-tools/pure";
 import type { Pool } from "pg";
 
+import { normalizeRelayUrl } from "../discovery/normalize";
 import { ApiError } from "../http/api-error";
+import { signNip98 } from "../http/nip98-client";
 import { canonicalRequestUrl } from "../http/nostr-auth";
 import {
   createFileWrappingKeyProvider,
@@ -27,10 +30,14 @@ const INSTALL_TOKEN_BYTES = 32;
 const DEFAULT_WRAPPING_KEY_VERSION = 1;
 
 export interface CommunityInstallToken {
+  bridgeNpub: string;
   bridgePubkey: string;
-  command: string;
+  // The self-host connector command. Null when the connector package is not
+  // published — the owner admits the bridge from their Buzz app instead.
+  command: string | null;
   expiresAt: string;
   relayUrl: string;
+  token: string;
 }
 
 export interface CommunityInstallDescriptor {
@@ -48,9 +55,10 @@ export async function createCommunityInstallToken(
   wrappingKeys: WrappingKeyProvider = createFileWrappingKeyProvider(),
 ): Promise<CommunityInstallToken> {
   const token = randomBytes(INSTALL_TOKEN_BYTES).toString("base64url");
-  const command = buildInstallerCommand(token);
+  const command = optionalInstallerCommand(token);
   const privateKey = generateSecretKey();
   const bridgePubkey = getPublicKey(privateKey);
+  const bridgeNpub = npubEncode(bridgePubkey);
   const wrappingKeyVersion = configuredWrappingKeyVersion();
 
   try {
@@ -65,10 +73,12 @@ export async function createCommunityInstallToken(
       wrappingKeyVersion,
     });
     return {
+      bridgeNpub,
       bridgePubkey,
       command,
       expiresAt: result.expiresAt,
       relayUrl: result.connection.relayUrl,
+      token,
     };
   } finally {
     privateKey.fill(0);
@@ -147,6 +157,163 @@ export async function verifyAndActivateCommunityConnection(
   }
 }
 
+export interface InviteClaimTarget {
+  claimUrl: string;
+  code: string;
+}
+
+export type InviteClaimFn = (
+  privateKey: Uint8Array,
+  target: InviteClaimTarget,
+) => Promise<void>;
+
+/**
+ * PRIMARY admission path: the owner mints an invite link in their Buzz app and
+ * pastes it here. The bridge redeems the link itself (POST /api/invites/claim,
+ * NIP-98 signed by the bridge key — the joining pubkey) so the owner never
+ * handles a key, then the unchanged kind-0 round trip proves real admission.
+ */
+export async function redeemInviteAndActivate(
+  pool: Pool,
+  token: string,
+  invite: string,
+  wrappingKeys: WrappingKeyProvider = createFileWrappingKeyProvider(),
+  relayFactory: RelayConnectionFactory = createRelayConnectionFactory(),
+  claimInvite: InviteClaimFn = claimInviteOverHttp,
+): Promise<CommunityConnectionRecord> {
+  const tokenHash = hashInstallToken(token);
+  const context = await getCommunityConnectionInstallContext(
+    pool,
+    tokenHash,
+  );
+  // Resolve (and host-validate) the invite before touching key material, so a
+  // bad link fails fast without decrypting the bridge key.
+  const target = resolveInviteClaimTarget(context.relayUrl, invite);
+  const wrappingKey = await wrappingKeys.getKey(
+    context.wrappingKeyVersion,
+  );
+  const privateKey = decryptConnectorPrivateKey(
+    context,
+    wrappingKey,
+    context.communityId,
+  );
+  try {
+    await claimInvite(privateKey, target);
+  } finally {
+    privateKey.fill(0);
+  }
+  return verifyAndActivateCommunityConnection(
+    pool,
+    token,
+    wrappingKeys,
+    relayFactory,
+  );
+}
+
+/**
+ * Extracts the invite code and derives the claim URL, pinning it to the relay
+ * already on record for this community. A pasted link may only point at that
+ * exact relay — this is the SSRF control that stops a crafted link redirecting
+ * the bridge's signed request at an arbitrary host.
+ */
+export function resolveInviteClaimTarget(
+  relayUrlOnRecord: string,
+  invite: string,
+): InviteClaimTarget {
+  const parsed = parseInvite(invite);
+  const record = normalizeRelayUrl(relayUrlOnRecord);
+
+  if (parsed.url) {
+    let pasted;
+    try {
+      pasted = normalizeRelayUrl(parsed.url.toString());
+    } catch {
+      throw new ApiError(
+        "invite_invalid",
+        "The invite link host is invalid.",
+        400,
+      );
+    }
+    if (pasted.canonicalRelayUrl !== record.canonicalRelayUrl) {
+      throw new ApiError(
+        "invite_host_mismatch",
+        "That invite link is for a different relay than this community.",
+        400,
+      );
+    }
+  }
+
+  const authority = record.canonicalRelayUrl.slice("wss://".length);
+  return {
+    claimUrl: `https://${authority}/api/invites/claim`,
+    code: parsed.code,
+  };
+}
+
+function parseInvite(invite: string): { code: string; url: URL | null } {
+  const trimmed = invite.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    let url: URL;
+    try {
+      url = new URL(trimmed);
+    } catch {
+      throw new ApiError("invite_invalid", "The invite link is invalid.", 400);
+    }
+    const match = /\/invite\/([^/?#]+)/.exec(url.pathname);
+    if (!match) {
+      throw new ApiError(
+        "invite_invalid",
+        "The invite link is missing an invite code.",
+        400,
+      );
+    }
+    return { code: decodeURIComponent(match[1]), url };
+  }
+  if (!/^[A-Za-z0-9._~+/=-]{1,900}$/.test(trimmed)) {
+    throw new ApiError("invite_invalid", "The invite code is invalid.", 400);
+  }
+  return { code: trimmed, url: null };
+}
+
+async function claimInviteOverHttp(
+  privateKey: Uint8Array,
+  target: InviteClaimTarget,
+): Promise<void> {
+  const body = JSON.stringify({ code: target.code });
+  const authorization = signNip98(privateKey, {
+    body,
+    method: "POST",
+    url: target.claimUrl,
+  });
+
+  let response: Response;
+  try {
+    response = await fetch(target.claimUrl, {
+      body,
+      headers: {
+        authorization: `Nostr ${authorization}`,
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+  } catch (error) {
+    throw new ApiError(
+      "invite_claim_unreachable",
+      "The community relay could not be reached to redeem the invite.",
+      502,
+      { cause: error },
+    );
+  }
+
+  if (!response.ok) {
+    throw new ApiError(
+      "invite_claim_rejected",
+      `The relay rejected the invite (status ${response.status}).`,
+      502,
+    );
+  }
+}
+
 export function hashInstallToken(token: string): string {
   if (
     typeof token !== "string" ||
@@ -170,6 +337,25 @@ function configuredWrappingKeyVersion(): number {
     );
   }
   return version;
+}
+
+/**
+ * The self-host connector command is a demoted convenience. When the connector
+ * package is not published, hosted owners admit the bridge from their Buzz app
+ * instead, so a missing package returns null rather than blocking the token.
+ */
+function optionalInstallerCommand(token: string): string | null {
+  try {
+    return buildInstallerCommand(token);
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      error.code === "connector_package_unavailable"
+    ) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export function buildInstallerCommand(token: string): string {

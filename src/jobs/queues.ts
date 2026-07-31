@@ -6,12 +6,23 @@ export const SOURCE_GITHUB_QUEUE = "discovery.source-github";
 export const SOURCE_NIP66_QUEUE = "discovery.source-nip66";
 export const SOURCE_NIP65_QUEUE = "discovery.source-nip65";
 export const RELIABILITY_ROLLUP_QUEUE = "discovery.reliability-rollup";
+export const BRIDGE_DELIVERY_QUEUE = "shared-channels.deliver";
 
 export interface ProbeCandidateJob {
   candidateId: string;
 }
 
 export async function configureQueues(boss: PgBoss): Promise<void> {
+  await boss.createQueue(BRIDGE_DELIVERY_QUEUE, {
+    deleteAfterSeconds: 7 * 24 * 60 * 60,
+    expireInSeconds: 60,
+    retentionSeconds: 14 * 24 * 60 * 60,
+    retryBackoff: true,
+    retryDelay: 15,
+    retryDelayMax: 15 * 60,
+    retryLimit: 8,
+  });
+
   await boss.createQueue(PROBE_CANDIDATE_QUEUE, {
     deleteAfterSeconds: 7 * 24 * 60 * 60,
     expireInSeconds: 60,

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   RELIABILITY_ROLLUP_QUEUE,
+  BRIDGE_DELIVERY_QUEUE,
   configureQueues,
   enqueueCandidateProbe,
   PROBE_CANDIDATE_QUEUE,
@@ -20,6 +21,12 @@ describe("configureQueues", () => {
 
     await configureQueues(boss);
 
+    expect(createQueue).toHaveBeenCalledWith(
+      BRIDGE_DELIVERY_QUEUE,
+      expect.objectContaining({
+        retryLimit: 8,
+      }),
+    );
     expect(createQueue).toHaveBeenCalledWith(
       PROBE_CANDIDATE_QUEUE,
       expect.objectContaining({ retryLimit: 2 }),

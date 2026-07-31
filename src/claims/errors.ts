@@ -1,3 +1,5 @@
+import { ApiError } from "../http/api-error";
+
 export type ClaimErrorCode =
   | "authentication_required"
   | "authentication_invalid"
@@ -11,9 +13,8 @@ export type ClaimErrorCode =
   | "invalid_input"
   | "proof_not_found";
 
-export class ClaimError extends Error {
-  readonly code: ClaimErrorCode;
-  readonly status: number;
+export class ClaimError extends ApiError {
+  declare readonly code: ClaimErrorCode;
 
   constructor(
     code: ClaimErrorCode,
@@ -21,9 +22,7 @@ export class ClaimError extends Error {
     status = 400,
     options?: ErrorOptions,
   ) {
-    super(message, options);
+    super(code, message, status, options);
     this.name = "ClaimError";
-    this.code = code;
-    this.status = status;
   }
 }

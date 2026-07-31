@@ -174,8 +174,8 @@ export async function listDirectoryCommunities(
           COALESCE(evidence.evidence_count, 0)::text AS evidence_count,
           COALESCE(evidence.source_types, '{}'::text[]) AS source_types,
           icons.candidate_id IS NOT NULL AS has_icon,
-          catalog.source_public_url AS public_url,
-          catalog.source_invite_code AS invite_code,
+          join_target.public_url,
+          join_target.invite_code,
           candidates.first_seen_at,
           communities.focus,
           communities.display_name_override,
@@ -220,6 +220,25 @@ export async function listDirectoryCommunities(
           ORDER BY source_observed_at DESC
           LIMIT 1
         ) AS catalog ON true
+        LEFT JOIN LATERAL (
+          SELECT
+            (
+              SELECT source_invite_code
+              FROM community_sources
+              WHERE candidate_id = candidates.id
+                AND source_invite_code IS NOT NULL
+              ORDER BY source_observed_at DESC
+              LIMIT 1
+            ) AS invite_code,
+            (
+              SELECT source_public_url
+              FROM community_sources
+              WHERE candidate_id = candidates.id
+                AND source_public_url IS NOT NULL
+              ORDER BY source_observed_at DESC
+              LIMIT 1
+            ) AS public_url
+        ) AS join_target ON true
         LEFT JOIN LATERAL (
           SELECT
             count(*) AS evidence_count,

@@ -7,6 +7,12 @@ import {
 
 export const runtime = "nodejs";
 
+function extractInviteCode(value: FormDataEntryValue | null): string | null {
+  if (typeof value !== "string") return null;
+  const match = /\/invite\/([^/?#\s]+)/u.exec(value);
+  return match ? decodeURIComponent(match[1]).slice(0, 200) : null;
+}
+
 const MAX_BODY_BYTES = 4 * 1_024;
 
 export async function POST(request: Request): Promise<Response> {
@@ -37,9 +43,12 @@ export async function POST(request: Request): Promise<Response> {
       return redirectToSubmission(publicOrigin, "queued");
     }
 
-    const relay = parseRelaySubmission(form.get("relayUrl"));
+    const rawUrl = form.get("relayUrl");
+    const relay = parseRelaySubmission(rawUrl);
+    const inviteCode = extractInviteCode(rawUrl);
     await upsertCandidate(getDatabasePool(), relay, {
       evidenceId: relay.canonicalRelayUrl,
+      listing: inviteCode ? { inviteCode } : undefined,
       locator: `${publicOrigin}/submit`,
       type: "submission",
     });

@@ -553,12 +553,12 @@
   align-items: center;
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: minmax(220px, 2fr) minmax(100px, 1fr) minmax(96px, 0.9fr) minmax(72px, 0.65fr) 24px;
+  grid-template-columns: minmax(220px, 2.2fr) minmax(120px, 1fr) minmax(80px, 0.7fr) 24px;
 }
 
 .indexNoFocus .indexHeader,
 .indexNoFocus .indexRow {
-  grid-template-columns: minmax(220px, 3fr) minmax(96px, 0.9fr) minmax(72px, 0.65fr) 24px;
+  grid-template-columns: minmax(220px, 3fr) minmax(80px, 0.7fr) 24px;
 }
 
 .indexHeader {
@@ -1130,7 +1130,7 @@
 
   .indexHeader,
   .indexRow {
-    grid-template-columns: minmax(210px, 2fr) minmax(90px, 0.9fr) minmax(88px, 0.8fr) 24px;
+    grid-template-columns: minmax(200px, 2fr) minmax(110px, 1fr) minmax(76px, 0.7fr) 24px;
   }
 
   .indexHeader span:nth-child(4),
@@ -1201,17 +1201,15 @@
 
   .indexHeader,
   .indexRow {
-    grid-template-columns: minmax(200px, 1fr) minmax(90px, 0.42fr) 24px;
+    grid-template-columns: minmax(0, 1fr) minmax(88px, auto) 24px;
   }
 
-  .indexHeader span:nth-child(2),
-  .indexFocusCell,
-  .indexHeader span:nth-child(4),
+  .indexHeader span:nth-child(3),
   .indexFreshnessCell {
     display: none;
   }
 
-  .indexHeader span:nth-child(3) {
+  .indexFocusCell {
     grid-column: 2;
   }
 
@@ -1307,7 +1305,7 @@
 
   .indexRow {
     gap: 9px;
-    grid-template-columns: minmax(0, 1fr) auto 20px;
+    grid-template-columns: minmax(0, 1fr) minmax(80px, auto) 20px;
     min-height: 82px;
     padding: 10px 12px;
   }
@@ -1335,13 +1333,13 @@
     justify-self: end;
   }
 
-  .indexFocusCell,
   .indexFreshnessCell {
     display: none;
   }
 
-  .indexSummary {
-    -webkit-line-clamp: 1;
+  .indexFocusCell {
+    justify-self: end;
+    text-align: right;
   }
 
   .indexFooter {
@@ -1399,7 +1397,7 @@
   }
   .indexNoFocus .indexHeader,
   .indexNoFocus .indexRow {
-    grid-template-columns: minmax(0, 1fr) auto 20px;
+    grid-template-columns: minmax(0, 1fr) minmax(80px, auto) 20px;
   }
 
 }

@@ -19,7 +19,8 @@ describeDatabase(
 
     beforeEach(async () => {
       await pool.query(
-        "TRUNCATE community_sources, community_candidates CASCADE",
+        "DELETE FROM community_candidates WHERE canonical_relay_url = $1",
+        ["wss://submit-test.example"],
       );
     });
 

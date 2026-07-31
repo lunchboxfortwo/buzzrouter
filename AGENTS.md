@@ -26,6 +26,17 @@ Key routing rules:
   DB suite.
 - `npm run db:migrate` applies `migrations/*.sql` against `DATABASE_URL`
   before running DB-backed tests or the app.
+- `*.integration.test.ts` files share Postgres tables and reset their own
+  fixtures each test. Vitest runs test files in parallel by default, so two
+  such files executing at once can wipe rows out from under each other —
+  `vitest.config.ts` puts every `*.integration.test.ts` file in its own
+  `projects` entry with `fileParallelism: false` to serialize them relative
+  to each other (the rest of the suite still runs in parallel). Prefer
+  scoping a new integration test's cleanup to the rows it owns (e.g. `DELETE
+  ... WHERE canonical_relay_url = $1`, see
+  `app/api/submissions/route.integration.test.ts`) over `TRUNCATE`ing a
+  shared table; if that's not practical, the file just needs to match the
+  `*.integration.test.ts` glob to get the same serialization.
 - There is no React component-testing library (no RTL/jsdom config) — client
   component behavior is covered by Playwright specs in `e2e/` instead
   (`npm run test:e2e`, needs `TEST_DATABASE_URL` and the app running per

@@ -1188,7 +1188,7 @@
     position: sticky;
     top: 0;
     z-index: 5;
-    max-height: 55vh;
+    max-height: 62vh;
     overflow-y: auto;
     border-bottom: 1px solid var(--line);
     box-shadow: 0 6px 18px rgb(17 19 24 / 6%);

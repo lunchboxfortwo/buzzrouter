@@ -215,10 +215,12 @@
 
 @media (max-width: 680px) {
   .headerInner {
-    gap: 4px 12px;
-    grid-template-columns: 1fr;
-    min-height: 58px;
+    align-items: center;
+    column-gap: 12px;
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 56px;
     padding: 0 10px;
+    row-gap: 4px;
     width: 100%;
   }
 
@@ -233,15 +235,27 @@
   }
 
   .nav {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    margin-inline: -4px;
+    grid-column: 2;
+    grid-row: 1;
+    justify-content: flex-start;
     overflow-x: auto;
+    scrollbar-width: none;
+    white-space: nowrap;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .navLink {
+    flex: 0 0 auto;
+    padding-inline: 10px;
   }
 
   .searchField,
   .searchForm {
-    grid-row: 3;
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 }
 
@@ -279,5 +293,11 @@
 @media (max-width: 920px) {
   .collapsibleToggle {
     display: flex;
+  }
+}
+
+@media (max-width: 920px) {
+  .header {
+    position: static;
   }
 }

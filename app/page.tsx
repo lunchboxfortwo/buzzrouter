@@ -428,6 +428,7 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
         />
       </header>
 
+      <MobileCollapsible label="More detail">
       <dl className={styles.inspectorMetrics}>
         <div className={styles.metricTile}>
           <dt>Uptime &middot; 30d</dt>
@@ -463,7 +464,6 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
       ) : null}
 
       <div className={styles.inspectorSections}>
-        <MobileCollapsible label="More detail">
         {community.claimed && work ? (
           <section className={styles.inspectorSection}>
             <h3>Current work</h3>
@@ -489,8 +489,8 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
           <p>{about.text}</p>
           <small>From the relay&rsquo;s own published details.</small>
         </section>
-        </MobileCollapsible>
       </div>
+      </MobileCollapsible>
 
       {community.slug ? (
         <footer className={styles.inspectorFooter}>

@@ -793,16 +793,21 @@
 .inspectorHeader {
   align-items: center;
   border-bottom: 1px solid var(--line);
+  column-gap: var(--space-4);
   display: grid;
-  gap: var(--space-4);
+  grid-template-areas:
+    "heading join"
+    "status  status";
   grid-template-columns: minmax(0, 1fr) auto;
   padding: 20px;
+  row-gap: 12px;
 }
 
 .inspectorHeading {
   align-items: center;
   display: grid;
   gap: var(--space-3);
+  grid-area: heading;
   grid-template-columns: 52px minmax(0, 1fr);
   min-width: 0;
 }
@@ -872,7 +877,33 @@
   flex-wrap: wrap;
   font-size: 0.76rem;
   gap: 8px 12px;
-  margin-top: 8px;
+  grid-area: status;
+}
+
+.inspectorShare {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.76rem;
+  font-weight: 620;
+  gap: 6px;
+  margin-left: auto;
+  padding: 5px 10px;
+  text-decoration: none;
+}
+
+.inspectorShare svg {
+  fill: currentColor;
+  height: 13px;
+  width: 13px;
+}
+
+.inspectorShare:hover {
+  border-color: var(--line-strong);
 }
 
 .copyButton {
@@ -886,6 +917,7 @@
   font-size: 0.87rem;
   font-weight: 660;
   gap: 8px;
+  grid-area: join;
   justify-content: center;
   min-height: 44px;
   min-width: 142px;
@@ -1157,9 +1189,15 @@
   }
 
   .indexHeader span:nth-child(4),
-
   .inspectorHeader {
     grid-template-columns: 1fr;
+  }
+
+  .inspectorHeader {
+    grid-template-areas:
+      "heading"
+      "status"
+      "join";
   }
 
   .copyButton {
@@ -1235,6 +1273,9 @@
   }
 
   .inspectorHeader {
+    grid-template-areas:
+      "heading join"
+      "status  status";
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
@@ -1361,6 +1402,10 @@
   }
 
   .inspectorHeader {
+    grid-template-areas:
+      "heading"
+      "status"
+      "join";
     grid-template-columns: 1fr;
     padding: 18px 14px;
   }

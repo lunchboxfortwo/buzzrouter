@@ -17,6 +17,7 @@ import { AutoSubmitSelect } from "./AutoSubmitSelect";
 import { CommunityRowLink } from "./CommunityRowLink";
 import { JoinButton } from "./JoinButton";
 import { MobileCollapsible } from "./MobileCollapsible";
+import { ShareOnX } from "./ShareOnX";
 import { SiteMasthead } from "./SiteMasthead";
 import chrome from "./site-chrome.module.css";
 import styles from "./directory.module.css";
@@ -339,6 +340,8 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
     supportedNips: community.supportedNips,
   });
   const checks = explainChecks(facts);
+  const shareUrl = `${process.env.PUBLIC_APP_ORIGIN ?? "https://buzzrouter.com"}/communities/${encodeURIComponent(community.relayHost)}`;
+  const shareText = `${community.displayName} — a real, live Buzz community, verified by @buzzrouter`;
 
   return (
     <article aria-labelledby="inspector-title" className={styles.communityInspector}>
@@ -365,32 +368,38 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
             <p className={styles.inspectorSummary}>
               {community.description ?? `A Buzz community at ${community.relayHost}.`}
             </p>
-            <div className={styles.inspectorStatus}>
-              <span className={`${styles.indexStatusCell} ${statusClass}`}>
-                <span aria-hidden="true" className={styles.statusDot} />
-                {label}
-              </span>
-              <span>Checked {relativeTime(community.lastVerifiedAt)}</span>
-              {accessKind(community) === "open" ? (
-                <span className={`${styles.accessFlag} ${styles.accessFlagOpen}`}>
-                  Open to join
-                </span>
-              ) : accessKind(community) === "invite" ? (
-                <span className={`${styles.accessFlag} ${styles.accessFlagInvite}`}>
-                  Invite-only
-                </span>
-              ) : null}
-              {community.openToSharedChannels ? (
-                <a
-                  className={`${styles.accessFlag} ${styles.accessFlagOpen}`}
-                  href="/shared-channels"
-                  title="This community welcomes shared-channel invitations"
-                >
-                  Open to shared channels
-                </a>
-              ) : null}
-            </div>
           </div>
+        </div>
+        <div className={styles.inspectorStatus}>
+          <span className={`${styles.indexStatusCell} ${statusClass}`}>
+            <span aria-hidden="true" className={styles.statusDot} />
+            {label}
+          </span>
+          <span>Checked {relativeTime(community.lastVerifiedAt)}</span>
+          {accessKind(community) === "open" ? (
+            <span className={`${styles.accessFlag} ${styles.accessFlagOpen}`}>
+              Open to join
+            </span>
+          ) : accessKind(community) === "invite" ? (
+            <span className={`${styles.accessFlag} ${styles.accessFlagInvite}`}>
+              Invite-only
+            </span>
+          ) : null}
+          {community.openToSharedChannels ? (
+            <a
+              className={`${styles.accessFlag} ${styles.accessFlagOpen}`}
+              href="/shared-channels"
+              title="This community welcomes shared-channel invitations"
+            >
+              Open to shared channels
+            </a>
+          ) : null}
+          <ShareOnX
+            className={styles.inspectorShare}
+            label="Share"
+            text={shareText}
+            url={shareUrl}
+          />
         </div>
         <JoinButton
           className={styles.copyButton}

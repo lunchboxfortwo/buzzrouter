@@ -119,6 +119,7 @@ export default async function CommunityPage({
   const access = accessKind(community);
   const tone = insigniaTone(community.relayHost);
   const shareUrl = `${pageOrigin()}/communities/${encodeURIComponent(community.relayHost)}`;
+  const shareText = `${community.displayName} — a real, live Buzz community, verified by @buzzrouter`;
 
   return (
     <div className={styles.page}>
@@ -161,13 +162,21 @@ export default async function CommunityPage({
               ) : null}
             </div>
           </div>
-          <JoinButton
-            className={styles.cta}
-            communityName={community.displayName}
-            inviteCode={community.inviteCode}
-            publicUrl={community.publicUrl}
-            relayUrl={community.canonicalRelayUrl}
-          />
+          <div className={styles.heroActions}>
+            <JoinButton
+              className={styles.cta}
+              communityName={community.displayName}
+              inviteCode={community.inviteCode}
+              publicUrl={community.publicUrl}
+              relayUrl={community.canonicalRelayUrl}
+            />
+            <ShareOnX
+              className={styles.heroShare}
+              label="Share on X"
+              text={shareText}
+              url={shareUrl}
+            />
+          </div>
         </div>
 
         {community.description ? (
@@ -302,15 +311,6 @@ export default async function CommunityPage({
             <Link href="/shared-channels">Propose a shared channel →</Link>
           </div>
         ) : null}
-
-        <div className={styles.footerRow}>
-          <span>Share</span>
-          <ShareOnX
-            className={styles.xbtn}
-            text={`${community.displayName} — a Buzz community, checked directly at the relay via @buzzrouter`}
-            url={shareUrl}
-          />
-        </div>
       </div>
     </div>
   );

@@ -39,6 +39,7 @@ import {
   beginCommunityConnectionInstall,
   createSharedChannel,
   disconnectSharedChannel,
+  getSharedChannelAdminWorkspace,
   ingestBridgeMessage,
   listSharedChannelEndpoints,
   pauseSharedChannelEndpoint,
@@ -138,6 +139,19 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
       ownerPubkey: route.source.ownerPubkey,
       sharedChannelId: route.sharedChannelId,
     });
+    const sourceWorkspace = await getSharedChannelAdminWorkspace(
+      pool,
+      route.source.ownerPubkey,
+    );
+    expect(sourceWorkspace.communities).toHaveLength(1);
+    expect(sourceWorkspace.channels).toMatchObject([
+      {
+        id: route.sharedChannelId,
+        ownCommunityId: route.source.communityId,
+        ownEndpointState: "active",
+        peerCommunityId: route.destination.communityId,
+      },
+    ]);
     const sourceEndpoint = endpoints.find(
       (endpoint) => endpoint.role === "source",
     );

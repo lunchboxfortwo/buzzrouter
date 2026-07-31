@@ -60,6 +60,33 @@ export interface SharedChannelEndpointRecord {
   state: "pending" | "active" | "paused" | "disconnected";
 }
 
+export interface SharedChannelCommunitySummary {
+  connectionHealth: CommunityConnectionRecord["health"] | null;
+  connectionState: CommunityConnectionRecord["state"] | null;
+  displayName: string;
+  id: string;
+  relayUrl: string;
+  slug: string | null;
+}
+
+export interface SharedChannelAdminRecord extends SharedChannelRecord {
+  ownCommunityId: string;
+  ownEndpointId: string;
+  ownEndpointState: SharedChannelEndpointRecord["state"];
+  ownLocalChannelId: string | null;
+  ownLocalChannelName: string | null;
+  peerCommunityId: string;
+  peerDisplayName: string;
+  peerEndpointState: SharedChannelEndpointRecord["state"];
+  peerSlug: string | null;
+}
+
+export interface SharedChannelAdminWorkspace {
+  channels: SharedChannelAdminRecord[];
+  communities: SharedChannelCommunitySummary[];
+  destinations: SharedChannelCommunitySummary[];
+}
+
 export interface BeginCommunityConnectionInstallInput {
   bridgePubkey: string;
   communityId: string;
@@ -1087,6 +1114,157 @@ export async function listSharedChannelEndpoints(
   return result.rows.map(mapEndpoint);
 }
 
+export async function getSharedChannelAdminWorkspace(
+  pool: Pool,
+  ownerPubkey: string,
+): Promise<SharedChannelAdminWorkspace> {
+  assertHex(ownerPubkey, 64, "Owner public key");
+
+  const communities = await pool.query<{
+    connection_health: CommunityConnectionRecord["health"] | null;
+    connection_state: CommunityConnectionRecord["state"] | null;
+    display_name: string;
+    id: string;
+    relay_url: string;
+    slug: string | null;
+  }>(
+    `
+      SELECT
+        communities.id,
+        COALESCE(
+          communities.display_name,
+          communities.slug,
+          candidates.host
+        ) AS display_name,
+        communities.slug,
+        candidates.canonical_relay_url AS relay_url,
+        connections.state AS connection_state,
+        connections.health AS connection_health
+      FROM communities
+      JOIN community_candidates AS candidates
+        ON candidates.id = communities.candidate_id
+      LEFT JOIN community_connections AS connections
+        ON connections.community_id = communities.id
+      WHERE communities.owner_pubkey = $1
+        AND communities.claim_state = ANY($2::text[])
+      ORDER BY display_name, communities.id
+    `,
+    [ownerPubkey, VERIFIED_CLAIM_STATES],
+  );
+  const owned = communities.rows.map(mapCommunitySummary);
+  if (owned.length === 0) {
+    return { channels: [], communities: [], destinations: [] };
+  }
+
+  const destinations = await pool.query<{
+    connection_health: CommunityConnectionRecord["health"] | null;
+    connection_state: CommunityConnectionRecord["state"] | null;
+    display_name: string;
+    id: string;
+    relay_url: string;
+    slug: string | null;
+  }>(
+    `
+      SELECT
+        communities.id,
+        COALESCE(
+          communities.display_name,
+          communities.slug,
+          candidates.host
+        ) AS display_name,
+        communities.slug,
+        candidates.canonical_relay_url AS relay_url,
+        connections.state AS connection_state,
+        connections.health AS connection_health
+      FROM communities
+      JOIN community_candidates AS candidates
+        ON candidates.id = communities.candidate_id
+      LEFT JOIN community_connections AS connections
+        ON connections.community_id = communities.id
+      WHERE communities.claim_state = ANY($1::text[])
+      ORDER BY display_name, communities.id
+    `,
+    [VERIFIED_CLAIM_STATES],
+  );
+
+  const channels = await pool.query<{
+    created_at: Date;
+    id: string;
+    own_community_id: string;
+    own_endpoint_id: string;
+    own_endpoint_state: SharedChannelEndpointRecord["state"];
+    own_local_channel_id: string | null;
+    own_local_channel_name: string | null;
+    peer_community_id: string;
+    peer_display_name: string;
+    peer_endpoint_state: SharedChannelEndpointRecord["state"];
+    peer_slug: string | null;
+    proposed_by_community_id: string;
+    proposed_name: string;
+    purpose: string;
+    state: SharedChannelRecord["state"];
+  }>(
+    `
+      SELECT
+        channels.id,
+        channels.proposed_by_community_id,
+        channels.proposed_name,
+        channels.purpose,
+        channels.state,
+        channels.created_at,
+        own_endpoint.id AS own_endpoint_id,
+        own_endpoint.community_id AS own_community_id,
+        own_endpoint.state AS own_endpoint_state,
+        own_endpoint.local_channel_id AS own_local_channel_id,
+        own_endpoint.local_channel_name_snapshot
+          AS own_local_channel_name,
+        peer_endpoint.community_id AS peer_community_id,
+        peer_endpoint.state AS peer_endpoint_state,
+        COALESCE(
+          peer_community.display_name,
+          peer_community.slug,
+          peer_candidate.host
+        ) AS peer_display_name,
+        peer_community.slug AS peer_slug
+      FROM shared_channels AS channels
+      JOIN shared_channel_endpoints AS own_endpoint
+        ON own_endpoint.shared_channel_id = channels.id
+      JOIN shared_channel_endpoints AS peer_endpoint
+        ON peer_endpoint.shared_channel_id = channels.id
+        AND peer_endpoint.id <> own_endpoint.id
+      JOIN communities AS peer_community
+        ON peer_community.id = peer_endpoint.community_id
+      JOIN community_candidates AS peer_candidate
+        ON peer_candidate.id = peer_community.candidate_id
+      WHERE own_endpoint.community_id = ANY($1::uuid[])
+      ORDER BY channels.created_at DESC, channels.id
+    `,
+    [owned.map((community) => community.id)],
+  );
+
+  return {
+    channels: channels.rows.map((row) => ({
+      createdAt: row.created_at.toISOString(),
+      id: row.id,
+      ownCommunityId: row.own_community_id,
+      ownEndpointId: row.own_endpoint_id,
+      ownEndpointState: row.own_endpoint_state,
+      ownLocalChannelId: row.own_local_channel_id,
+      ownLocalChannelName: row.own_local_channel_name,
+      peerCommunityId: row.peer_community_id,
+      peerDisplayName: row.peer_display_name,
+      peerEndpointState: row.peer_endpoint_state,
+      peerSlug: row.peer_slug,
+      proposedByCommunityId: row.proposed_by_community_id,
+      proposedName: row.proposed_name,
+      purpose: row.purpose,
+      state: row.state,
+    })),
+    communities: owned,
+    destinations: destinations.rows.map(mapCommunitySummary),
+  };
+}
+
 export async function listActiveConnectorConfigs(
   pool: Pool,
 ): Promise<ActiveConnectorConfig[]> {
@@ -1897,6 +2075,24 @@ function mapEndpoint(
     role: row.role,
     sharedChannelId: row.shared_channel_id,
     state: row.state,
+  };
+}
+
+function mapCommunitySummary(row: {
+  connection_health: CommunityConnectionRecord["health"] | null;
+  connection_state: CommunityConnectionRecord["state"] | null;
+  display_name: string;
+  id: string;
+  relay_url: string;
+  slug: string | null;
+}): SharedChannelCommunitySummary {
+  return {
+    connectionHealth: row.connection_health,
+    connectionState: row.connection_state,
+    displayName: row.display_name,
+    id: row.id,
+    relayUrl: row.relay_url,
+    slug: row.slug,
   };
 }
 

@@ -23,6 +23,29 @@ export interface NostrIdentity {
   pubkey: string;
 }
 
+export async function authenticateRequest(
+  request: Request,
+  pool: Pool,
+): Promise<NostrIdentity> {
+  const requestUrl = new URL(request.url);
+  const canonicalUrl = canonicalRequestUrl(
+    `${requestUrl.pathname}${requestUrl.search}`,
+  );
+  const identity = verifyNip98Authorization(
+    request.headers.get("authorization"),
+    canonicalUrl,
+    request.method,
+    "",
+  );
+  await consumeNip98Event(
+    pool,
+    identity,
+    canonicalUrl,
+    request.method,
+  );
+  return identity;
+}
+
 export async function authenticateJsonRequest(
   request: Request,
   pool: Pool,
@@ -149,6 +172,9 @@ export function canonicalRequestUrl(pathAndSearch: string): string {
   }
 
   const origin = new URL(configuredOrigin);
+  const loopbackHttp =
+    origin.protocol === "http:" &&
+    ["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname);
   if (
     origin.username ||
     origin.password ||
@@ -156,7 +182,7 @@ export function canonicalRequestUrl(pathAndSearch: string): string {
     origin.search ||
     origin.hash ||
     (origin.protocol !== "https:" &&
-      !(process.env.NODE_ENV !== "production" && origin.protocol === "http:"))
+      !loopbackHttp)
   ) {
     throw new Error("PUBLIC_APP_ORIGIN must be an HTTPS origin.");
   }

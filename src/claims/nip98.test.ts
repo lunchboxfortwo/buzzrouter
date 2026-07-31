@@ -141,4 +141,11 @@ describe("canonicalRequestUrl", () => {
       "https://buzzrouter.com/api/test?one=two",
     );
   });
+
+  it("allows loopback HTTP for local release checks", () => {
+    process.env.PUBLIC_APP_ORIGIN = "http://127.0.0.1:3210";
+    expect(canonicalRequestUrl("/api/test")).toBe(
+      "http://127.0.0.1:3210/api/test",
+    );
+  });
 });

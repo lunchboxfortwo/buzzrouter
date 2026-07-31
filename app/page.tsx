@@ -114,6 +114,9 @@ export default async function DirectoryPage({
               <a aria-current="page" className={styles.navLink} href="/">
                 Discover
               </a>
+              <Link className={styles.navLink} href="/shared-channels">
+                Shared channels
+              </Link>
               <Link className={styles.navLink} href="/submit">List a community</Link>
             </nav>
 

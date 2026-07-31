@@ -248,6 +248,39 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
     expect(delivery.rows[0].state).toBe("cancelled");
   });
 
+  it("flags and ranks the home community as the canonical destination", async () => {
+    const owner = await createConnectedCommunity(pool, "owner");
+    const home = await createVerifiedCommunity(pool, "home");
+    await pool.query(
+      "UPDATE community_candidates SET host = $2 WHERE id = (SELECT candidate_id FROM communities WHERE id = $1)",
+      [home.communityId, "home.buzzrouter.test"],
+    );
+
+    const previous = process.env.BUZZROUTER_HOME_COMMUNITY_HOST;
+    process.env.BUZZROUTER_HOME_COMMUNITY_HOST = "home.buzzrouter.test";
+    try {
+      const workspace = await getSharedChannelAdminWorkspace(
+        pool,
+        owner.ownerPubkey,
+      );
+      expect(workspace.destinations[0]).toMatchObject({
+        featured: true,
+        id: home.communityId,
+      });
+      expect(
+        workspace.destinations
+          .filter((community) => community.id !== home.communityId)
+          .every((community) => community.featured === false),
+      ).toBe(true);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.BUZZROUTER_HOME_COMMUNITY_HOST;
+      } else {
+        process.env.BUZZROUTER_HOME_COMMUNITY_HOST = previous;
+      }
+    }
+  });
+
   it("does not accept an expired invitation", async () => {
     const source = await createConnectedCommunity(pool, "source");
     const destination = await createConnectedCommunity(

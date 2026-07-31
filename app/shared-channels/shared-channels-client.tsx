@@ -333,6 +333,7 @@ function ProposalForm({
   const eligible = destinations.filter(
     (community) => community.id !== activeCommunityId,
   );
+  const featured = eligible.find((community) => community.featured);
 
   async function submit(formData: FormData) {
     setBusy(true);
@@ -363,13 +364,26 @@ function ProposalForm({
           <p>Invite another verified community to a two-way route.</p>
         </div>
       </div>
+      {featured ? (
+        <p className={styles.featuredHint}>
+          <strong>New to shared channels?</strong> {featured.displayName} is
+          selected by default. It is BuzzRouter&apos;s own community &mdash;
+          a good first route for trying the flow end to end, asking for help,
+          or reporting an issue.
+        </p>
+      ) : null}
       <div className={styles.formGrid}>
         <label>
           Destination community
-          <select name="destinationCommunityId" required>
+          <select
+            defaultValue={featured?.id}
+            name="destinationCommunityId"
+            required
+          >
             {eligible.map((community) => (
               <option key={community.id} value={community.id}>
                 {community.displayName}
+                {community.featured ? " — BuzzRouter (start here)" : ""}
               </option>
             ))}
           </select>

@@ -121,6 +121,21 @@
   padding: 1px 5px;
 }
 
+.featuredHint {
+  background: #ddf4ff;
+  border: 1px solid #54aeff66;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+}
+
+.featuredHint strong {
+  font-weight: 600;
+}
+
 .signerHelp {
   background: #fff8c5;
   border: 1px solid #d4a72c66;

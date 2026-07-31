@@ -64,9 +64,21 @@ export interface SharedChannelCommunitySummary {
   connectionHealth: CommunityConnectionRecord["health"] | null;
   connectionState: CommunityConnectionRecord["state"] | null;
   displayName: string;
+  featured: boolean;
   id: string;
   relayUrl: string;
   slug: string | null;
+}
+
+/**
+ * BuzzRouter's own community. It is offered as the canonical first shared
+ * channel so an owner can exercise the whole flow — and reach the team —
+ * without needing to find a willing peer first.
+ */
+export function homeCommunityHost(): string {
+  return (
+    process.env.BUZZROUTER_HOME_COMMUNITY_HOST ?? "relay.buzzrouter.com"
+  );
 }
 
 export interface SharedChannelAdminRecord extends SharedChannelRecord {
@@ -1225,6 +1237,7 @@ export async function getSharedChannelAdminWorkspace(
     connection_health: CommunityConnectionRecord["health"] | null;
     connection_state: CommunityConnectionRecord["state"] | null;
     display_name: string;
+    featured: boolean;
     id: string;
     relay_url: string;
     slug: string | null;
@@ -1239,6 +1252,7 @@ export async function getSharedChannelAdminWorkspace(
         ) AS display_name,
         communities.slug,
         candidates.canonical_relay_url AS relay_url,
+        candidates.host = $2 AS featured,
         connections.state AS connection_state,
         connections.health AS connection_health
       FROM communities
@@ -1247,9 +1261,9 @@ export async function getSharedChannelAdminWorkspace(
       LEFT JOIN community_connections AS connections
         ON connections.community_id = communities.id
       WHERE communities.claim_state = ANY($1::text[])
-      ORDER BY display_name, communities.id
+      ORDER BY featured DESC, display_name, communities.id
     `,
-    [VERIFIED_CLAIM_STATES],
+    [VERIFIED_CLAIM_STATES, homeCommunityHost()],
   );
 
   const channels = await pool.query<{
@@ -2147,6 +2161,7 @@ function mapCommunitySummary(row: {
   connection_health: CommunityConnectionRecord["health"] | null;
   connection_state: CommunityConnectionRecord["state"] | null;
   display_name: string;
+  featured?: boolean;
   id: string;
   relay_url: string;
   slug: string | null;
@@ -2155,6 +2170,7 @@ function mapCommunitySummary(row: {
     connectionHealth: row.connection_health,
     connectionState: row.connection_state,
     displayName: row.display_name,
+    featured: row.featured ?? false,
     id: row.id,
     relayUrl: row.relay_url,
     slug: row.slug,

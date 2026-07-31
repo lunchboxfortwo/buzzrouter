@@ -721,31 +721,31 @@ and GitHub workflows should be merged by Lane E to avoid conflicts.
 Synthesized from the engineering review. Each task maps directly to an approved
 decision.
 
-- [ ] **T1 (P2, human: ~1 day / CC: ~2-4h)** - HTTP auth - Extract generic NIP-98 request authentication and API errors.
+- [x] **T1 (P2, human: ~1 day / CC: ~2-4h)** - HTTP auth - Extract generic NIP-98 request authentication and API errors.
   - Surfaced by: Code quality review - claim-specific authentication errors cannot be reused safely.
   - Files: `src/http/`, `src/claims/`, existing claim route tests.
   - Verify: `npm test -- src/claims src/http`.
-- [ ] **T2 (P1, human: ~3 days / CC: ~1 day)** - Persistence - Add the shared-channel schema and owner-authorized store.
+- [x] **T2 (P1, human: ~3 days / CC: ~1 day)** - Persistence - Add the shared-channel schema and owner-authorized store.
   - Surfaced by: Architecture review - bilateral endpoint state, immediate disconnect, and immutable identity constraints.
   - Files: `migrations/`, `src/shared-channels/store.ts`.
   - Verify: migrations plus focused PostgreSQL integration tests.
-- [ ] **T3 (P1, human: ~2 days / CC: ~1 day)** - Credentials - Add encrypted connector-key storage, activation tokens, rotation, and revocation.
+- [x] **T3 (P1, human: ~2 days / CC: ~1 day)** - Credentials - Add encrypted connector-key storage, activation tokens, rotation, and revocation.
   - Surfaced by: Architecture review - managed connector key custody.
   - Files: `src/shared-channels/store.ts`, production secret configuration.
   - Verify: encryption, wrong-key, token replay, rotation, and deletion tests.
-- [ ] **T4 (P1, human: ~5 days / CC: ~2 days)** - Bridge runtime - Implement canonical projection, connector supervision, and durable delivery.
+- [x] **T4 (P1, human: ~5 days / CC: ~2 days)** - Bridge runtime - Implement canonical projection, connector supervision, and durable delivery.
   - Surfaced by: Architecture review - persistent relay sessions, atomic enqueue, idempotency, and parent-aware retry.
   - Files: `src/shared-channels/bridge.ts`, `src/shared-channels/connector.ts`, `src/jobs/`, `src/worker.ts`.
   - Verify: fake-relay and PostgreSQL integration suites.
-- [ ] **T5 (P1, human: ~4 days / CC: ~2 days)** - Product surfaces - Add invitation, acceptance, health, pause, resume, disconnect, and audit APIs and views.
+- [x] **T5 (P1, human: ~4 days / CC: ~2 days)** - Product surfaces - Add invitation, acceptance, health, pause, resume, disconnect, and audit APIs and views.
   - Surfaced by: Product contract and owner-only bilateral administration decisions.
   - Files: `app/api/shared-channels/`, shared-channel pages and components.
   - Verify: route and component integration tests plus browser canary.
-- [ ] **T6 (P1, human: ~3 days / CC: ~1 day)** - Installer - Build the one-shot connector CLI and release publication workflow.
+- [x] **T6 (P1, human: ~3 days / CC: ~1 day)** - Installer - Build the one-shot connector CLI and release publication workflow.
   - Surfaced by: Architecture review - relay credentials must remain on the community host.
   - Files: connector package, `.github/workflows/`, installation documentation.
   - Verify: clean-host install, expired token, replay, partial setup, and successful round trip.
-- [ ] **T7 (P1, human: ~2 days / CC: ~1 day)** - Verification - Complete database, fake-relay, route, component, focused Playwright, and release checks.
+- [x] **T7 (P1, human: ~2 days / CC: ~1 day)** - Verification - Complete database, fake-relay, route, component, focused Playwright, and release checks.
   - Surfaced by: Test review - transaction and bilateral flows require real integration coverage.
   - Files: `src/shared-channels/*.test.ts`, shared-channel API tests, `e2e/shared-channel-admin.spec.ts`, Playwright configuration, CI workflow.
   - Verify: `npm run typecheck && npm test && npx playwright test && npm run build`.

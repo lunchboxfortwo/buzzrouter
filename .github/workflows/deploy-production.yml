@@ -88,6 +88,10 @@ jobs:
       - name: Collect deployment diagnostics
         if: failure()
         run: |
+          echo "::group::deploy log"
+          cat "${BUZZROUTER_STATE_DIR:-/var/lib/buzzrouter}/last-deploy.log" \
+            || echo "no deploy log written"
+          echo "::endgroup::"
           echo "::group::deploy service status"
           sudo --non-interactive /usr/bin/systemctl status buzzrouter-deploy.service --no-pager -l || true
           echo "::endgroup::"

@@ -1227,6 +1227,14 @@
   }
 }
 
+@media (max-width: 920px) {
+  /* The hero has done its work by the time someone is browsing on a phone;
+     the screen belongs to the selected community and the list. */
+  .premiseBand {
+    display: none;
+  }
+}
+
 @media (max-width: 680px) {
   .headerInner {
     gap: 4px 12px;

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -49,8 +49,28 @@ jobs:
             }
           '
 
-      - name: Publish package
+      - name: Pack release artifact
         if: startsWith(github.ref, 'refs/tags/connect-v')
-        run: npm publish --workspace @buzzrouter/connect --access public --provenance
+        run: npm pack --workspace @buzzrouter/connect --pack-destination .
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/connect-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "buzzrouter-connect-${GITHUB_REF_NAME#connect-v}.tgz" \
+            --generate-notes \
+            --title "@buzzrouter/connect ${GITHUB_REF_NAME#connect-v}" \
+            --verify-tag
+
+      - name: Publish npm package
+        if: startsWith(github.ref, 'refs/tags/connect-v')
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "NPM_TOKEN is not configured; GitHub release is canonical."
+            exit 0
+          fi
+          npm publish --workspace @buzzrouter/connect --access public --provenance

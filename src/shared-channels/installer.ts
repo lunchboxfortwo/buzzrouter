@@ -172,14 +172,9 @@ function configuredWrappingKeyVersion(): number {
   return version;
 }
 
-function buildInstallerCommand(token: string): string {
+export function buildInstallerCommand(token: string): string {
   const packageSpec = process.env.BUZZROUTER_CONNECT_PACKAGE_SPEC;
-  if (
-    !packageSpec ||
-    !/^@buzzrouter\/connect@[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(
-      packageSpec,
-    )
-  ) {
+  if (!packageSpec || !isAllowedPackageSpec(packageSpec)) {
     throw new ApiError(
       "connector_package_unavailable",
       "The connector installer is not published.",
@@ -187,5 +182,21 @@ function buildInstallerCommand(token: string): string {
     );
   }
   const origin = new URL(canonicalRequestUrl("/"));
-  return `npx --yes ${packageSpec} ${token} --router ${origin.origin}`;
+  return `npx --yes --package=${packageSpec} buzzrouter-connect ${token} --router ${origin.origin}`;
+}
+
+function isAllowedPackageSpec(packageSpec: string): boolean {
+  if (
+    /^@buzzrouter\/connect@[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(
+      packageSpec,
+    )
+  ) {
+    return true;
+  }
+
+  const release =
+    /^https:\/\/github\.com\/lunchboxfortwo\/buzzrouter\/releases\/download\/connect-v([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)\/buzzrouter-connect-([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)\.tgz$/.exec(
+      packageSpec,
+    );
+  return release !== null && release[1] === release[2];
 }

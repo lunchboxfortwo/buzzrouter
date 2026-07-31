@@ -1,5 +1,6 @@
-import Image from "next/image";
 
+import chrome from "../site-chrome.module.css";
+import { SiteMasthead } from "../SiteMasthead";
 import styles from "./submit.module.css";
 
 interface SubmitSearchParams {
@@ -17,27 +18,8 @@ export default async function SubmitPage({
   const host = firstValue(params.host);
 
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.headerInner}>
-          <a className={styles.brand} href="/">
-            <Image
-              alt=""
-              height={34}
-              priority
-              src="/assets/brand/buzzrouter-logo.png"
-              width={34}
-            />
-            <span>BuzzRouter</span>
-          </a>
-          <nav aria-label="Primary navigation">
-            <a href="/">Discover</a>
-            <a aria-current="page" href="/submit">
-              List a community
-            </a>
-          </nav>
-        </div>
-      </header>
+    <div className={`${chrome.siteCanvas} ${styles.page}`}>
+      <SiteMasthead current="submit" />
 
       <main>
         <section className={styles.intro}>

@@ -9,6 +9,11 @@ lock_file="${BUZZROUTER_LOCK_FILE:-/run/lock/buzzrouter-deploy.lock}"
 
 mkdir -p "$(dirname "${source_dir}")" "${state_dir}"
 
+deploy_log="${state_dir}/last-deploy.log"
+exec > >(tee "${deploy_log}") 2>&1
+trap 'chmod 0644 "${deploy_log}" 2>/dev/null || true' EXIT
+set -x
+
 exec 9>"${lock_file}"
 flock -n 9 || exit 0
 

@@ -348,9 +348,20 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
             {monogram(community.displayName)}
           </span>
           <div>
-            <h2 className={styles.inspectorTitle} id="inspector-title">
-              {community.displayName}
-            </h2>
+            <div className={styles.inspectorNameRow}>
+              <h2 className={styles.inspectorTitle} id="inspector-title">
+                {community.displayName}
+              </h2>
+              <a
+                className={styles.inspectorProfileInline}
+                href={`/communities/${encodeURIComponent(community.relayHost)}`}
+              >
+                Full profile
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </a>
+            </div>
             <p className={styles.inspectorSummary}>
               {community.description ?? `A Buzz community at ${community.relayHost}.`}
             </p>

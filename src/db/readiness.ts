@@ -10,6 +10,7 @@ const REQUIRED_TABLES = [
   "community_claims",
   "nostr_auth_events",
   "community_icons",
+  "community_reliability_metrics",
 ] as const;
 
 export interface DiscoveryDatabaseReadiness {
@@ -30,6 +31,7 @@ export async function assertDiscoveryDatabaseReady(
     community_claims: string | null;
     nostr_auth_events: string | null;
     community_icons: string | null;
+    community_reliability_metrics: string | null;
     migrations: string | null;
   }>(`
     SELECT
@@ -51,6 +53,8 @@ export async function assertDiscoveryDatabaseReady(
         AS nostr_auth_events,
       to_regclass('public.community_icons')::text
         AS community_icons,
+      to_regclass('public.community_reliability_metrics')::text
+        AS community_reliability_metrics,
       to_regclass('public.buzzrouter_schema_migrations')::text
         AS migrations
   `);

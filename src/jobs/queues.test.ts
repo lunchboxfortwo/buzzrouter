@@ -2,6 +2,7 @@ import type { PgBoss } from "pg-boss";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  RELIABILITY_ROLLUP_QUEUE,
   configureQueues,
   enqueueCandidateProbe,
   PROBE_CANDIDATE_QUEUE,
@@ -65,6 +66,25 @@ describe("configureQueues", () => {
       "30 2 * * *",
       null,
       { key: "phase2-nip65", tz: "UTC" },
+    );
+  });
+
+  it("creates the reliability rollup queue on its hourly cadence", async () => {
+    const createQueue = vi.fn().mockResolvedValue(undefined);
+    const schedule = vi.fn().mockResolvedValue(undefined);
+    const boss = { createQueue, schedule } as unknown as PgBoss;
+
+    await configureQueues(boss);
+
+    expect(createQueue).toHaveBeenCalledWith(
+      RELIABILITY_ROLLUP_QUEUE,
+      expect.objectContaining({ retryLimit: 2 }),
+    );
+    expect(schedule).toHaveBeenCalledWith(
+      RELIABILITY_ROLLUP_QUEUE,
+      "45 * * * *",
+      null,
+      { key: "phase3-reliability-rollup", tz: "UTC" },
     );
   });
 

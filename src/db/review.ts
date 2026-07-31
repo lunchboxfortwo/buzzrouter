@@ -25,8 +25,10 @@ export interface ReviewProbe {
 export interface CandidateReview {
   canonicalRelayUrl: string;
   classifierReason: string | null;
+  displayNameOverride: string | null;
   eligibility: ListingEligibility;
   firstSeenAt: string;
+  focus: string | null;
   id: string;
   lastSeenAt: string;
   nextProbeAt: string;
@@ -54,7 +56,9 @@ export async function listCandidateReviews(
   const candidates = await pool.query<{
     canonical_relay_url: string;
     classifier_reason: string | null;
+    display_name_override: string | null;
     first_seen_at: Date;
+    focus: string | null;
     id: string;
     last_seen_at: Date;
     next_probe_at: Date;
@@ -62,15 +66,19 @@ export async function listCandidateReviews(
   }>(
     `
       SELECT
-        id,
-        canonical_relay_url,
-        state,
-        first_seen_at,
-        last_seen_at,
-        next_probe_at,
-        classifier_reason
-      FROM community_candidates
-      ORDER BY last_seen_at DESC, id
+        candidates.id,
+        candidates.canonical_relay_url,
+        candidates.state,
+        candidates.first_seen_at,
+        candidates.last_seen_at,
+        candidates.next_probe_at,
+        candidates.classifier_reason,
+        communities.focus,
+        communities.display_name_override
+      FROM community_candidates AS candidates
+      LEFT JOIN communities
+        ON communities.candidate_id = candidates.id
+      ORDER BY candidates.last_seen_at DESC, candidates.id
       LIMIT $1
     `,
     [limit],
@@ -163,6 +171,7 @@ export async function listCandidateReviews(
     return {
       canonicalRelayUrl: candidate.canonical_relay_url,
       classifierReason: candidate.classifier_reason,
+      displayNameOverride: candidate.display_name_override,
       eligibility: evaluateListingEligibility(
         candidate.state,
         candidateSources.map((source) => ({
@@ -175,6 +184,7 @@ export async function listCandidateReviews(
         },
       ),
       firstSeenAt: candidate.first_seen_at.toISOString(),
+      focus: candidate.focus,
       id: candidate.id,
       lastSeenAt: candidate.last_seen_at.toISOString(),
       nextProbeAt: candidate.next_probe_at.toISOString(),

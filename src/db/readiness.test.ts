@@ -19,6 +19,7 @@ describe("assertDiscoveryDatabaseReady", () => {
             community_claims: "community_claims",
             nostr_auth_events: "nostr_auth_events",
             community_icons: "community_icons",
+            community_reliability_metrics: "community_reliability_metrics",
             migrations: "buzzrouter_schema_migrations",
           },
         ],
@@ -40,6 +41,7 @@ describe("assertDiscoveryDatabaseReady", () => {
         "community_claims",
         "nostr_auth_events",
         "community_icons",
+        "community_reliability_metrics",
       ],
     });
   });

@@ -8,7 +8,9 @@ import {
   listSourceStateReviews,
 } from "../../../src/db/review";
 import { isInternalReviewAuthorized } from "../../../src/internal/auth";
+import { FOCUS_SLUGS, focusLabel } from "../../../src/ranking/focus";
 
+import { curateListingAction, toggleSuppressionAction } from "./actions";
 import styles from "./review.module.css";
 
 export const dynamic = "force-dynamic";
@@ -152,6 +154,12 @@ export default async function DiscoveryReviewPage() {
                         </p>
                         <DetailSources sources={candidate.sources} />
                         <DetailProbes probes={candidate.recentProbes} />
+                        <DetailCuration
+                          candidateId={candidate.id}
+                          displayNameOverride={candidate.displayNameOverride}
+                          focus={candidate.focus}
+                          state={candidate.state}
+                        />
                       </div>
                     </details>
                   </td>
@@ -229,6 +237,65 @@ function DetailProbes({
             : ""}
         </p>
       ))}
+    </div>
+  );
+}
+
+function DetailCuration({
+  candidateId,
+  displayNameOverride,
+  focus,
+  state,
+}: {
+  candidateId: string;
+  displayNameOverride: string | null;
+  focus: string | null;
+  state: string;
+}) {
+  const suppressed = state === "suppressed";
+
+  return (
+    <div>
+      <strong>Curation</strong>
+      <form action={curateListingAction}>
+        <input name="candidateId" type="hidden" value={candidateId} />
+        <p>
+          <label>
+            Display name override{" "}
+            <input
+              defaultValue={displayNameOverride ?? ""}
+              maxLength={120}
+              name="displayNameOverride"
+              type="text"
+            />
+          </label>
+        </p>
+        <p>
+          <label>
+            Focus{" "}
+            <select defaultValue={focus ?? ""} name="focus">
+              <option value="">Uncategorized</option>
+              {FOCUS_SLUGS.map((slug) => (
+                <option key={slug} value={slug}>
+                  {focusLabel(slug)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </p>
+        <button type="submit">Save curation</button>
+      </form>
+      <form action={toggleSuppressionAction}>
+        <input name="candidateId" type="hidden" value={candidateId} />
+        <input
+          name="suppressed"
+          type="hidden"
+          value={suppressed ? "false" : "true"}
+        />
+        <button type="submit">
+          {suppressed ? "Unsuppress" : "Suppress"}
+        </button>
+      </form>
     </div>
   );
 }

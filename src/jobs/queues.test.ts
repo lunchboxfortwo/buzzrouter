@@ -7,7 +7,10 @@ import {
   BRIDGE_DELIVERY_QUEUE,
   configureQueues,
   enqueueCandidateProbe,
+  HARVEST_INVITES_QUEUE,
   PROBE_CANDIDATE_QUEUE,
+  REFRESH_INVITES_QUEUE,
+  REFRESH_SUMMARIES_QUEUE,
   SCHEDULE_DUE_PROBES_QUEUE,
   SOURCE_GITHUB_QUEUE,
   SOURCE_NIP65_QUEUE,
@@ -96,7 +99,7 @@ describe("configureQueues", () => {
     );
   });
 
-  it("creates the auto-join queue on its daily cadence", async () => {
+  it("installs the staggered 2-hour presence cadence", async () => {
     const createQueue = vi.fn().mockResolvedValue(undefined);
     const schedule = vi.fn().mockResolvedValue(undefined);
     const boss = { createQueue, schedule } as unknown as PgBoss;
@@ -107,10 +110,36 @@ describe("configureQueues", () => {
       AUTO_JOIN_QUEUE,
       expect.objectContaining({ retryLimit: 2 }),
     );
-    expect(schedule).toHaveBeenCalledWith(AUTO_JOIN_QUEUE, "0 3 * * *", null, {
+    expect(createQueue).toHaveBeenCalledWith(
+      HARVEST_INVITES_QUEUE,
+      expect.objectContaining({ retryLimit: 2 }),
+    );
+    expect(createQueue).toHaveBeenCalledWith(
+      REFRESH_INVITES_QUEUE,
+      expect.objectContaining({ retryLimit: 2 }),
+    );
+    expect(schedule).toHaveBeenCalledWith(
+      REFRESH_SUMMARIES_QUEUE,
+      "0 */2 * * *",
+      null,
+      { key: "presence-refresh-summaries", tz: "UTC" },
+    );
+    expect(schedule).toHaveBeenCalledWith(AUTO_JOIN_QUEUE, "15 */2 * * *", null, {
       key: "presence-auto-join",
       tz: "UTC",
     });
+    expect(schedule).toHaveBeenCalledWith(
+      HARVEST_INVITES_QUEUE,
+      "30 */2 * * *",
+      null,
+      { key: "presence-harvest-invites", tz: "UTC" },
+    );
+    expect(schedule).toHaveBeenCalledWith(
+      REFRESH_INVITES_QUEUE,
+      "45 */2 * * *",
+      null,
+      { key: "presence-refresh-invites", tz: "UTC" },
+    );
   });
 
   it("deduplicates candidate jobs within the scheduler lease window", async () => {

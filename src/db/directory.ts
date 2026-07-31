@@ -137,6 +137,7 @@ export async function listDirectoryCommunities(
                 THEN communities.description
             END,
             catalog.source_description,
+            presence.goals,
             latest.relay_description
           ) AS description,
           COALESCE(
@@ -262,6 +263,8 @@ export async function listDirectoryCommunities(
           ON icons.candidate_id = candidates.id
         LEFT JOIN community_reliability_metrics AS metrics
           ON metrics.candidate_id = candidates.id
+        LEFT JOIN presence_communities AS presence
+          ON presence.relay_host = candidates.host
         WHERE candidates.state = 'verified_buzz'
           AND latest.probed_at >= now() - interval '7 days'
       )

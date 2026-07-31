@@ -1,6 +1,6 @@
 {
   "name": "@buzzrouter/connect",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "One-shot installer for a BuzzRouter community connector",
   "type": "module",
   "bin": {

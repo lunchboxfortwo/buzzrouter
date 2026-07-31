@@ -454,11 +454,11 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
       </div>
       </MobileCollapsible>
 
-      {community.slug ? (
-        <footer className={styles.inspectorFooter}>
-          <a href={`/communities/${community.slug}`}>View full profile</a>
-        </footer>
-      ) : null}
+      <footer className={styles.inspectorFooter}>
+        <a href={`/communities/${encodeURIComponent(community.relayHost)}`}>
+          View full profile
+        </a>
+      </footer>
     </article>
   );
 }

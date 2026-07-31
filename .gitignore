@@ -10,3 +10,6 @@ config/reviewed-relays.json
 *.tsbuildinfo
 .DS_Store
 .cgstack/
+
+# Local agent identity / secrets (never commit)
+.secrets/

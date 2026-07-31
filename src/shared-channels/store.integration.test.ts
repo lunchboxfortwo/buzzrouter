@@ -32,10 +32,14 @@ import {
   ConnectorSupervisor,
   type RelayConnection,
   type RelayConnectionFactory,
+  type RelayGroup,
 } from "./connector";
+import { listCommunityLocalChannels } from "./local-channels";
 import {
   getCommunityInstallDescriptor,
   hashInstallToken,
+  type InviteClaimTarget,
+  redeemInviteAndActivate,
   verifyAndActivateCommunityConnection,
 } from "./installer";
 import {
@@ -132,6 +136,90 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
         relays,
       ),
     ).rejects.toMatchObject({ code: "install_token_unavailable" });
+  });
+
+  it("redeems a pasted invite link then activates over the round trip", async () => {
+    const community = await createVerifiedCommunity(pool, "invite");
+    const token = randomBytes(32).toString("base64url");
+    const privateKey = randomBytes(32);
+    const bridgePubkey = getPublicKey(privateKey);
+    await beginCommunityConnectionInstall(pool, {
+      bridgePubkey,
+      communityId: community.communityId,
+      ownerPubkey: community.ownerPubkey,
+      privateKey,
+      tokenHash: hashInstallToken(token),
+      wrappingKey,
+      wrappingKeyVersion: 1,
+    });
+
+    const host = new URL(community.relayUrl).host;
+    const claims: InviteClaimTarget[] = [];
+    const relays = new FakeRelayFactory();
+    const connection = await redeemInviteAndActivate(
+      pool,
+      token,
+      `https://${host}/invite/opaque-code-123`,
+      { getKey: async () => wrappingKey },
+      relays,
+      async (_privateKey, target) => {
+        claims.push(target);
+      },
+    );
+
+    // The bridge redeems against its own community relay, code parsed out.
+    expect(claims).toEqual([
+      {
+        claimUrl: `https://${host}/api/invites/claim`,
+        code: "opaque-code-123",
+      },
+    ]);
+    // The unchanged kind-0 round trip still proves real admission.
+    expect(connection.state).toBe("active");
+    expect(relays.get(community.relayUrl).published).toMatchObject([
+      { kind: 0, pubkey: bridgePubkey },
+    ]);
+  });
+
+  it("leaves the token reusable when invite redemption fails", async () => {
+    const community = await createVerifiedCommunity(pool, "invite-fail");
+    const token = randomBytes(32).toString("base64url");
+    const privateKey = randomBytes(32);
+    const bridgePubkey = getPublicKey(privateKey);
+    await beginCommunityConnectionInstall(pool, {
+      bridgePubkey,
+      communityId: community.communityId,
+      ownerPubkey: community.ownerPubkey,
+      privateKey,
+      tokenHash: hashInstallToken(token),
+      wrappingKey,
+      wrappingKeyVersion: 1,
+    });
+    const host = new URL(community.relayUrl).host;
+
+    await expect(
+      redeemInviteAndActivate(
+        pool,
+        token,
+        `https://${host}/invite/opaque-code-123`,
+        { getKey: async () => wrappingKey },
+        new FakeRelayFactory(),
+        async () => {
+          throw new Error("relay rejected the invite");
+        },
+      ),
+    ).rejects.toThrow("relay rejected the invite");
+
+    // A failed claim must not consume the token — the owner can retry.
+    const connection = await redeemInviteAndActivate(
+      pool,
+      token,
+      `https://${host}/invite/opaque-code-123`,
+      { getKey: async () => wrappingKey },
+      new FakeRelayFactory(),
+      async () => {},
+    );
+    expect(connection.state).toBe("active");
   });
 
   it("enforces endpoint-owned pause and immediate disconnect", async () => {
@@ -250,7 +338,9 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
 
   it("flags and ranks the home community as the canonical destination", async () => {
     const owner = await createConnectedCommunity(pool, "owner");
-    const home = await createVerifiedCommunity(pool, "home");
+    await setOpenToSharedChannels(pool, owner.communityId, true);
+    const home = await createConnectedCommunity(pool, "home");
+    await setOpenToSharedChannels(pool, home.communityId, true);
     await pool.query(
       "UPDATE community_candidates SET host = $2 WHERE id = (SELECT candidate_id FROM communities WHERE id = $1)",
       [home.communityId, "home.buzzrouter.test"],
@@ -279,6 +369,34 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
         process.env.BUZZROUTER_HOME_COMMUNITY_HOST = previous;
       }
     }
+  });
+
+  it("excludes destinations that cannot accept a shared channel", async () => {
+    const owner = await createConnectedCommunity(pool, "owner");
+    await setOpenToSharedChannels(pool, owner.communityId, true);
+
+    const notOpen = await createConnectedCommunity(pool, "not-open");
+    // Left at the default: open_to_shared_channels = false.
+
+    const notConnected = await createVerifiedCommunity(
+      pool,
+      "not-connected",
+    );
+    await setOpenToSharedChannels(pool, notConnected.communityId, true);
+
+    const eligible = await createConnectedCommunity(pool, "eligible");
+    await setOpenToSharedChannels(pool, eligible.communityId, true);
+
+    const workspace = await getSharedChannelAdminWorkspace(
+      pool,
+      owner.ownerPubkey,
+    );
+    const destinationIds = workspace.destinations.map(
+      (community) => community.id,
+    );
+    expect(destinationIds).toContain(eligible.communityId);
+    expect(destinationIds).not.toContain(notOpen.communityId);
+    expect(destinationIds).not.toContain(notConnected.communityId);
   });
 
   it("does not accept an expired invitation", async () => {
@@ -399,6 +517,69 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
     expect(counts.rows[0]).toEqual({
       deliveries: "0",
       messages: "0",
+    });
+  });
+
+  it("lists local channels for an owned, connected community", async () => {
+    const community = await createConnectedCommunity(pool, "picker");
+    const relayFactory = new GroupListingRelayFactory([
+      { id: "group-2", name: "Zeta" },
+      { id: "group-1", name: "Alpha" },
+    ]);
+
+    const listing = await listCommunityLocalChannels(
+      pool,
+      {
+        communityId: community.communityId,
+        ownerPubkey: community.ownerPubkey,
+      },
+      { getKey: async () => wrappingKey },
+      relayFactory,
+    );
+
+    expect(listing.connectorActive).toBe(true);
+    expect(listing.channels).toEqual([
+      { id: "group-1", name: "Alpha" },
+      { id: "group-2", name: "Zeta" },
+    ]);
+    expect(relayFactory.connectCalls).toBe(1);
+    expect(relayFactory.closed).toBe(true);
+  });
+
+  it("reports the connector inactive for an owned community with no connector", async () => {
+    const community = await createVerifiedCommunity(pool, "unconnected");
+    const relayFactory = new GroupListingRelayFactory([]);
+
+    const listing = await listCommunityLocalChannels(
+      pool,
+      {
+        communityId: community.communityId,
+        ownerPubkey: community.ownerPubkey,
+      },
+      { getKey: async () => wrappingKey },
+      relayFactory,
+    );
+
+    expect(listing).toEqual({ channels: [], connectorActive: false });
+    expect(relayFactory.connectCalls).toBe(0);
+  });
+
+  it("refuses to list channels for a community the caller does not own", async () => {
+    const community = await createConnectedCommunity(pool, "guarded");
+
+    await expect(
+      listCommunityLocalChannels(
+        pool,
+        {
+          communityId: community.communityId,
+          ownerPubkey: hex(32),
+        },
+        { getKey: async () => wrappingKey },
+        new GroupListingRelayFactory([]),
+      ),
+    ).rejects.toMatchObject({
+      code: "community_owner_required",
+      status: 403,
     });
   });
 
@@ -587,6 +768,17 @@ async function createVerifiedCommunity(
   return { communityId, ownerPubkey, relayUrl };
 }
 
+async function setOpenToSharedChannels(
+  pool: Pool,
+  communityId: string,
+  open: boolean,
+): Promise<void> {
+  await pool.query(
+    "UPDATE communities SET open_to_shared_channels = $2 WHERE id = $1",
+    [communityId, open],
+  );
+}
+
 function hex(bytes: number): string {
   return randomBytes(bytes).toString("hex");
 }
@@ -630,6 +822,10 @@ class FakeRelayConnection implements RelayConnection {
     return this.published.some((event) => event.id === eventId);
   }
 
+  async listGroups(): Promise<never[]> {
+    return [];
+  }
+
   async publish(event: Event): Promise<void> {
     this.published.push(event);
   }
@@ -640,6 +836,31 @@ class FakeRelayConnection implements RelayConnection {
     _onClose: (reason: string) => void,
   ): void {
     this.onEvent = onEvent;
+  }
+}
+
+class GroupListingRelayFactory implements RelayConnectionFactory {
+  connectCalls = 0;
+  closed = false;
+
+  constructor(private readonly groups: RelayGroup[]) {}
+
+  async connect(): Promise<RelayConnection> {
+    this.connectCalls += 1;
+    const factory = this;
+    return {
+      close() {
+        factory.closed = true;
+      },
+      async hasEvent() {
+        return false;
+      },
+      async listGroups() {
+        return factory.groups;
+      },
+      async publish() {},
+      subscribe() {},
+    };
   }
 }
 

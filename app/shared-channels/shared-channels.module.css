@@ -276,6 +276,86 @@
   overflow-wrap: anywhere;
 }
 
+.botAdmission {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+}
+
+.botHeader {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.botHeader span {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.botHeader strong {
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.botHeader p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.botPrimary {
+  background: #f6f8fa;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.botStep {
+  color: #1a7f37;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.botHint {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.botAlt {
+  border-top: 1px solid var(--border, #d0d7de);
+  padding-top: 14px;
+}
+
+.botAlt summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.botAlt > p,
+.botAlt > div,
+.botAlt > button {
+  margin-top: 12px;
+}
+
+.botKeyRow {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.botKeyRow code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .connection > div {
   align-items: center;
   display: flex;
@@ -345,6 +425,40 @@
   grid-column: 1 / -1;
 }
 
+.channelField {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.channelFieldLabel {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.channelHint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.channelPickerInline {
+  display: contents;
+}
+
+.channelActions select {
+  min-width: 160px;
+}
+
+.channelHintInline {
+  color: var(--muted);
+  flex-basis: 100%;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
 .channelSection {
   padding: 20px;
 }
@@ -397,6 +511,47 @@
   width: 150px;
 }
 
+.claimLookup {
+  margin-top: 16px;
+}
+
+.claimForm {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 10px;
+}
+
+.claimResults {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.claimResults li {
+  align-items: baseline;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.claimResults span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.claimEmpty {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 14px;
+}
+
 .notice {
   background: #f6f8fa;
   border-left: 3px solid var(--blue);
@@ -414,7 +569,8 @@
   .connectPanel,
   .toolbar,
   .installer,
-  .channel {
+  .channel,
+  .claimForm {
     align-items: stretch;
     grid-template-columns: 1fr;
   }

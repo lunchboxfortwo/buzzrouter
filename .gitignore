@@ -13,3 +13,7 @@ config/reviewed-relays.json
 
 # Local agent identity / secrets (never commit)
 .secrets/
+
+# Playwright artifacts
+/test-results/
+/playwright-report/

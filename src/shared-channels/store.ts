@@ -578,6 +578,80 @@ export async function getCommunityConnectionInstallContext(
   };
 }
 
+export interface OwnedConnectorConnection
+  extends CommunityConnectionRecord,
+    EncryptedConnectorKey {}
+
+/**
+ * The active connector connection for a community the caller verifiably owns,
+ * including its encrypted key so a request can open the same authenticated
+ * relay session the connector uses. Throws {@link ApiError} `community_owner_required`
+ * when the caller is not the verified owner; returns `null` when the community
+ * is owned but has no active connector yet.
+ */
+export async function getOwnedCommunityConnection(
+  pool: Pool,
+  input: { communityId: string; ownerPubkey: string },
+): Promise<OwnedConnectorConnection | null> {
+  assertHex(input.ownerPubkey, 64, "Owner public key");
+  const result = await pool.query<
+    CommunityConnectionRow & {
+      community_owned: boolean;
+      connection_id: string | null;
+      encrypted_private_key: Buffer | null;
+      private_key_auth_tag: Buffer | null;
+      private_key_nonce: Buffer | null;
+    }
+  >(
+    `
+      SELECT
+        communities.id AS community_id,
+        connections.id AS connection_id,
+        connections.relay_url_snapshot,
+        connections.bridge_pubkey,
+        connections.encrypted_private_key,
+        connections.private_key_nonce,
+        connections.private_key_auth_tag,
+        connections.wrapping_key_version,
+        connections.state,
+        connections.health
+      FROM communities
+      JOIN community_candidates AS candidates
+        ON candidates.id = communities.candidate_id
+      LEFT JOIN community_connections AS connections
+        ON connections.community_id = communities.id
+        AND connections.state = 'active'
+      WHERE communities.id = $1
+        AND communities.owner_pubkey = $2
+        AND communities.claim_state = ANY($3::text[])
+        AND candidates.state = 'verified_buzz'
+    `,
+    [input.communityId, input.ownerPubkey, VERIFIED_CLAIM_STATES],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new ApiError(
+      "community_owner_required",
+      "Verified community ownership is required.",
+      403,
+    );
+  }
+  if (
+    !row.connection_id ||
+    !row.encrypted_private_key ||
+    !row.private_key_nonce ||
+    !row.private_key_auth_tag
+  ) {
+    return null;
+  }
+  return {
+    ...mapConnection({ ...row, id: row.connection_id }),
+    authTag: row.private_key_auth_tag,
+    ciphertext: row.encrypted_private_key,
+    nonce: row.private_key_nonce,
+  };
+}
+
 export async function createSharedChannel(
   pool: Pool,
   input: CreateSharedChannelInput,
@@ -1258,9 +1332,11 @@ export async function getSharedChannelAdminWorkspace(
       FROM communities
       JOIN community_candidates AS candidates
         ON candidates.id = communities.candidate_id
-      LEFT JOIN community_connections AS connections
+      JOIN community_connections AS connections
         ON connections.community_id = communities.id
       WHERE communities.claim_state = ANY($1::text[])
+        AND communities.open_to_shared_channels = true
+        AND connections.state = 'active'
       ORDER BY featured DESC, display_name, communities.id
     `,
     [VERIFIED_CLAIM_STATES, homeCommunityHost()],

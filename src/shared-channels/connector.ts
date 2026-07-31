@@ -38,7 +38,10 @@ import {
 const RECONCILE_INTERVAL_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 5_000;
 const EVENT_LOOKUP_TIMEOUT_MS = 3_000;
+const GROUP_LIST_TIMEOUT_MS = 4_000;
+const GROUP_METADATA_KIND = 39_000;
 const MAX_WEBSOCKET_MESSAGE_BYTES = 512 * 1_024;
+const AUTH_REQUIRED_PATTERN = /auth-required/i;
 
 class ConnectorWebSocket extends NodeWebSocket {
   constructor(address: string | URL, protocols?: string | string[]) {
@@ -55,9 +58,15 @@ export interface WrappingKeyProvider {
   getKey(version: number): Promise<Uint8Array>;
 }
 
+export interface RelayGroup {
+  id: string;
+  name: string;
+}
+
 export interface RelayConnection {
   close(): void;
   hasEvent(eventId: string): Promise<boolean>;
+  listGroups(): Promise<RelayGroup[]>;
   publish(event: Event): Promise<void>;
   subscribe(
     routes: ConnectorRouteConfig[],
@@ -507,7 +516,7 @@ export function createRelayConnectionFactory(): RelayConnectionFactory {
  */
 function isAuthRequired(error: unknown): boolean {
   return (
-    error instanceof Error && /auth-required/i.test(error.message)
+    error instanceof Error && AUTH_REQUIRED_PATTERN.test(error.message)
   );
 }
 
@@ -543,6 +552,57 @@ export class NostrRelayConnection implements RelayConnection {
     this.subscription?.close("connector stopped");
     this.subscription = undefined;
     this.relay.close();
+  }
+
+  /**
+   * Enumerate the relay's NIP-29 groups (its channels) from their kind-39000
+   * metadata. Mirrors {@link publish}: authenticate eagerly, and if a REQ is
+   * rejected because the challenge only arrives after connect, re-authenticate
+   * and retry once.
+   */
+  async listGroups(): Promise<RelayGroup[]> {
+    try {
+      return await this.collectGroups();
+    } catch (error) {
+      if (!isAuthRequired(error)) throw error;
+      await this.authenticate();
+      return await this.collectGroups();
+    }
+  }
+
+  private collectGroups(): Promise<RelayGroup[]> {
+    return new Promise((resolve, reject) => {
+      const groups = new Map<string, RelayGroup>();
+      let settled = false;
+      let subscription: Subscription | undefined;
+      const finish = (complete: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        subscription?.close("group listing complete");
+        complete();
+      };
+      const timeout = setTimeout(
+        () => finish(() => resolve([...groups.values()])),
+        GROUP_LIST_TIMEOUT_MS,
+      );
+      subscription = this.relay.subscribe(
+        [{ kinds: [GROUP_METADATA_KIND] }],
+        {
+          onclose: (reason: string) =>
+            finish(() =>
+              AUTH_REQUIRED_PATTERN.test(reason)
+                ? reject(new Error(reason))
+                : resolve([...groups.values()]),
+            ),
+          oneose: () => finish(() => resolve([...groups.values()])),
+          onevent: (event: Event) => {
+            const group = toRelayGroup(event);
+            if (group) groups.set(group.id, group);
+          },
+        },
+      );
+    });
   }
 
   async hasEvent(eventId: string): Promise<boolean> {
@@ -606,6 +666,16 @@ export class NostrRelayConnection implements RelayConnection {
       onclose: onClose,
     });
   }
+}
+
+function toRelayGroup(event: Event): RelayGroup | null {
+  const id = event.tags.find((tag) => tag[0] === "d")?.[1];
+  if (!id) return null;
+  const name = event.tags.find((tag) => tag[0] === "name")?.[1];
+  return {
+    id,
+    name: name && name.trim().length > 0 ? name.trim() : id,
+  };
 }
 
 function parseErrorCode(error: unknown): string {

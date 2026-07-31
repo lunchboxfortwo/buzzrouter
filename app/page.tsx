@@ -53,7 +53,11 @@ export default async function DirectoryPage({
     sort,
   });
 
-  const hasFocusData = allCommunities.some((community) => Boolean(community.focus));
+  const focusCoverage = allCommunities.length
+    ? allCommunities.filter((community) => Boolean(community.focus)).length /
+      allCommunities.length
+    : 0;
+  const hasFocusData = focusCoverage >= 0.6;
   const focusOptions = hasFocusData
     ? Array.from(
         new Set(
@@ -244,10 +248,13 @@ export default async function DirectoryPage({
             </div>
 
             <div className={styles.workspaceGrid}>
-              <section aria-labelledby="directory-results-title" className={styles.communityIndex}>
+              <section
+                aria-labelledby="directory-results-title"
+                className={`${styles.communityIndex} ${hasFocusData ? "" : styles.indexNoFocus}`}
+              >
                 <div aria-hidden="true" className={styles.indexHeader}>
                   <span>Community</span>
-                  <span>Focus</span>
+                  {hasFocusData ? <span>Focus</span> : null}
                   <span>Status</span>
                   <span>Freshness</span>
                   <span />
@@ -264,6 +271,7 @@ export default async function DirectoryPage({
                           community={community}
                           filters={filters}
                           selected={community.candidateId === selected.candidateId}
+                          showFocus={hasFocusData}
                         />
                       </li>
                     ))}
@@ -368,10 +376,12 @@ function CommunityRow({
   community,
   filters,
   selected,
+  showFocus,
 }: {
   community: DirectoryCommunity;
   filters: Filters;
   selected: boolean;
+  showFocus: boolean;
 }) {
   const label = reliabilityLabel(toReliabilityFacts(community));
   const statusClass = reliabilityStatusClass(label);
@@ -403,9 +413,11 @@ function CommunityRow({
           <small className={styles.indexSummary}>{community.relayHost}</small>
         </span>
       </span>
-      <span className={styles.indexFocusCell}>
-        {community.focus ? focusLabel(community.focus) : "—"}
-      </span>
+      {showFocus ? (
+        <span className={styles.indexFocusCell}>
+          {community.focus ? focusLabel(community.focus) : "—"}
+        </span>
+      ) : null}
       <span className={`${styles.indexStatusCell} ${statusClass}`}>
         <span aria-hidden="true" className={styles.statusDot} />
         {label}

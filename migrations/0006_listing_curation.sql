@@ -2,7 +2,8 @@ ALTER TABLE communities
   ADD COLUMN focus text,
   ADD COLUMN display_name_override text,
   ADD COLUMN curated_at timestamptz,
-  ADD COLUMN curated_by text;
+  ADD COLUMN curated_by text,
+  ADD COLUMN focus_source text;
 
 ALTER TABLE communities
   ADD CONSTRAINT communities_focus
@@ -15,6 +16,14 @@ ALTER TABLE communities
         'research-knowledge',
         'local-regional',
         'team-private'
+      )
+    ),
+  ADD CONSTRAINT communities_focus_source
+    CHECK (
+      focus_source IS NULL OR focus_source IN (
+        'classified',
+        'operator',
+        'confirmed'
       )
     ),
   ADD CONSTRAINT communities_display_name_override

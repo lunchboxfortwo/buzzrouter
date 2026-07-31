@@ -55,15 +55,20 @@ export async function setListingCuration(
       INSERT INTO communities (
         candidate_id,
         focus,
+        focus_source,
         display_name_override,
         curated_at,
         curated_by
       )
-      VALUES ($1, $2, $3, now(), $4)
+      VALUES ($1, $2, CASE WHEN $5 THEN 'confirmed' END, $3, now(), $4)
       ON CONFLICT (candidate_id) DO UPDATE
         SET focus = CASE
               WHEN $5 THEN EXCLUDED.focus
               ELSE communities.focus
+            END,
+            focus_source = CASE
+              WHEN $5 THEN 'confirmed'
+              ELSE communities.focus_source
             END,
             display_name_override = CASE
               WHEN $6 THEN EXCLUDED.display_name_override

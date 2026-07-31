@@ -554,6 +554,11 @@
   grid-template-columns: minmax(220px, 2fr) minmax(100px, 1fr) minmax(96px, 0.9fr) minmax(72px, 0.65fr) 24px;
 }
 
+.indexNoFocus .indexHeader,
+.indexNoFocus .indexRow {
+  grid-template-columns: minmax(220px, 3fr) minmax(96px, 0.9fr) minmax(72px, 0.65fr) 24px;
+}
+
 .indexHeader {
   background: var(--surface-muted);
   border-bottom: 1px solid var(--line);

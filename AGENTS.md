@@ -197,10 +197,14 @@ Key routing rules:
 
 ## Create-community front door
 
-- `app/create-community/` sends visitors to the real hosted Buzz signup
-  (`https://app.builderlab.xyz`, Auth0-backed) since buzz.xyz itself has no
-  signup/login path — verified by fetching its production bundle directly,
-  not assumed.
+- `app/create-community/` LEADS with a one-page create form
+  (`CreateCommunityForm.tsx` → `POST /api/create-community`): the visitor types
+  a community name + handover email and gets back the community URL plus a
+  one-time nsec export. The old "sign up at app.builderlab.xyz yourself" +
+  desktop-download path is kept BELOW as a self-serve fallback (buzz.xyz has no
+  signup/login of its own — verified from its production bundle). The live
+  provisioning path is flag-gated OFF (`BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE=1`),
+  so with the flag off the form fails loudly to that fallback instead of hanging.
 - Per-OS desktop download resolution (`download-assets.ts`) replicates the
   asset-matching regexes and GitHub Releases API call
   (`api.github.com/repos/block/buzz/releases`) found in Buzz's own shipped
@@ -224,7 +228,7 @@ to touch without coordinating.
 
 | Owner | Paths |
 | --- | --- |
-| Bridge / directory (this agent) | `src/shared-channels/`, `src/hosted-signup/`, `app/shared-channels/`, `app/submit/`, `app/create-community/`, `src/submissions/` |
+| Bridge / directory (this agent) | `src/shared-channels/`, `src/hosted-signup/`, `app/shared-channels/`, `app/submit/`, `app/create-community/`, `src/submissions/`, `src/directory/`, `src/db/join-probes.ts`, `src/jobs/probe-joinability.ts` |
 | Presence agent | `src/presence/`, `src/jobs/auto-join-communities.ts`, `src/jobs/harvest-invites.ts`, `src/jobs/refresh-community-summaries.ts`, `src/jobs/refresh-invites.ts` |
 | SHARED — rebase immediately before touching, keep the diff minimal | `migrations/`, `vitest.config.ts`, `app/SiteMasthead.tsx`, `PRODUCT.md`, `README.md`, `package.json`, `.github/workflows/`, `src/db/` |
 
@@ -255,8 +259,26 @@ next number in the old sequence — see `migrations/README.md`. Existing
 - Live calls are opt-in: `resolveLiveBuilderlabConfig` (and the
   `BuilderlabClient` constructor when the base URL is the real host) refuse
   unless `BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE=1`. Tests inject a fake endpoint +
-  fake fetch and never touch the real service. The one interactive step (OAuth
-  login → `exchangeLoginCode`) is deliberately NOT automated.
+  fake fetch and never touch the real service.
+- The one-page front door ADDS account provisioning in front of that binding
+  module (it does not rewrite it). `provision.ts` orchestrates
+  signup → bind (`createHostedCommunity`) → directory listing → one-time nsec
+  export; `signup-driver.ts` is the ONE step needing a real browser
+  (`PlaywrightSignupDriver`, dynamic-imports `playwright`, same live flag) — it
+  drives Block's signup UI then runs the CLI-login exchange in the authenticated
+  browser to get the bearer session. Selectors are best-effort against a
+  third-party UI and every failure raises a stable `signup_*` code so the page
+  degrades to the self-serve fallback. `playwright` is only a transitive dep, so
+  an omit-dev prod build fails the live path gracefully (`signup_browser_unavailable`)
+  rather than crashing; enabling live provisioning needs `playwright install`.
+- Because the account is WRITE-ONCE (returning login is email-OTP gated), the
+  bind key is the real ownership; the user gets the nsec once (shown + download).
+  `store.ts`/`hosted_community_provisions` persists the encrypted key BEFORE the
+  bind and the encrypted session (via `session-custody.ts`, a general
+  AES-256-GCM helper because `encryptConnectorPrivateKey` asserts a 32-byte
+  payload) so a post-bind failure resumes within the session's lifetime instead
+  of orphaning the account. The nsec appears ONLY in the create response (the
+  deliberate export); no other secret is ever returned, logged, or stored plain.
 
 ## List-a-community intake (`app/submit/`)
 
@@ -312,6 +334,70 @@ next number in the old sequence — see `migrations/README.md`. Existing
   loop and throws `"ReadableStream is already closed"` as an unhandled
   rejection (reproduces reliably under Vitest, not just in production);
   drain to completion instead and throw only after the loop ends.
+
+## Managed identities (keyless click-to-join)
+
+- `src/managed-identity/` lets a visitor with no key JOIN a directory community
+  in one tap: BuzzRouter generates a Nostr keypair server-side, seals the secret
+  with the SAME custody path as the connector bridge key
+  (`encryptConnectorPrivateKey`/`decryptConnectorPrivateKey`, host wrapping key
+  from `BUZZROUTER_CONNECTOR_WRAPPING_KEYS_FILE`), and claims the invite with it.
+  The GCM AAD is the identity's **pubkey**. Custody is server-side by operator
+  decision — do not silently move key generation client-side.
+- Tables in `migrations/20260801T1100_managed_identities.sql`: `managed_identities`
+  (sealed secret; `exported_at` custody flag), `managed_identity_sessions` (a
+  durable HttpOnly `br_identity` cookie, stored only as its sha256), and
+  `managed_identity_memberships` (idempotency so we never re-claim upstream).
+- The secret NEVER leaves `withIdentitySecret`'s callback in the clear and is
+  zeroed in `finally`; the ONLY endpoint that returns key material is
+  `POST /api/identity/export` (nsec, once, marks `exported_at`). `store.ts` and
+  `join.ts` deliberately never log it — see the no-leak assertions in
+  `store.integration.test.ts` and `join.test.ts`.
+- Click-to-join (`join.ts`) resolves the community server-side by relay host
+  (never trusting a client-supplied invite code), pins the claim URL to the
+  on-record relay via the connector's `resolveInviteClaimTarget` (SSRF control),
+  and returns a STRUCTURED outcome — a refused claim (`403 join_policy_required`)
+  is `status: "refused"` with a plain reason, not a thrown error to retry.
+- Rate limits live in `src/managed-identity/rate-limit.ts` (generic keyed
+  sliding window, separate from the submission limiter): joins are capped per
+  managed pubkey well under the upstream 10/60s so we are not an abuse amplifier.
+- UI is `app/join/` (server list + `JoinClient`); custody is disclosed up front,
+  never buried. E2e: `e2e/managed-identity-join.spec.ts` runs the whole journey
+  against the fake relay's `/api/invites/claim` stub.
+## Directory "joinable" = make the join work, don't hide the community
+
+- Holding an invite code is not proof a bare deep link (`buzz://join?relay&code`)
+  joins: Buzz gates most joins behind a ToS/age handshake, and a bare claim is
+  refused `403 join_policy_required` (measured live). But that gate is ONE consent
+  click, not a closed door — so we make the join work rather than hiding the
+  community. Measured facts (see the receipt-findings brief / `store` tests):
+  `POST /api/invites/accept-policy {code, policy_version, age_confirmed}` mints a
+  receipt bound to **(code, policy version, expiry) with NO pubkey**, so a
+  server-minted receipt admits a key we never see; the deep link
+  `buzz://join?relay&code&policy_receipt=<receipt>` is what the mobile app reads.
+  The receipt is SHORT-LIVED (~10 min) — never cache, store, precompute, or bake
+  it into a page; mint it at the consent click.
+- The consent flow: `/join/[candidateId]` (`app/join/`) renders the ACTUAL policy
+  and an UNTICKED age/ToS checkbox; only on a real tick does the client POST
+  `/api/invite-receipt`, which mints via accept-policy and returns the receipt,
+  and the client builds the deep link and hands off. `age_confirmed` is the human's
+  answer — never defaulted/hardcoded. The endpoint 409s on a policy-version drift
+  so the user re-reviews. SSRF: the relay host + code come from our own record for
+  the candidate id (`getCandidateInviteTarget`), never caller input.
+- Claimability is still probed + stored (`community_join_probes`,
+  `src/db/join-probes.ts`; hourly `directory.probe-joinability` job) with the same
+  cheap signal — the public `GET /api/join-policy` age flag settles a community as
+  `policy_gated` with no claim; only an un-gated community costs one bare claim.
+  But the verdict now RECLASSIFIES rather than hides: `src/db/directory.ts`
+  exposes `joinStatus` (fresh 12h window, pinned to the advertised code), and
+  `?joinable=true` includes everything with a code EXCEPT a proven-`restricted`
+  (owner-only/allowlist) one. `policy_gated`/`stale`/unprobed stay joinable (they
+  route through the consent flow); only `restricted` is withheld and shown as
+  "Request an invite" (`app/joinability-view.ts`). Auto-join reuses `?joinable=true`.
+- Verify the receipt chain live before trusting reasoning: gated script
+  `scripts/verify-receipt-join.ts` (`BUZZROUTER_VERIFY_RECEIPT_JOIN_LIVE=1`) runs
+  policy→accept→deep-link→claim against a real community and asserts 200 joined.
+  It consumes one invite use on success; run once, never loop (10 claims/60s cap).
 
 ## Maintaining this file
 

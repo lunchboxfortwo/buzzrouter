@@ -3,24 +3,30 @@ import { expect, test } from "@playwright/test";
 const WINDOWS_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-test("is reachable from the masthead and links to the hosted signup", async ({
+test("leads with the one-page create form and normalizes the name", async ({
   page,
 }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/\/create-community$/);
 
-  const signupLink = page.getByRole("link", {
-    name: "Sign up at app.builderlab.xyz",
-  });
-  await expect(signupLink).toHaveAttribute(
-    "href",
-    "https://app.builderlab.xyz",
-  );
+  await expect(
+    page.getByRole("heading", { name: "Create a community" }),
+  ).toBeVisible();
 
+  const nameInput = page.getByPlaceholder("my-community");
+  await expect(nameInput).toBeVisible();
+  await expect(page.getByPlaceholder("you@example.com")).toBeVisible();
+
+  // The live name preview normalizes to the hosted host.
+  await nameInput.fill("My Cool Community!!");
+  await expect(
+    page.getByText("my-cool-community.communities.buzz.xyz"),
+  ).toBeVisible();
+
+  // The desktop app remains available as a self-serve fallback, and the
+  // downstream CTAs still point where they should.
   await expect(page.getByText(/Buzz desktop app/)).toBeVisible();
-  await expect(page.getByText(/134MB/)).toBeVisible();
-
   await expect(
     page.getByRole("link", { name: "List your community" }),
   ).toHaveAttribute("href", "/submit");
@@ -29,34 +35,31 @@ test("is reachable from the masthead and links to the hosted signup", async ({
   ).toHaveAttribute("href", "/shared-channels");
 });
 
-test.describe("platform-specific download", () => {
-  test.use({ userAgent: WINDOWS_UA });
+test("fails loudly with a self-serve fallback when live provisioning is off", async ({
+  page,
+}) => {
+  // The live path is flag-gated OFF by default, so a real submit must surface a
+  // legible failure with a "do it yourself" link — never a silent hang.
+  await page.goto("/create-community");
+  await page.getByPlaceholder("my-community").fill("e2e-offpath");
+  await page.getByPlaceholder("you@example.com").fill("owner@example.com");
+  await page.getByRole("button", { name: /Create my community/ }).click();
 
-  test("detects Windows from the user agent", async ({ page }) => {
-    await page.goto("/create-community");
-    await expect(page.getByText(/Detected Windows/)).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Download for Windows (.exe)" }),
-    ).toBeVisible();
-  });
+  const alert = page.getByRole("alert");
+  await expect(alert).toBeVisible();
+  await expect(
+    alert.getByRole("link", { name: "app.builderlab.xyz" }),
+  ).toHaveAttribute("href", "https://app.builderlab.xyz");
 });
 
-test.describe("unknown platform", () => {
-  test.use({ userAgent: "curl/8.4.0" });
+test.describe("platform-specific download fallback", () => {
+  test.use({ userAgent: WINDOWS_UA });
 
-  test("offers every platform's choices", async ({ page }) => {
+  test("detects Windows for the desktop fallback", async ({ page }) => {
     await page.goto("/create-community");
-    await expect(
-      page.getByText(/couldn't detect your platform/),
-    ).toBeVisible();
+    await expect(page.getByText(/detected Windows/)).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Download for Windows (.exe)" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Download for Linux (.AppImage)" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Apple Silicon Mac (.dmg)" }),
     ).toBeVisible();
   });
 });

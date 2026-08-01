@@ -331,6 +331,8 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
   const label = reliabilityLabel(facts);
   const statusClass = reliabilityStatusClass(label);
   const tone = insigniaTone(community.relayHost);
+  const hasActivity = hasActivitySummary(community);
+  const overview = summaryLine(community);
   const about = aboutText(community.description);
   const work = currentWork({
     claimed: community.claimed,
@@ -365,7 +367,9 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
               </a>
             </div>
             <p className={styles.inspectorSummary}>
-              {summaryLine(community) ?? `Hosted at ${community.relayHost}.`}
+              {hasActivity && community.tagline
+                ? community.tagline
+                : (overview ?? `Hosted at ${community.relayHost}.`)}
             </p>
           </div>
         </div>
@@ -410,26 +414,60 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
       </header>
 
       <MobileCollapsible label="More detail">
-      <dl className={styles.inspectorMetrics}>
-        <div className={styles.metricTile}>
-          <dt>Uptime &middot; 30d</dt>
-          <dd>
-            {uptimeLabel(community)}
-            <span className={styles.metricNote}>
-              {community.evidenceSufficient
-                ? "Successful relay checks"
-                : "Not enough evidence yet"}
-            </span>
-          </dd>
-        </div>
-        <div className={styles.metricTile}>
-          <dt>Last checked</dt>
-          <dd>
-            {relativeTime(community.lastVerifiedAt)}
-            <span className={styles.metricNote}>Most recent relay probe</span>
-          </dd>
-        </div>
-      </dl>
+      {hasActivity ? (
+        <dl className={`${styles.inspectorMetrics} ${styles.inspectorActivity}`}>
+          <div className={styles.metricTile}>
+            <dt>Activity</dt>
+            <dd>
+              {activityLabel(community.activityLevel)}
+              <span className={styles.metricNote}>
+                past {community.activityWindowDays ?? 7}d
+              </span>
+            </dd>
+          </div>
+          <div className={styles.metricTile}>
+            <dt>Active members</dt>
+            <dd>
+              {community.activeMemberCount}
+              <span className={styles.metricNote}>
+                {community.totalMemberCount
+                  ? `of ${community.totalMemberCount} members`
+                  : "active recently"}
+              </span>
+            </dd>
+          </div>
+          <div className={styles.metricTile}>
+            <dt>Messages</dt>
+            <dd>
+              {community.messageCount}
+              <span className={styles.metricNote}>
+                past {community.activityWindowDays ?? 7}d
+              </span>
+            </dd>
+          </div>
+        </dl>
+      ) : (
+        <dl className={styles.inspectorMetrics}>
+          <div className={styles.metricTile}>
+            <dt>Uptime &middot; 30d</dt>
+            <dd>
+              {uptimeLabel(community)}
+              <span className={styles.metricNote}>
+                {community.evidenceSufficient
+                  ? "Successful relay checks"
+                  : "Not enough evidence yet"}
+              </span>
+            </dd>
+          </div>
+          <div className={styles.metricTile}>
+            <dt>Last checked</dt>
+            <dd>
+              {relativeTime(community.lastVerifiedAt)}
+              <span className={styles.metricNote}>Most recent relay probe</span>
+            </dd>
+          </div>
+        </dl>
+      )}
 
       {community.categories.length > 0 ? (
         <div className={styles.inspectorTags}>
@@ -444,33 +482,62 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
         </div>
       ) : null}
 
-      <div className={styles.inspectorSections}>
-        {community.claimed && work ? (
+      {hasActivity ? (
+        (community.tagline && overview) ||
+        community.recentProjects.length > 0 ? (
+          <div className={styles.inspectorSections}>
+            {community.tagline && overview ? (
+              <section className={styles.inspectorSection}>
+                <h3>Overview</h3>
+                <p>{overview}</p>
+                <small>What this community is about.</small>
+              </section>
+            ) : null}
+            {community.recentProjects.length > 0 ? (
+              <section className={styles.inspectorSection}>
+                <h3>Recently</h3>
+                <ul className={styles.reasonList}>
+                  {community.recentProjects.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+                <small>
+                  What the community has been working on lately, from our agent
+                  inside it.
+                </small>
+              </section>
+            ) : null}
+          </div>
+        ) : null
+      ) : (
+        <div className={styles.inspectorSections}>
+          {community.claimed && work ? (
+            <section className={styles.inspectorSection}>
+              <h3>Current work</h3>
+              <p>{work.text}</p>
+              <small>
+                {work.kind === "operator"
+                  ? "Shared by the community’s operator."
+                  : "Observed from the relay’s own published metadata."}
+              </small>
+            </section>
+          ) : null}
           <section className={styles.inspectorSection}>
-            <h3>Current work</h3>
-            <p>{work.text}</p>
-            <small>
-              {work.kind === "operator"
-                ? "Shared by the community’s operator."
-                : "Observed from the relay’s own published metadata."}
-            </small>
+            <h3>What we checked</h3>
+            <ul className={styles.reasonList}>
+              {checks.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+            <small>These are the ranking inputs, not a written summary.</small>
           </section>
-        ) : null}
-        <section className={styles.inspectorSection}>
-          <h3>What we checked</h3>
-          <ul className={styles.reasonList}>
-            {checks.map((reason) => (
-              <li key={reason}>{reason}</li>
-            ))}
-          </ul>
-          <small>These are the ranking inputs, not a written summary.</small>
-        </section>
-        <section className={styles.inspectorSection}>
-          <h3>About</h3>
-          <p>{about.text}</p>
-          <small>From the relay&rsquo;s own published details.</small>
-        </section>
-      </div>
+          <section className={styles.inspectorSection}>
+            <h3>About</h3>
+            <p>{about.text}</p>
+            <small>From the relay&rsquo;s own published details.</small>
+          </section>
+        </div>
+      )}
       </MobileCollapsible>
 
       <footer className={styles.inspectorFooter}>
@@ -503,6 +570,28 @@ function summaryLine(community: DirectoryCommunity): string | null {
   const text = community.description?.trim();
   if (!text || GENERIC_SUMMARY.test(text)) return null;
   return text;
+}
+
+const ACTIVITY_LABEL: Record<string, string> = {
+  quiet: "Quiet",
+  light: "Light",
+  active: "Active",
+  busy: "Busy",
+};
+
+function activityLabel(level: string | null): string {
+  return (level && ACTIVITY_LABEL[level]) || "Active";
+}
+
+/**
+ * True when the in-community agent has summarized this community, so the
+ * inspector can show live activity (members, messages, pace) instead of the
+ * relay-probe metrics. Both fields are written together by the summary job.
+ */
+function hasActivitySummary(community: DirectoryCommunity): boolean {
+  return (
+    community.lastSummarizedAt !== null && community.activeMemberCount !== null
+  );
 }
 
 /**

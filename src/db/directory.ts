@@ -37,6 +37,17 @@ export interface DirectoryCommunity {
   /** Short (~40 char) row tagline from the agent's summary, or null. */
   tagline: string | null;
   websocketOpenMs: number | null;
+  /**
+   * Live-activity summary from the in-community agent (presence), or null/empty
+   * when we have no agent inside. Drives the inspector's activity view.
+   */
+  activeMemberCount: number | null;
+  totalMemberCount: number | null;
+  activityLevel: string | null;
+  messageCount: number | null;
+  activityWindowDays: number | null;
+  recentProjects: string[];
+  lastSummarizedAt: string | null;
 }
 
 export interface DirectoryQuery {
@@ -105,6 +116,13 @@ export async function listDirectoryCommunities(
     supported_nips: number[];
     tagline: string | null;
     ws_open_ms: number | null;
+    active_member_count: number | null;
+    total_member_count: number | null;
+    activity_level: string | null;
+    message_count: number | null;
+    activity_window_days: number | null;
+    recent_projects: unknown;
+    last_summarized_at: Date | null;
   }>(
     `
       WITH directory AS (
@@ -192,6 +210,13 @@ export async function listDirectoryCommunities(
           candidates.first_seen_at,
           communities.focus,
           presence.tagline,
+          presence.active_member_count,
+          presence.total_member_count,
+          presence.activity_level,
+          presence.message_count,
+          presence.window_days AS activity_window_days,
+          presence.recent_projects,
+          presence.last_summarized_at,
           communities.display_name_override,
           COALESCE(metrics.reliability_score, 0)::text AS reliability_score,
           COALESCE(metrics.adoption_pubkeys, 0) AS adoption_pubkeys,
@@ -328,6 +353,17 @@ export async function listDirectoryCommunities(
     supportedNips: row.supported_nips,
     tagline: row.tagline,
     websocketOpenMs: row.ws_open_ms,
+    activeMemberCount: row.active_member_count,
+    totalMemberCount: row.total_member_count,
+    activityLevel: row.activity_level,
+    messageCount: row.message_count,
+    activityWindowDays: row.activity_window_days,
+    recentProjects: Array.isArray(row.recent_projects)
+      ? (row.recent_projects as string[])
+      : [],
+    lastSummarizedAt: row.last_summarized_at
+      ? row.last_summarized_at.toISOString()
+      : null,
   }));
 }
 

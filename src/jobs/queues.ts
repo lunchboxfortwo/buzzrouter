@@ -11,6 +11,7 @@ export const REFRESH_SUMMARIES_QUEUE = "presence.refresh-summaries";
 export const AUTO_JOIN_QUEUE = "presence.auto-join";
 export const HARVEST_INVITES_QUEUE = "presence.harvest-invites";
 export const REFRESH_INVITES_QUEUE = "presence.refresh-invites";
+export const PROBE_JOINABILITY_QUEUE = "directory.probe-joinability";
 export const BRIDGE_DELIVERY_QUEUE = "shared-channels.deliver";
 
 export interface ProbeCandidateJob {
@@ -86,6 +87,14 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
     retryLimit: 2,
   });
 
+  await boss.createQueue(PROBE_JOINABILITY_QUEUE, {
+    deleteAfterSeconds: 24 * 60 * 60,
+    expireInSeconds: 30 * 60,
+    retryBackoff: true,
+    retryDelay: 5 * 60,
+    retryLimit: 2,
+  });
+
   for (const sourceQueue of [
     SOURCE_GITHUB_QUEUE,
     SOURCE_NIP66_QUEUE,
@@ -152,6 +161,14 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
   // Freshness-probe every directory invite and swap in a live candidate.
   await boss.schedule(REFRESH_INVITES_QUEUE, "45 */2 * * *", null, {
     key: "presence-refresh-invites",
+    tz: "UTC",
+  });
+  // Re-probe whether each advertised invite code will actually admit a new user,
+  // so the directory's "joinable" claim stays honest and a stale verdict decays.
+  // Hourly (at :50) — a batch-capped pass that keeps the whole set fresh over
+  // time without ever approaching the relay's per-pubkey claim rate limit.
+  await boss.schedule(PROBE_JOINABILITY_QUEUE, "50 * * * *", null, {
+    key: "directory-probe-joinability",
     tz: "UTC",
   });
 }

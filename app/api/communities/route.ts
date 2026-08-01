@@ -17,9 +17,19 @@ export async function GET(request: Request): Promise<Response> {
   });
 
   const communities = allCommunities
+    // "joinable" means a user CAN join, not "the claim is frictionless". A
+    // public web-join URL always works; an invite code is joinable unless a
+    // probe found the door genuinely closed — owner-only/allowlist
+    // (`restricted`). A ToS/age gate (`policy_gated`) is one consent click, not a
+    // dead end (`/join/[candidateId]` mints a policy receipt), so it stays
+    // joinable; `stale`/unconfirmed codes degrade gracefully into the same flow
+    // rather than being hidden. Only a known-`restricted` code is withheld — the
+    // row still lists, with "Request an invite" instead of a join button.
     .filter(
       (community) =>
-        !joinableOnly || community.inviteCode || community.publicUrl,
+        !joinableOnly ||
+        community.publicUrl ||
+        (Boolean(community.inviteCode) && community.joinStatus !== "restricted"),
     )
     .map((community) => ({
       host: community.relayHost,

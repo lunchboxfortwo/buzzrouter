@@ -1,5 +1,7 @@
 import type { Pool } from "pg";
 
+import type { JoinStatus } from "../directory/joinability";
+
 export const DIRECTORY_SORTS = ["evidence", "recent", "reliable", "new"] as const;
 export type DirectorySort = (typeof DIRECTORY_SORTS)[number];
 
@@ -25,6 +27,14 @@ export interface DirectoryCommunity {
   iconUrl: string | null;
   publicUrl: string | null;
   inviteCode: string | null;
+  /**
+   * Fresh claimability verdict for the advertised invite code, or null when we
+   * have no current verdict (never probed, verdict decayed, or code rotated).
+   * `open` means a bare claim actually lands; `policy_gated`/`restricted`/`stale`
+   * mean a code-only join is refused. Only `open` should be presented as
+   * one-tap joinable. See `src/directory/joinability.ts`.
+   */
+  joinStatus: JoinStatus | null;
   joinMode: string | null;
   joinUrl: string | null;
   lastVerifiedAt: string;
@@ -105,6 +115,7 @@ export async function listDirectoryCommunities(
     has_icon: boolean;
     public_url: string | null;
     invite_code: string | null;
+    join_status: string | null;
     join_mode: string | null;
     join_url: string | null;
     last_verified_at: Date;
@@ -207,6 +218,16 @@ export async function listDirectoryCommunities(
           icons.candidate_id IS NOT NULL AS has_icon,
           join_target.public_url,
           join_target.invite_code,
+          -- Trust a claimability verdict only while it is fresh (decay window,
+          -- kept in step with STALE_AFTER_MS in jobs/probe-joinability.ts) AND
+          -- was recorded against the code we are still advertising. A stale or
+          -- code-rotated verdict reads as null, so the row stops claiming
+          -- "joinable" until the next probe pass re-confirms it.
+          CASE
+            WHEN probe.probed_at >= now() - interval '12 hours'
+              AND probe.probed_code IS NOT DISTINCT FROM join_target.invite_code
+              THEN probe.status
+          END AS join_status,
           candidates.first_seen_at,
           communities.focus,
           presence.tagline,
@@ -294,6 +315,8 @@ export async function listDirectoryCommunities(
           ON metrics.candidate_id = candidates.id
         LEFT JOIN presence_communities AS presence
           ON presence.relay_host = candidates.host
+        LEFT JOIN community_join_probes AS probe
+          ON probe.candidate_id = candidates.id
         WHERE candidates.state = 'verified_buzz'
           AND latest.probed_at >= now() - interval '7 days'
       )
@@ -339,6 +362,7 @@ export async function listDirectoryCommunities(
     reliabilityScore: Number(row.reliability_score ?? 0),
     publicUrl: row.public_url,
     inviteCode: row.invite_code,
+    joinStatus: (row.join_status as JoinStatus | null) ?? null,
     iconUrl: row.has_icon
       ? `/api/community-icons/${row.candidate_id}`
       : null,

@@ -224,7 +224,7 @@ to touch without coordinating.
 
 | Owner | Paths |
 | --- | --- |
-| Bridge / directory (this agent) | `src/shared-channels/`, `src/hosted-signup/`, `app/shared-channels/`, `app/submit/`, `app/create-community/`, `src/submissions/` |
+| Bridge / directory (this agent) | `src/shared-channels/`, `src/hosted-signup/`, `app/shared-channels/`, `app/submit/`, `app/create-community/`, `src/submissions/`, `src/directory/`, `src/db/join-probes.ts`, `src/jobs/probe-joinability.ts` |
 | Presence agent | `src/presence/`, `src/jobs/auto-join-communities.ts`, `src/jobs/harvest-invites.ts`, `src/jobs/refresh-community-summaries.ts`, `src/jobs/refresh-invites.ts` |
 | SHARED — rebase immediately before touching, keep the diff minimal | `migrations/`, `vitest.config.ts`, `app/SiteMasthead.tsx`, `PRODUCT.md`, `README.md`, `package.json`, `.github/workflows/`, `src/db/` |
 
@@ -312,6 +312,41 @@ next number in the old sequence — see `migrations/README.md`. Existing
   loop and throws `"ReadableStream is already closed"` as an unhandled
   rejection (reproduces reliably under Vitest, not just in production);
   drain to completion instead and throw only after the loop ends.
+
+## Directory "joinable" = make the join work, don't hide the community
+
+- Holding an invite code is not proof a bare deep link (`buzz://join?relay&code`)
+  joins: Buzz gates most joins behind a ToS/age handshake, and a bare claim is
+  refused `403 join_policy_required` (measured live). But that gate is ONE consent
+  click, not a closed door — so we make the join work rather than hiding the
+  community. Measured facts (see the receipt-findings brief / `store` tests):
+  `POST /api/invites/accept-policy {code, policy_version, age_confirmed}` mints a
+  receipt bound to **(code, policy version, expiry) with NO pubkey**, so a
+  server-minted receipt admits a key we never see; the deep link
+  `buzz://join?relay&code&policy_receipt=<receipt>` is what the mobile app reads.
+  The receipt is SHORT-LIVED (~10 min) — never cache, store, precompute, or bake
+  it into a page; mint it at the consent click.
+- The consent flow: `/join/[candidateId]` (`app/join/`) renders the ACTUAL policy
+  and an UNTICKED age/ToS checkbox; only on a real tick does the client POST
+  `/api/invite-receipt`, which mints via accept-policy and returns the receipt,
+  and the client builds the deep link and hands off. `age_confirmed` is the human's
+  answer — never defaulted/hardcoded. The endpoint 409s on a policy-version drift
+  so the user re-reviews. SSRF: the relay host + code come from our own record for
+  the candidate id (`getCandidateInviteTarget`), never caller input.
+- Claimability is still probed + stored (`community_join_probes`,
+  `src/db/join-probes.ts`; hourly `directory.probe-joinability` job) with the same
+  cheap signal — the public `GET /api/join-policy` age flag settles a community as
+  `policy_gated` with no claim; only an un-gated community costs one bare claim.
+  But the verdict now RECLASSIFIES rather than hides: `src/db/directory.ts`
+  exposes `joinStatus` (fresh 12h window, pinned to the advertised code), and
+  `?joinable=true` includes everything with a code EXCEPT a proven-`restricted`
+  (owner-only/allowlist) one. `policy_gated`/`stale`/unprobed stay joinable (they
+  route through the consent flow); only `restricted` is withheld and shown as
+  "Request an invite" (`app/joinability-view.ts`). Auto-join reuses `?joinable=true`.
+- Verify the receipt chain live before trusting reasoning: gated script
+  `scripts/verify-receipt-join.ts` (`BUZZROUTER_VERIFY_RECEIPT_JOIN_LIVE=1`) runs
+  policy→accept→deep-link→claim against a real community and asserts 200 joined.
+  It consumes one invite use on success; run once, never loop (10 claims/60s cap).
 
 ## Maintaining this file
 

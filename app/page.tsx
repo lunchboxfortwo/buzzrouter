@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 
 import Image from "next/image";
 
@@ -272,6 +271,7 @@ function CommunityRow({
   selected: boolean;
 }) {
   const tone = insigniaTone(community.relayHost);
+  const summary = summaryLine(community);
 
   return (
     <CommunityRowLink
@@ -312,9 +312,9 @@ function CommunityRow({
               </span>
             ) : null}
           </span>
-          <small className={styles.indexSummary}>
-            {hostParts(community.relayHost)}
-          </small>
+          {summary ? (
+            <small className={styles.indexSummary}>{summary}</small>
+          ) : null}
         </span>
       </span>
       <span className={styles.indexFocusCell}>
@@ -366,7 +366,7 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
               </a>
             </div>
             <p className={styles.inspectorSummary}>
-              {community.description ?? `A Buzz community at ${community.relayHost}.`}
+              {summaryLine(community) ?? `Hosted at ${community.relayHost}.`}
             </p>
           </div>
         </div>
@@ -490,18 +490,20 @@ function firstValue(value: string | string[] | undefined): string {
 
 
 /**
- * Offers the browser a break after each dot so a wrapped host splits at label
- * boundaries rather than mid-word.
+ * A short, community-specific line for a directory row — what THIS community is
+ * about, not its relay URL. Every listing is a Buzz community, so the generic
+ * relay boilerplate ("Buzz", "private team communication relay") says nothing
+ * that distinguishes it; in that case we return null and the row simply omits
+ * the line rather than showing filler. The description is clamped to one line
+ * by CSS (`.indexSummary`).
  */
-function hostParts(host: string) {
-  const labels = host.split(".");
-  return labels.map((label, index) => (
-    <Fragment key={`${label}-${index}`}>
-      {label}
-      {index < labels.length - 1 ? "." : null}
-      {index < labels.length - 1 ? <wbr /> : null}
-    </Fragment>
-  ));
+const GENERIC_SUMMARY =
+  /^\s*(a\s+)?buzz(\s+(relay|community|workspace))?\.?\s*$|private team communication relay/i;
+
+function summaryLine(community: DirectoryCommunity): string | null {
+  const text = community.description?.trim();
+  if (!text || GENERIC_SUMMARY.test(text)) return null;
+  return text;
 }
 
 /**

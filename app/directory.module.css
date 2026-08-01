@@ -773,6 +773,16 @@
   background: var(--accent-strong);
 }
 
+/* Admission is restricted (owner-only / allowlist): a muted, non-actionable
+   label so the row sets expectations instead of offering a dead-end join. */
+.indexRowRequest {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 560;
+  padding: 8px 4px;
+  white-space: nowrap;
+}
+
 .indexFooter {
   align-items: center;
   background: var(--surface-muted);

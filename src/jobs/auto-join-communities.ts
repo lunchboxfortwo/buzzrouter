@@ -14,9 +14,11 @@ import { AUTO_JOIN_QUEUE, REFRESH_SUMMARIES_QUEUE } from "./queues";
  * Auto-joins every joinable community advertised by the public directory that
  * the BuzzRouter Agent is not already a member of.
  *
- * The job reads the directory's `GET /api/communities?joinable=true` feed, skips
- * any host already recorded in `presence_communities`, and for each remaining
- * community that carries an invite code claims the invite as the agent —
+ * The job reads the directory's `GET /api/communities?joinable=true` feed (every
+ * community a user could join — anything with a code the probe did not find
+ * owner-only/allowlist), skips any host already recorded in
+ * `presence_communities`, and for each remaining community that carries an
+ * invite code claims the invite as the agent —
  * explicitly accepting Block's Terms of Service plus the 18+ age attestation
  * (`acceptTerms: true`; this is authorized/counsel-approved). A successful join
  * records the membership so the recurring 4h summary refresh picks the community

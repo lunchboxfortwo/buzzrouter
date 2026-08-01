@@ -14,8 +14,8 @@ import {
 } from "../presence/extract-invites";
 import { llmExtractInvites } from "../presence/llm-extract-invites";
 import {
-  readCommunity as defaultReadCommunity,
-  type PresenceMessage,
+  readCommunityContent as defaultReadCommunityContent,
+  type CommunityContent,
   type ReadCommunityOptions,
 } from "../presence/reader";
 import { HARVEST_INVITES_QUEUE } from "./queues";
@@ -25,9 +25,10 @@ import { HARVEST_INVITES_QUEUE } from "./queues";
  * already read, and turns them into coverage.
  *
  * The agent is a read-only member of many Buzz communities; people paste invite
- * links (`buzz://join?...`, `https://host/invite/<code>`) into channels. This
- * job reads recent messages from every joined community, extracts those invites,
- * and classifies each one against the set of communities we're already in:
+ * links (`buzz://join?...`, `https://host/invite/<code>`) into channels — and
+ * pin them in channel descriptions. This job reads recent messages AND each
+ * channel's metadata (`about`/`name`) from every joined community, extracts
+ * those invites, and classifies each one against the communities we're in:
  *
  *   - NOT already joined  → INGEST it as a directory candidate (source type
  *     `"harvest"`, carrying the invite code) rather than joining directly, so
@@ -43,9 +44,9 @@ import { HARVEST_INVITES_QUEUE } from "./queues";
  * is logged.
  */
 
-export type ReadCommunityFn = (
+export type ReadContentFn = (
   options: ReadCommunityOptions,
-) => Promise<PresenceMessage[]>;
+) => Promise<CommunityContent>;
 
 export type LlmExtractFn = (
   messages: { content: string }[],
@@ -59,8 +60,11 @@ export type InjectCandidateFn = (
 
 export interface HarvestInvitesDeps {
   pool: Pool;
-  /** Injectable community reader; defaults to the real NIP-42 relay read. */
-  readCommunity?: ReadCommunityFn;
+  /**
+   * Injectable community reader; defaults to the real NIP-42 relay read that
+   * returns both the channel index and recent messages.
+   */
+  readContent?: ReadContentFn;
   /** Injectable candidate ingestion; defaults to the real `upsertCandidate`. */
   injectImpl?: InjectCandidateFn;
   /**
@@ -99,7 +103,7 @@ interface Harvested {
  */
 async function collectInvites(
   deps: HarvestInvitesDeps,
-  readCommunity: ReadCommunityFn,
+  readContent: ReadContentFn,
   llmExtract: LlmExtractFn,
   result: HarvestInvitesResult,
 ): Promise<{ joinedHosts: Set<string>; harvested: Harvested[] }> {
@@ -118,9 +122,9 @@ async function collectInvites(
 
   for (const community of joined) {
     result.scannedCommunities += 1;
-    let messages: PresenceMessage[];
+    let content: CommunityContent;
     try {
-      messages = await readCommunity({
+      content = await readContent({
         limit: deps.messageLimit,
         relayUrl: community.relayUrl,
       });
@@ -133,19 +137,28 @@ async function collectInvites(
       continue;
     }
 
-    // First pass: the deterministic structured-format extractor.
-    for (const message of messages) {
-      for (const invite of extractInvites(message.content)) {
+    // Scan chat AND channel metadata: invites get pinned in a channel's
+    // `about`/`name` as often as they're pasted into chat. Both are free-form
+    // text carrying the same two structured link shapes.
+    const texts: string[] = content.messages.map((message) => message.content);
+    for (const channel of content.channels) {
+      if (channel.about) texts.push(channel.about);
+      if (channel.name) texts.push(channel.name);
+    }
+
+    // First pass: the deterministic structured-format extractor over every text.
+    for (const text of texts) {
+      for (const invite of extractInvites(text)) {
         push(invite, community.relayHost);
       }
     }
 
-    // Second pass: LLM recall for invites the regex missed. Every candidate is
-    // already re-validated by `extractInvites` inside `llmExtract`, so these are
-    // merged (and deduped) on equal footing with the regex hits. Isolated so a
-    // recall failure never aborts the scan.
+    // Second pass: LLM recall for invites the regex missed, over the same texts.
+    // Every candidate is already re-validated by `extractInvites` inside
+    // `llmExtract`, so these merge (and dedupe) on equal footing with the regex
+    // hits. Isolated so a recall failure never aborts the scan.
     try {
-      for (const invite of await llmExtract(messages)) {
+      for (const invite of await llmExtract(texts.map((content) => ({ content })))) {
         push(invite, community.relayHost);
       }
     } catch (error) {
@@ -163,7 +176,7 @@ async function collectInvites(
 export async function harvestInvites(
   deps: HarvestInvitesDeps,
 ): Promise<HarvestInvitesResult> {
-  const readCommunity = deps.readCommunity ?? defaultReadCommunity;
+  const readContent = deps.readContent ?? defaultReadCommunityContent;
   const injectImpl = deps.injectImpl ?? defaultUpsertCandidate;
   const llmExtract = deps.llmExtractImpl ?? llmExtractInvites;
 
@@ -177,7 +190,7 @@ export async function harvestInvites(
 
   const { harvested, joinedHosts } = await collectInvites(
     deps,
-    readCommunity,
+    readContent,
     llmExtract,
     result,
   );

@@ -1,17 +1,26 @@
+import { FOCUS_LABELS, FOCUS_SLUGS, isFocusSlug, type FocusSlug } from "../ranking/focus";
 import type { PresenceMessage } from "./reader";
 
 /**
  * Summarizes a Buzz community FOR A PROSPECTIVE MEMBER browsing the directory
- * and deciding whether to join. The summary surfaces exactly three things:
+ * and deciding whether to join. The summary surfaces:
  *
  *   1. goals          — what the community is about / its overall purpose.
  *   2. recentProjects — 2–4 short bullets on what it's recently working on.
- *   3. activity       — how active it is, including a count of active members.
+ *   3. focus          — the single best-fit directory focus slug (or null).
+ *   4. activity       — how active it is, including a count of active members.
  *
- * Only `goals` and `recentProjects` come from the LLM. Every count
+ * Only `goals`, `recentProjects`, and `focus` come from the LLM. Every count
  * (activeMemberCount, messageCount, channelCount) and the derived activityLevel
  * are computed DETERMINISTICALLY here from the message set — never asked of the
  * model — so the directory's activity claims are auditable and stable.
+ *
+ * `focus` is the directory's single-select filter vocabulary. The heuristic
+ * classifier (src/ranking/classify-focus) guesses it from the hostname and is
+ * deliberately low-coverage; the agent, reading real activity, is a much
+ * stronger signal, so its classification is written with focus_source='presence'
+ * (see refresh-community-summaries). The model must pick one of the known slugs
+ * or return null — a wrong focus is worse than none.
  */
 
 const DEFAULT_OPENROUTER_ORIGIN = "https://openrouter.ai";
@@ -26,6 +35,8 @@ export type ActivityLevel = "quiet" | "light" | "active" | "busy";
 export interface CommunitySummary {
   goals: string;
   recentProjects: string[];
+  /** Best-fit directory focus slug from real activity, or null if unclear. */
+  focus: FocusSlug | null;
   activityLevel: ActivityLevel;
   activeMemberCount: number;
   totalMemberCount?: number;
@@ -34,10 +45,12 @@ export interface CommunitySummary {
   windowDays: number;
 }
 
-/** The two fields the LLM produces; everything else is computed in code. */
+/** The fields the LLM produces; everything else is computed in code. */
 export interface CommunityBlurb {
   goals: string;
   recentProjects: string[];
+  /** One of FOCUS_SLUGS, or null when the activity does not clearly fit one. */
+  focus: FocusSlug | null;
 }
 
 export interface ActivityMetrics {
@@ -132,12 +145,17 @@ export function computeActivityMetrics(
   };
 }
 
+/** `slug — Label` lines the model chooses `focus` from, built from one source. */
+const FOCUS_MENU = FOCUS_SLUGS.map(
+  (slug) => `    ${slug} — ${FOCUS_LABELS[slug]}`,
+).join("\n");
+
 const SYSTEM_PROMPT = [
   "You write neutral, public-facing blurbs for a community directory.",
   "Your reader is a prospective member deciding whether to JOIN this community.",
   "You are given recent public messages, each with a channel, content, and",
   "timestamp — nothing that identifies who wrote them.",
-  "Produce a JSON object with exactly two fields:",
+  "Produce a JSON object with exactly three fields:",
   '  "goals": a 1-2 sentence description of what the community is about and its',
   "    overall purpose.",
   "The reader is already browsing a directory of Buzz communities and knows every",
@@ -146,11 +164,16 @@ const SYSTEM_PROMPT = [
   "distinct (its topic, who it's for, what it does).",
   '  "recentProjects": an array of 2-4 short strings, each a single interesting',
   "    thing the community has recently been working on or discussing.",
+  '  "focus": the ONE category from the list below that best fits this',
+  "    community's primary topic, given as its exact slug. Choose the single best",
+  "    fit; use null (not a guess) if the activity does not clearly match any, or",
+  "    if there is too little activity to tell. Allowed slugs:",
+  FOCUS_MENU,
   "Rules: Write for an outsider. Do NOT include usernames, display names,",
   "pubkeys, npubs, or any IDs. Do NOT quote messages verbatim — paraphrase.",
   "Do NOT invent facts not supported by the messages. If there is too little",
-  'activity to tell, say so plainly in "goals" and return an empty',
-  '"recentProjects" array. Respond with ONLY the JSON object.',
+  'activity to tell, say so plainly in "goals", return an empty "recentProjects"',
+  'array, and set "focus" to null. Respond with ONLY the JSON object.',
 ].join("\n");
 
 /**
@@ -234,6 +257,7 @@ export async function buildCommunitySummary(
     activeMemberCount: metrics.activeMemberCount,
     activityLevel: metrics.activityLevel,
     channelCount: metrics.channelCount,
+    focus: blurb.focus,
     goals: blurb.goals,
     messageCount: metrics.messageCount,
     recentProjects: blurb.recentProjects,
@@ -246,9 +270,11 @@ export async function buildCommunitySummary(
 }
 
 /**
- * Robustly extracts `{ goals, recentProjects }` from a model completion. Falls
- * back to treating the raw text as the goals blurb when it is not valid JSON,
- * so a well-behaved-but-unfenced model never yields an empty summary.
+ * Robustly extracts `{ goals, recentProjects, focus }` from a model completion.
+ * Falls back to treating the raw text as the goals blurb when it is not valid
+ * JSON, so a well-behaved-but-unfenced model never yields an empty summary. Any
+ * `focus` that is not one of the known slugs is coerced to null — a wrong focus
+ * is worse than none, so only an exact vocabulary match is trusted.
  */
 export function parseBlurb(content: string): CommunityBlurb {
   const trimmed = content.trim();
@@ -257,6 +283,7 @@ export function parseBlurb(content: string): CommunityBlurb {
     const parsed = JSON.parse(candidate) as {
       goals?: unknown;
       recentProjects?: unknown;
+      focus?: unknown;
     };
     const goals =
       typeof parsed.goals === "string" && parsed.goals.trim().length > 0
@@ -268,9 +295,10 @@ export function parseBlurb(content: string): CommunityBlurb {
           .map((item) => item.trim())
           .filter((item) => item.length > 0)
       : [];
-    return { goals, recentProjects };
+    const focus = isFocusSlug(parsed.focus) ? parsed.focus : null;
+    return { focus, goals, recentProjects };
   } catch {
-    return { goals: trimmed, recentProjects: [] };
+    return { focus: null, goals: trimmed, recentProjects: [] };
   }
 }
 

@@ -3,8 +3,10 @@ import type { Pool } from "pg";
 
 import {
   listJoinedCommunities,
+  recordPresenceFocus,
   upsertSummary,
 } from "../db/presence";
+import type { FocusSlug } from "../ranking/focus";
 import {
   readCommunity as defaultReadCommunity,
   readMemberCount as defaultReadMemberCount,
@@ -41,6 +43,11 @@ export type ReadMemberCountFn = (options: {
   relayUrl: string;
 }) => Promise<number>;
 
+export type RecordFocusFn = (
+  relayHost: string,
+  focus: FocusSlug,
+) => Promise<void>;
+
 export interface RefreshDeps {
   pool: Pool;
   /** Injectable relay reader; defaults to the real NIP-42 reader. */
@@ -49,6 +56,8 @@ export interface RefreshDeps {
   buildSummary?: BuildSummaryFn;
   /** Injectable NIP-29 roster reader; defaults to the real reader. */
   readMemberCount?: ReadMemberCountFn;
+  /** Injectable focus writer; defaults to the real `recordPresenceFocus`. */
+  recordFocus?: RecordFocusFn;
 }
 
 export interface RefreshResult {
@@ -62,6 +71,10 @@ export async function refreshCommunitySummaries(
   const readCommunity = deps.readCommunity ?? defaultReadCommunity;
   const buildSummary = deps.buildSummary ?? defaultBuildSummary;
   const readMemberCount = deps.readMemberCount ?? defaultReadMemberCount;
+  const recordFocus =
+    deps.recordFocus ??
+    ((relayHost: string, focus: FocusSlug) =>
+      recordPresenceFocus(deps.pool, relayHost, focus));
 
   const communities = await listJoinedCommunities(deps.pool);
   let ok = 0;
@@ -91,6 +104,23 @@ export async function refreshCommunitySummaries(
         );
       }
       await upsertSummary(deps.pool, community.relayHost, summary);
+      // Best-effort: surface the activity-classified focus onto the directory
+      // listing (focus_source='presence'). Never let a focus-write failure fail
+      // the whole community — the summary is already saved.
+      if (summary.focus) {
+        try {
+          await recordFocus(community.relayHost, summary.focus);
+        } catch (focusError) {
+          const reason =
+            focusError instanceof Error
+              ? focusError.message
+              : String(focusError);
+          console.warn(
+            `presence.refresh-summaries: focus write failed ` +
+              `${community.relayHost}: ${reason}`,
+          );
+        }
+      }
       ok += 1;
       console.log(
         `presence.refresh-summaries: refreshed ${community.relayHost} ` +

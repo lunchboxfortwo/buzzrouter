@@ -104,16 +104,21 @@ describe("parseBlurb", () => {
   it("parses a clean JSON object", () => {
     expect(
       parseBlurb('{"goals":"Build things","recentProjects":["A","B"]}'),
-    ).toEqual({ goals: "Build things", recentProjects: ["A", "B"] });
+    ).toEqual({ focus: null, goals: "Build things", recentProjects: ["A", "B"] });
   });
 
   it("extracts JSON embedded in prose / code fences", () => {
     const text = 'Sure!\n```json\n{"goals":"G","recentProjects":["X"]}\n```';
-    expect(parseBlurb(text)).toEqual({ goals: "G", recentProjects: ["X"] });
+    expect(parseBlurb(text)).toEqual({
+      focus: null,
+      goals: "G",
+      recentProjects: ["X"],
+    });
   });
 
   it("falls back to raw text when not JSON", () => {
     expect(parseBlurb("A friendly builders community.")).toEqual({
+      focus: null,
       goals: "A friendly builders community.",
       recentProjects: [],
     });
@@ -122,7 +127,25 @@ describe("parseBlurb", () => {
   it("drops non-string project entries", () => {
     expect(
       parseBlurb('{"goals":"G","recentProjects":["A",1,null,"B"]}'),
-    ).toEqual({ goals: "G", recentProjects: ["A", "B"] });
+    ).toEqual({ focus: null, goals: "G", recentProjects: ["A", "B"] });
+  });
+
+  it("keeps a focus that is a known vocabulary slug", () => {
+    expect(
+      parseBlurb(
+        '{"goals":"G","recentProjects":[],"focus":"bitcoin-money"}',
+      ).focus,
+    ).toBe("bitcoin-money");
+  });
+
+  it("coerces an unknown or malformed focus to null", () => {
+    expect(
+      parseBlurb('{"goals":"G","recentProjects":[],"focus":"crypto-bros"}')
+        .focus,
+    ).toBeNull();
+    expect(
+      parseBlurb('{"goals":"G","recentProjects":[],"focus":42}').focus,
+    ).toBeNull();
   });
 });
 
@@ -230,7 +253,7 @@ describe("summarizeMessages", () => {
         apiKey: "k",
         fetchImpl: valid as unknown as typeof fetch,
       }),
-    ).toEqual({ goals: "Ship", recentProjects: ["A", "B"] });
+    ).toEqual({ focus: null, goals: "Ship", recentProjects: ["A", "B"] });
 
     const malformed = vi.fn(async () => completion("totally not json"));
     expect(
@@ -238,7 +261,7 @@ describe("summarizeMessages", () => {
         apiKey: "k",
         fetchImpl: malformed as unknown as typeof fetch,
       }),
-    ).toEqual({ goals: "totally not json", recentProjects: [] });
+    ).toEqual({ focus: null, goals: "totally not json", recentProjects: [] });
   });
 
   it("throws on a non-OK OpenRouter response", async () => {
@@ -259,7 +282,10 @@ describe("buildCommunitySummary", () => {
       message({ channelId: "b", pubkey: "bob" }),
     ];
     const fetchImpl = vi.fn(async () =>
-      completion('{"goals":"A builder guild","recentProjects":["Relay work"]}'),
+      completion(
+        '{"goals":"A builder guild","recentProjects":["Relay work"],' +
+          '"focus":"building"}',
+      ),
     );
     const summary = await buildCommunitySummary(messages, {
       apiKey: "k",
@@ -271,6 +297,7 @@ describe("buildCommunitySummary", () => {
       activeMemberCount: 2,
       activityLevel: "light",
       channelCount: 2,
+      focus: "building",
       goals: "A builder guild",
       messageCount: 2,
       recentProjects: ["Relay work"],

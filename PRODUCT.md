@@ -24,14 +24,21 @@ join path without controlling BuzzRouter's independent technical evidence.
 
 ## Product Purpose
 
-BuzzRouter is the public discovery layer for Buzz communities. It converts
-relay-based spaces into a legible directory where people can:
+BuzzRouter is the public discovery layer for Buzz communities, plus the
+surfaces an operator uses to get a community into that directory and connected
+to others. It has four surfaces:
 
-- Search by community name, description, or category.
-- Filter by category.
-- Read a one-line explanation before opening a listing.
-- Inspect direct relay and discovery evidence.
-- Open or join the community in Buzz.
+- **Discover** — the verified directory. Converts relay-based spaces into a
+  legible directory where people can search by name, description, or
+  category; filter by category; read a one-line explanation before opening a
+  listing; inspect direct relay and discovery evidence; and open or join the
+  community in Buzz.
+- **List** (`/submit`) — a community owner submits a relay, community URL, or
+  invite for verification and listing.
+- **Link** (`/shared-channels`) — two verified communities pair one channel
+  each and BuzzRouter mirrors messages between them with visible attribution.
+- **Create** (`/create-community`) — a wrapper over Block's hosted Buzz
+  signup. In progress, not shipped.
 
 The MVP succeeds when a first-time visitor can understand what several communities
 do and make a confident join decision in a few minutes.
@@ -57,7 +64,8 @@ prototype or placeholder directory in the serving path.
 
 The shipped directory provides:
 
-- A two-route masthead: `Discover` and `Submit`.
+- A four-route masthead: `Discover`, `Create a community`, `Shared channels`,
+  and `List a community`.
 - Community and category totals for the current result set.
 - Search across display name, one-line description, and category tags.
 - Category filtering across Bitcoin, Builders, Culture, GTM, Labs, and Privacy.
@@ -77,6 +85,90 @@ verification pipeline; it does not publish immediately.
 Verified operators can claim listings and publish bounded display metadata,
 categories, slugs, and public join configuration. Claimed communities can have a
 dedicated public profile route.
+
+## Link: Cross-Community Shared Channels
+
+Link (`/shared-channels`) lets two verified community owners pair one channel
+in their community with one channel in another, so members in each keep
+talking in their home community while BuzzRouter mirrors messages and threads
+between the two channels with visible attribution. It is deliberately not a
+managed inbox or a broadcast tool: BuzzRouter pairs exactly one channel per
+route, never impersonates a member, and never injects itself as a party to the
+conversation.
+
+Admission and pairing are a two-step flow (this replaced the v0.2 web-ceremony
+design in `docs/buzzrouter-cross-community-messaging-v0.2.md` — read the
+current code in `src/shared-channels/`, not that doc, for the shipped
+mechanics):
+
+1. **Admit the bridge.** The owner pastes an invite link from their Buzz app
+   into BuzzRouter (or admits the bridge by key or self-hosted connector
+   command); the bridge redeems it and joins the community as an ordinary
+   member, the same as any other member would.
+2. **Confirm the binding.** The owner arms a proposed channel pairing on
+   BuzzRouter's web UI, which mints a single-use code, then types that code as
+   an ordinary message in the chosen Buzz channel. The bridge only activates
+   the route once it observes that code posted by a pubkey the community's
+   relay-signed roster marks owner or admin — a forwarded or leaked
+   confirmation link grants nothing on its own, because the web step only
+   arms the pairing and never activates it.
+
+Each community gets its own generated bridge keypair per connection
+(`src/shared-channels/installer.ts`); messages are re-signed by that bridge
+identity with `br` tags carrying the source community, source event, and
+source actor so recipients can see whose message is being mirrored and from
+where. Delivery state, retries, and deduplication are tracked durably in
+PostgreSQL (`bridge_messages`/`bridge_deliveries`), reasoned about in
+`docs/hub-routing-analysis.md`.
+
+Shared channels are new and have not been proven at scale — they connect a
+small number of paired channels today, not a general message bus between
+communities.
+
+## Create: Hosted Community Signup
+
+Create (`/create-community`) is a wrapper over Block's hosted Buzz signup
+(`app.builderlab.xyz`) for people who want a new Buzz community without
+running their own relay. **This is in progress and not shipped.** Feasibility
+was proven live against the hosted service — a self-generated Nostr key with
+no prior registration and no desktop app can complete the identity-binding
+challenge and create a hosted community end-to-end (see
+`/home/lunchbox/firstmate/data/bind-live-proof/report.md`) — but the current
+`/create-community` route only detects the visitor's OS and links out to
+Buzz's own desktop download; it does not yet drive the hosted signup itself.
+
+## Agents
+
+BuzzRouter operates two distinct Nostr identities against Buzz relays. They
+are not interchangeable, and the difference is a trust boundary, not an
+implementation detail:
+
+- **The bridge** (`src/shared-channels/`) exists only to carry Link traffic.
+  It joins a community's relay only after being explicitly invited or
+  admitted by an owner/admin, gets a freshly generated keypair per connection,
+  and subscribes to exactly one mapped channel per route (a `#h`-tag filter
+  scoped to that channel's ID — see `src/shared-channels/connector.ts`). It
+  runs no LLM and does not summarize, interpret, or act on what it reads; it
+  mirrors message content verbatim, re-signed under its own identity with
+  attribution tags. It cannot see any channel it was not explicitly paired to,
+  and it cannot see communities it was never admitted into at all.
+- **The presence agent** (`src/presence/`, plus the jobs in
+  `src/jobs/auto-join-communities.ts`, `harvest-invites.ts`, and
+  `refresh-community-summaries.ts`) is a single shared identity
+  (`.secrets/buzz-agent.identity.json` / `BUZZ_AGENT_KEY`) that joins any
+  community the public directory lists as joinable, on a recurring schedule.
+  It reads community messages and sends them to an LLM to derive a
+  directory-facing activity summary — goals, recent projects, a focus
+  category, and a deterministically computed activity level (`src/presence/
+  summarize.ts`). It exists to make Discover's listings more useful, not to
+  carry conversation between communities.
+
+The bridge's narrow, invitation-gated scope is a deliberate trust property:
+an owner who admits the bridge for one Link connection is not granting
+BuzzRouter agent-wide read access to their community. The presence agent, by
+contrast, is BuzzRouter's own directory-research member and is expected to be
+present in every joinable community, reading everything it is permitted to
+read as a member.
 
 ## Discovery and Publication
 
@@ -163,6 +255,12 @@ Implemented:
 - Operator claim and listing metadata workflows.
 - Internal evidence review and operational tooling.
 - Self-hosted continuous deployment to `buzzrouter.com`.
+- Link: bridge admission by invite link, key, or connector command;
+  two-step channel pairing confirmed by an owner/admin-signed roster; verbatim
+  attributed message mirroring between exactly one channel per route.
+- The presence agent: scheduled auto-join of joinable directory communities
+  and LLM-derived activity summaries that feed Discover's focus and activity
+  signals.
 
 Not yet implemented:
 
@@ -171,6 +269,10 @@ Not yet implemented:
 - A representative cross-community activity metric.
 - Open-ended or automatically inferred category creation.
 - Personalized recommendations.
+- Create: driving Block's hosted Buzz signup itself. Feasibility is proven
+  (self-generated-key identity binding succeeds against the live hosted
+  service); the shipped route only detects OS and links to Buzz's desktop
+  download.
 
 ## Brand Personality
 

@@ -48,9 +48,10 @@ vi.mock("./store", () => ({
 import { joinCommunityWithManagedIdentity } from "./join";
 
 const JOIN_INPUT = {
+  ageConfirmed: true,
   candidateId: "11111111-1111-4111-8111-111111111111",
   identityId: "id-1",
-  policyReceipt: "receipt-123",
+  policyVersion: "v1",
 };
 
 function fakePool(): Pool {
@@ -109,7 +110,7 @@ describe("joinCommunityWithManagedIdentity", () => {
       role: "member",
       status: "joined",
     });
-    expect(JSON.stringify(outcome)).not.toContain(JOIN_INPUT.policyReceipt);
+    expect(JSON.stringify(outcome)).not.toContain("policy-receipt");
     expect(state.recordMembership).toHaveBeenCalledTimes(1);
 
     // SSRF: the claim is pinned to the community's on-record relay over https,
@@ -119,18 +120,46 @@ describe("joinCommunityWithManagedIdentity", () => {
       RequestInit,
     ];
     expect(url).toBe("https://relay.example.com/api/invites/claim");
-    expect(init.body).toBe(
-      JSON.stringify({ code: "inv123", policy_receipt: "receipt-123" }),
-    );
+    expect(init.body).toBe(JSON.stringify({ code: "inv123" }));
     expect(String((init.headers as Record<string, string>).authorization)).toMatch(
       /^Nostr /,
     );
   });
 
-  it("does not hide a relay rejection when a fresh receipt is refused", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse(403, { error: "join_policy_required" }),
-    );
+  it("accepts a required policy with the managed key and retries with its receipt", async () => {
+    let claimAttempts = 0;
+    let acceptPubkey = "";
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/api/join-policy")) {
+        return jsonResponse(200, {
+          policy: { age_attestation_required: true, version: "v1" },
+        });
+      }
+      if (url.endsWith("/api/invites/accept-policy")) {
+        expect(init?.body).toBe(
+          JSON.stringify({
+            age_confirmed: true,
+            code: "inv123",
+            policy_version: "v1",
+          }),
+        );
+        acceptPubkey = nip98Pubkey(init);
+        return jsonResponse(200, { receipt: "policy-receipt" });
+      }
+      if (url.endsWith("/api/invites/claim")) {
+        claimAttempts += 1;
+        if (claimAttempts === 1) {
+          expect(init?.body).toBe(JSON.stringify({ code: "inv123" }));
+          return jsonResponse(403, { error: "join_policy_required" });
+        }
+        expect(init?.body).toBe(
+          JSON.stringify({ code: "inv123", policy_receipt: "policy-receipt" }),
+        );
+        expect(nip98Pubkey(init)).toBe(acceptPubkey);
+        return jsonResponse(200, { community_id: "c-1", role: "member" });
+      }
+      return jsonResponse(404, {});
+    });
 
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
@@ -139,11 +168,9 @@ describe("joinCommunityWithManagedIdentity", () => {
       fetchImpl as unknown as typeof fetch,
     );
 
-    expect(outcome.status).toBe("refused");
-    if (outcome.status === "refused") {
-      expect(outcome.reason).toMatch(/approval/i);
-    }
-    expect(state.recordMembership).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("joined");
+    expect(claimAttempts).toBe(2);
+    expect(state.recordMembership).toHaveBeenCalledTimes(1);
   });
 
   it("gives a generic refusal for a 403 without a known policy signal", async () => {
@@ -156,7 +183,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     );
     expect(outcome.status).toBe("refused");
     if (outcome.status === "refused") {
-      expect(outcome.reason).toMatch(/declined/i);
+      expect(outcome.reason).toBe("This community declined the join request.");
     }
   });
 
@@ -248,3 +275,14 @@ describe("joinCommunityWithManagedIdentity", () => {
     expect(JSON.stringify(outcome)).not.toContain(secretHex);
   });
 });
+
+function nip98Pubkey(init: RequestInit | undefined): string {
+  const authorization = String(
+    (init?.headers as Record<string, string> | undefined)?.authorization ?? "",
+  );
+  const encoded = authorization.replace(/^Nostr /, "");
+  const event = JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as {
+    pubkey: string;
+  };
+  return event.pubkey;
+}

@@ -3,6 +3,11 @@ import type { Pool } from "pg";
 import { getCommunityByHost } from "../db/directory";
 import { getCandidateInviteTarget } from "../db/join-probes";
 import { signNip98 } from "../http/nip98-client";
+import {
+  acceptJoinPolicy,
+  getJoinPolicy,
+  isJoinPolicyRequired,
+} from "../presence/policy";
 import type { WrappingKeyProvider } from "../shared-channels/connector";
 import { createFileWrappingKeyProvider } from "../shared-channels/connector";
 // SSRF control: reuse the connector's target resolver so a claim can only be
@@ -25,6 +30,7 @@ export type JoinOutcome =
       relayHost: string;
       status: "refused";
     }
+  | { displayName: string; relayHost: string; status: "policy_required" }
   | { displayName: string; relayHost: string; status: "not_joinable" }
   | { displayName: string; relayHost: string; status: "unreachable" }
   | {
@@ -46,12 +52,14 @@ async function claimInvite(
   privateKey: Buffer,
   claimUrl: string,
   code: string,
-  policyReceipt: string,
+  policyReceipt: string | undefined,
   relayHost: string,
   displayName: string,
   fetchImpl: typeof fetch,
 ): Promise<JoinOutcome> {
-  const body = JSON.stringify({ code, policy_receipt: policyReceipt });
+  const body = JSON.stringify(
+    policyReceipt ? { code, policy_receipt: policyReceipt } : { code },
+  );
   const authorization = signNip98(Uint8Array.from(privateKey), {
     body,
     method: "POST",
@@ -85,9 +93,13 @@ async function claimInvite(
   }
 
   if (response.status === 403) {
+    const parsed = safeJson(rawText);
+    if (isJoinPolicyRequired(parsed)) {
+      return { displayName, relayHost, status: "policy_required" };
+    }
     return {
       displayName,
-      reason: refusalReason(rawText),
+      reason: "This community declined the join request.",
       relayHost,
       status: "refused",
     };
@@ -119,18 +131,6 @@ function safeJson(text: string): Record<string, unknown> | null {
 }
 
 /**
- * A human, non-leaky reason for a 403. We look for the known policy signal and
- * otherwise give a generic message — never echoing arbitrary relay text into
- * our UI verbatim.
- */
-function refusalReason(rawText: string): string {
-  if (/join_policy_required|join.?policy|approval|pending/i.test(rawText)) {
-    return "This community requires manual approval to join.";
-  }
-  return "This community declined the join request.";
-}
-
-/**
  * Click-to-join with a managed identity. Resolves the community server-side from
  * its candidate id (never trusting a client-supplied relay or invite code),
  * claims the invite with the identity's key, and returns a real outcome. Idempotent: a
@@ -139,7 +139,12 @@ function refusalReason(rawText: string): string {
  */
 export async function joinCommunityWithManagedIdentity(
   pool: Pool,
-  input: { candidateId: string; identityId: string; policyReceipt: string },
+  input: {
+    ageConfirmed: boolean;
+    candidateId: string;
+    identityId: string;
+    policyVersion: string;
+  },
   wrappingKeys: WrappingKeyProvider = createFileWrappingKeyProvider(),
   fetchImpl: typeof fetch = fetch,
 ): Promise<JoinOutcome> {
@@ -182,16 +187,60 @@ export async function joinCommunityWithManagedIdentity(
   const outcome = await withIdentitySecret(
     pool,
     input.identityId,
-    (privateKey) =>
-      claimInvite(
+    async (privateKey): Promise<JoinOutcome> => {
+      const first = await claimInvite(
         privateKey,
         target.claimUrl,
         target.code,
-        input.policyReceipt,
+        undefined,
         community.relayHost,
         displayName,
         fetchImpl,
-      ),
+      );
+      if (first.status !== "policy_required") return first;
+
+      let policy: Awaited<ReturnType<typeof getJoinPolicy>>;
+      try {
+        policy = await getJoinPolicy(inviteTarget.host, fetchImpl);
+      } catch {
+        return { displayName, relayHost: community.relayHost, status: "unreachable" };
+      }
+      if (
+        policy.version !== input.policyVersion ||
+        (policy.ageAttestationRequired && input.ageConfirmed !== true)
+      ) {
+        return { displayName, relayHost: community.relayHost, status: "error" };
+      }
+
+      const accepted = await acceptJoinPolicy({
+        ageConfirmed: input.ageConfirmed,
+        code: target.code,
+        fetchImpl,
+        host: inviteTarget.host,
+        policyVersion: policy.version,
+        privateKey: Uint8Array.from(privateKey),
+      });
+      if (!accepted.ok) {
+        return {
+          displayName,
+          relayHost: community.relayHost,
+          status: accepted.status === 0 ? "unreachable" : "error",
+        };
+      }
+
+      const retried = await claimInvite(
+        privateKey,
+        target.claimUrl,
+        target.code,
+        accepted.receipt,
+        community.relayHost,
+        displayName,
+        fetchImpl,
+      );
+      return retried.status === "policy_required"
+        ? { displayName, relayHost: community.relayHost, status: "error" }
+        : retried;
+    },
     wrappingKeys,
   );
 

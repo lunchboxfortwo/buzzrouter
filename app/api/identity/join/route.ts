@@ -55,9 +55,10 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const outcome = await joinCommunityWithManagedIdentity(pool, {
+      ageConfirmed: input.ageConfirmed,
       candidateId: input.candidateId,
       identityId: ref.identityId,
-      policyReceipt: input.policyReceipt,
+      policyVersion: input.policyVersion,
     });
     return Response.json(
       { outcome },
@@ -69,25 +70,32 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 function readJoinRequest(body: unknown): {
+  ageConfirmed: boolean;
   candidateId: string;
-  policyReceipt: string;
+  policyVersion: string;
 } {
   const input =
     body && typeof body === "object"
-      ? (body as { candidateId?: unknown; policyReceipt?: unknown })
+      ? (body as {
+          ageConfirmed?: unknown;
+          candidateId?: unknown;
+          policyVersion?: unknown;
+        })
       : {};
   if (typeof input.candidateId !== "string" || !isUuid(input.candidateId)) {
     throw new ApiError("invalid_input", "A valid community id is required.");
   }
   if (
-    typeof input.policyReceipt !== "string" ||
-    input.policyReceipt.length === 0 ||
-    input.policyReceipt.length > 4096
+    typeof input.ageConfirmed !== "boolean" ||
+    typeof input.policyVersion !== "string" ||
+    input.policyVersion.length === 0 ||
+    input.policyVersion.length > 256
   ) {
-    throw new ApiError("invalid_input", "A fresh join approval is required.");
+    throw new ApiError("invalid_input", "Fresh join consent is required.");
   }
   return {
+    ageConfirmed: input.ageConfirmed,
     candidateId: input.candidateId,
-    policyReceipt: input.policyReceipt,
+    policyVersion: input.policyVersion,
   };
 }

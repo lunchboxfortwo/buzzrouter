@@ -188,9 +188,10 @@ export function JoinConsent({
       </a>
 
       <ManagedIdentityJoin
+        ageConfirmed={ageAttestationRequired ? agreed : false}
         candidateId={candidateId}
         disabled={!consentSatisfied}
-        prepareReceipt={prepareReceipt}
+        policyVersion={policyVersion}
         relayHost={new URL(relayUrl).host}
       />
     </>

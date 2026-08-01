@@ -17,6 +17,7 @@ interface Outcome {
     | "already_joined"
     | "refused"
     | "not_joinable"
+    | "policy_required"
     | "unreachable"
     | "rate_limited"
     | "error";
@@ -25,14 +26,16 @@ interface Outcome {
 type JoinState = "idle" | "joining" | "joined" | "error";
 
 export function ManagedIdentityJoin({
+  ageConfirmed,
   candidateId,
   disabled,
-  prepareReceipt,
+  policyVersion,
   relayHost,
 }: {
+  ageConfirmed: boolean;
   candidateId: string;
   disabled: boolean;
-  prepareReceipt: () => Promise<string>;
+  policyVersion: string;
   relayHost: string;
 }) {
   const [identity, setIdentity] = useState<IdentityView | null | undefined>(
@@ -81,10 +84,9 @@ export function ManagedIdentityJoin({
     setJoinState("joining");
     setMessage(null);
     try {
-      const policyReceipt = await prepareReceipt();
       const currentIdentity = await ensureIdentity();
       const response = await fetch("/api/identity/join", {
-        body: JSON.stringify({ candidateId, policyReceipt }),
+        body: JSON.stringify({ ageConfirmed, candidateId, policyVersion }),
         headers: { "content-type": "application/json" },
         method: "POST",
       });
@@ -111,7 +113,14 @@ export function ManagedIdentityJoin({
           : "Something went wrong. Review the terms and try again.",
       );
     }
-  }, [candidateId, ensureIdentity, joinState, prepareReceipt, relayHost]);
+  }, [
+    ageConfirmed,
+    candidateId,
+    ensureIdentity,
+    joinState,
+    policyVersion,
+    relayHost,
+  ]);
 
   const handleExport = useCallback(async () => {
     setExporting(true);
@@ -217,6 +226,8 @@ function outcomeMessage(outcome: Outcome | undefined): string {
       return "Couldn't reach the community's relay. Try again later.";
     case "rate_limited":
       return "The community is rate-limiting joins. Try again shortly.";
+    case "policy_required":
+      return "The community couldn't accept the policy approval. Reload and try again.";
     default:
       return "The join didn't complete. Review the terms and try again.";
   }

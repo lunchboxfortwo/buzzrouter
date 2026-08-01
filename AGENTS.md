@@ -105,6 +105,22 @@ Key routing rules:
   fake relay; the auth branches (owner ok / member / unreadable roster / replay
   / expired) are covered in `store.integration.test.ts`.
 
+## Create-community front door
+
+- `app/create-community/` sends visitors to the real hosted Buzz signup
+  (`https://app.builderlab.xyz`, Auth0-backed) since buzz.xyz itself has no
+  signup/login path — verified by fetching its production bundle directly,
+  not assumed.
+- Per-OS desktop download resolution (`download-assets.ts`) replicates the
+  asset-matching regexes and GitHub Releases API call
+  (`api.github.com/repos/block/buzz/releases`) found in Buzz's own shipped
+  `BuzzDownloadLink` component — reverse-engineered from their production JS
+  bundle, not guessed. Server-side OS detection (`platform.ts`, from the
+  `user-agent` header) picks the initial view; architecture (arm64 vs x64 on
+  Mac) can't be read from a UA string, so the client resolves it at click
+  time via the same GitHub API call, falling back to the releases page on
+  any failure — never a fabricated direct file URL.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

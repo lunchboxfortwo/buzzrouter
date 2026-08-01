@@ -88,4 +88,64 @@ describe("community submissions", () => {
       "https://buzzrouter.com/submit?status=invalid",
     );
   });
+
+  it("rejects a submission missing a contact email", async () => {
+    vi.stubEnv("PUBLIC_APP_ORIGIN", "https://buzzrouter.com");
+    const response = await POST(
+      new Request("https://buzzrouter.com/api/submissions", {
+        body: "relayUrl=wss%3A%2F%2Fno-email-test.example",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin: "https://buzzrouter.com",
+        },
+        method: "POST",
+      }),
+    );
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      "https://buzzrouter.com/submit?status=invalid",
+    );
+  });
+
+  it("rejects a submission with a malformed contact email", async () => {
+    vi.stubEnv("PUBLIC_APP_ORIGIN", "https://buzzrouter.com");
+    const response = await POST(
+      new Request("https://buzzrouter.com/api/submissions", {
+        body: "relayUrl=wss%3A%2F%2Fbad-email-test.example&contactEmail=not-an-email",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin: "https://buzzrouter.com",
+        },
+        method: "POST",
+      }),
+    );
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      "https://buzzrouter.com/submit?status=invalid",
+    );
+  });
+
+  it("rejects a submission with an unrecognized focus", async () => {
+    vi.stubEnv("PUBLIC_APP_ORIGIN", "https://buzzrouter.com");
+    const response = await POST(
+      new Request("https://buzzrouter.com/api/submissions", {
+        body:
+          "relayUrl=wss%3A%2F%2Fbad-focus-test.example" +
+          "&contactEmail=owner%40bad-focus-test.example" +
+          "&focus=not-a-focus",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin: "https://buzzrouter.com",
+        },
+        method: "POST",
+      }),
+    );
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      "https://buzzrouter.com/submit?status=invalid",
+    );
+  });
 });

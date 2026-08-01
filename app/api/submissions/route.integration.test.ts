@@ -33,7 +33,15 @@ describeDatabase(
 
       const response = await POST(
         new Request("https://buzzrouter.com/api/submissions", {
-          body: "relayUrl=wss%3A%2F%2Fsubmit-test.example",
+          body: new URLSearchParams({
+            audience: "Builders shipping on Nostr",
+            categories: "builders",
+            communityName: "Submit Test Community",
+            contactEmail: "owner@submit-test.example",
+            description: "A relay for testing submissions.",
+            focus: "building",
+            relayUrl: "wss://submit-test.example",
+          }).toString(),
           headers: {
             "content-type": "application/x-www-form-urlencoded",
             origin: "https://buzzrouter.com",
@@ -56,6 +64,29 @@ describeDatabase(
         ["wss://submit-test.example"],
       );
       expect(stored.rows[0]?.id).toBe(candidateId);
+
+      const source = await pool.query(
+        `
+          SELECT
+            source_audience,
+            source_categories,
+            source_contact_email,
+            source_description,
+            source_display_name,
+            source_focus
+          FROM community_sources
+          WHERE candidate_id = $1 AND source_type = 'submission'
+        `,
+        [candidateId],
+      );
+      expect(source.rows[0]).toMatchObject({
+        source_audience: "Builders shipping on Nostr",
+        source_categories: ["builders"],
+        source_contact_email: "owner@submit-test.example",
+        source_description: "A relay for testing submissions.",
+        source_display_name: "Submit Test Community",
+        source_focus: "building",
+      });
     });
   },
 );

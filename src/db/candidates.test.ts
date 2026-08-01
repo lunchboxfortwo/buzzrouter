@@ -37,28 +37,41 @@ describe("normalizeCandidateSourceListing", () => {
   it("bounds and normalizes imported catalog metadata", () => {
     expect(
       normalizeCandidateSourceListing({
+        audience: "  People building open protocols. ",
         categories: [" Builders ", "unknown", "BUILDERS", "Privacy"],
+        contactEmail: "  Owner@Builders.example  ",
         description: "  People\n building together. ",
         displayName: "  Buzz Builders ",
+        focus: "building",
         inviteCode: "  abc123 ",
         publicUrl: "https://builders.example/join",
       }),
     ).toEqual({
+      audience: "People building open protocols.",
       categories: ["builders", "privacy"],
+      contactEmail: "owner@builders.example",
       description: "People building together.",
       displayName: "Buzz Builders",
+      focus: "building",
       inviteCode: "abc123",
       publicUrl: "https://builders.example/join",
     });
   });
 
-  it("rejects a non-https public url and blank invite code", () => {
+  it("rejects a non-https public url, blank invite code, invalid email, and unknown focus", () => {
     expect(
       normalizeCandidateSourceListing({
-        publicUrl: "http://insecure.example",
+        contactEmail: "not-an-email",
+        focus: "not-a-focus",
         inviteCode: "   ",
+        publicUrl: "http://insecure.example",
       }),
-    ).toMatchObject({ inviteCode: null, publicUrl: null });
+    ).toMatchObject({
+      contactEmail: null,
+      focus: null,
+      inviteCode: null,
+      publicUrl: null,
+    });
   });
 });
 

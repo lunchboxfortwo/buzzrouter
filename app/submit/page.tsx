@@ -2,6 +2,7 @@
 import { isUuid } from "../../src/claims/http";
 import chrome from "../site-chrome.module.css";
 import { SiteMasthead } from "../SiteMasthead";
+import { SubmitForm } from "./SubmitForm";
 import styles from "./submit.module.css";
 
 interface SubmitSearchParams {
@@ -30,12 +31,12 @@ export default async function SubmitPage({
           <p>Community intake</p>
           <h1>Submit a Buzz community</h1>
           <span>
-            Add a relay or shared invite URL. The listing appears only after
-            direct Buzz protocol verification succeeds.
+            Tell us what your community does and who it&apos;s for. We&apos;ll
+            use it to build your listing once the relay verifies.
           </span>
         </section>
 
-        <section className={styles.formPanel}>
+        <div className={styles.statusMessages}>
           {status === "queued" ? (
             <div className={styles.success} role="status">
               <strong>Verification queued</strong>
@@ -55,7 +56,8 @@ export default async function SubmitPage({
           ) : null}
           {status === "invalid" ? (
             <div className={styles.error} role="alert">
-              Enter a valid public relay or Buzz invite URL.
+              Enter a valid public relay or Buzz invite URL, and a contact
+              email we can reach you at.
             </div>
           ) : null}
           {status === "failed" ? (
@@ -94,49 +96,11 @@ export default async function SubmitPage({
               again.
             </div>
           ) : null}
+        </div>
 
-          <form action="/api/submissions" method="post">
-            <label htmlFor="relay-url">Relay or invite URL</label>
-            <input
-              autoComplete="url"
-              id="relay-url"
-              maxLength={2048}
-              name="relayUrl"
-              placeholder="wss://community.communities.buzz.xyz"
-              required
-              type="url"
-            />
-            <div className={styles.honeypot} aria-hidden="true">
-              <label htmlFor="website">Website</label>
-              <input
-                autoComplete="off"
-                id="website"
-                name="website"
-                tabIndex={-1}
-                type="text"
-              />
-            </div>
-            <button type="submit">Queue verification</button>
-          </form>
-
-          <dl>
-            <div>
-              <dt>Accepted</dt>
-              <dd>WSS relay, HTTPS community, or shared invite URL</dd>
-            </div>
-            <div>
-              <dt>Published</dt>
-              <dd>Only after a fresh direct relay verification</dd>
-            </div>
-            <div>
-              <dt>Invite links</dt>
-              <dd>
-                The invite code is kept, labelled, and used only to hand
-                members to the Buzz app
-              </dd>
-            </div>
-          </dl>
-        </section>
+        <div className={styles.formLayout}>
+          <SubmitForm />
+        </div>
       </main>
       </div>
     </div>

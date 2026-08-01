@@ -6,6 +6,10 @@ import {
 } from "../../../src/db/submission-validations";
 import { checkSubmissionRateLimit } from "../../../src/http/rate-limit";
 import {
+  parseCategories,
+  parseContactEmail,
+  parseFocus,
+  parseListingText,
   parseRelaySubmission,
   SubmissionValidationError,
 } from "../../../src/submissions/validation";
@@ -116,6 +120,9 @@ export async function POST(request: Request): Promise<Response> {
     if (inviteCode) {
       // Invite present → validate synchronously: the worker joins with it (which
       // both verifies the code and admits the agent) and we wait for the verdict.
+      // This is the fast "add an invite" path (per-community CTA, or a bare
+      // invite link pasted into the full intake form below) — it doesn't collect
+      // the rich intake fields, matching how it already behaves in production.
       const id = await createSubmissionValidation(getDatabasePool(), {
         inviteCode,
         relayHost: relay.host,
@@ -125,9 +132,27 @@ export async function POST(request: Request): Promise<Response> {
       return redirectToSubmission(publicOrigin, outcome, relay.host);
     }
 
-    // Bare relay URL, no invite → ingest for the async probe pipeline as before.
+    // Bare relay URL, no invite → the full intake form: collect what other
+    // people need to care about this community, then ingest for the async
+    // probe pipeline as before.
+    const contactEmail = parseContactEmail(form.get("contactEmail"));
+    const displayName = parseListingText(form.get("communityName"), 80);
+    const description = parseListingText(form.get("description"), 500);
+    const audience = parseListingText(form.get("audience"), 300);
+    const focus = parseFocus(form.get("focus"));
+    const categories = parseCategories(form.getAll("categories"));
+
     const candidate = await upsertCandidate(getDatabasePool(), relay, {
       evidenceId: relay.canonicalRelayUrl,
+      listing: {
+        audience,
+        categories,
+        contactEmail,
+        description,
+        displayName,
+        focus,
+        inviteCode,
+      },
       locator: `${publicOrigin}/submit`,
       type: "submission",
     });

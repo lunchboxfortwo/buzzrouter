@@ -404,3 +404,90 @@ export async function listSimilarCommunities(
     )
     .slice(0, limit);
 }
+
+export interface SubmissionPrefill {
+  categories: string[];
+  description: string | null;
+  displayName: string | null;
+  focus: string | null;
+}
+
+/**
+ * What we already know about a relay a submitter is about to describe by
+ * hand, so the intake form can show it instead of asking them to retype it.
+ * Draws from the same catalog/probe/community fallbacks as the public
+ * directory (`listDirectoryCommunities`), but keyed by canonical relay URL
+ * and without the `verified_buzz` gate, since submission can happen before
+ * verification finishes.
+ */
+export async function getSubmissionPrefill(
+  pool: Pool,
+  canonicalRelayUrl: string,
+): Promise<SubmissionPrefill | null> {
+  const result = await pool.query<{
+    display_name: string | null;
+    description: string | null;
+    categories: string[];
+    focus: string | null;
+  }>(
+    `
+      SELECT
+        COALESCE(
+          CASE WHEN communities.visibility = 'public'
+            THEN communities.display_name_override
+          END,
+          CASE WHEN communities.visibility = 'public'
+            THEN communities.display_name
+          END,
+          catalog.source_display_name,
+          latest.relay_name
+        ) AS display_name,
+        COALESCE(
+          CASE WHEN communities.visibility = 'public'
+            THEN communities.description
+          END,
+          catalog.source_description,
+          latest.relay_description
+        ) AS description,
+        COALESCE(
+          CASE WHEN communities.visibility = 'public'
+            THEN communities.categories
+          END,
+          catalog.source_categories,
+          '{}'::text[]
+        ) AS categories,
+        communities.focus
+      FROM community_candidates AS candidates
+      LEFT JOIN communities
+        ON communities.candidate_id = candidates.id
+      LEFT JOIN LATERAL (
+        SELECT source_display_name, source_description, source_categories
+        FROM community_sources
+        WHERE candidate_id = candidates.id
+          AND source_display_name IS NOT NULL
+        ORDER BY source_observed_at DESC
+        LIMIT 1
+      ) AS catalog ON true
+      LEFT JOIN LATERAL (
+        SELECT relay_name, relay_description
+        FROM probe_snapshots
+        WHERE candidate_id = candidates.id
+          AND (relay_name IS NOT NULL OR relay_description IS NOT NULL)
+        ORDER BY probed_at DESC
+        LIMIT 1
+      ) AS latest ON true
+      WHERE candidates.canonical_relay_url = $1
+    `,
+    [canonicalRelayUrl],
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    categories: row.categories ?? [],
+    description: row.description,
+    displayName: row.display_name,
+    focus: row.focus,
+  };
+}

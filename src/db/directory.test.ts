@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Pool } from "pg";
 
-import { listDirectoryCommunities } from "./directory";
+import { getSubmissionPrefill, listDirectoryCommunities } from "./directory";
 
 describe("listDirectoryCommunities", () => {
   it("maps verified relay evidence into the public directory contract", async () => {
@@ -116,5 +116,44 @@ describe("listDirectoryCommunities", () => {
     await expect(
       listDirectoryCommunities(pool, { limit }),
     ).rejects.toThrow("between 1 and 200");
+  });
+});
+
+describe("getSubmissionPrefill", () => {
+  it("returns already-known catalog metadata for a relay", async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [
+        {
+          categories: ["builders"],
+          description: "People building together.",
+          display_name: "Buzz Builders",
+          focus: "building",
+        },
+      ],
+    });
+    const pool = { query } as unknown as Pool;
+
+    await expect(
+      getSubmissionPrefill(pool, "wss://builders.example"),
+    ).resolves.toEqual({
+      categories: ["builders"],
+      description: "People building together.",
+      displayName: "Buzz Builders",
+      focus: "building",
+    });
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("canonical_relay_url = $1"),
+      ["wss://builders.example"],
+    );
+  });
+
+  it("returns null for a relay with no known candidate", async () => {
+    const pool = {
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+    } as unknown as Pool;
+
+    await expect(
+      getSubmissionPrefill(pool, "wss://unknown.example"),
+    ).resolves.toBeNull();
   });
 });

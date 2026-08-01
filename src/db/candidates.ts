@@ -6,6 +6,8 @@ import { sanitizeSourceLocator } from "../discovery/source-locator";
 import type { RelayProbeResult } from "../discovery/probe";
 import type { NormalizedRelay } from "../discovery/normalize";
 import { parsePublicIconDataUri } from "../discovery/nip11";
+import { isFocusSlug, type FocusSlug } from "../ranking/focus";
+import { SUBMISSION_CATEGORY_SLUGS } from "../submissions/categories";
 
 export const SOURCE_TYPES = [
   "reviewed_seed",
@@ -32,9 +34,12 @@ export interface CandidateSource {
 }
 
 export interface CandidateSourceListing {
+  audience?: string;
   categories?: string[];
+  contactEmail?: string;
   description?: string;
   displayName?: string;
+  focus?: string;
   inviteCode?: string | null;
   publicUrl?: string | null;
 }
@@ -103,9 +108,12 @@ export async function upsertCandidate(
           source_description,
           source_categories,
           source_public_url,
-          source_invite_code
+          source_invite_code,
+          source_contact_email,
+          source_audience,
+          source_focus
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         ON CONFLICT (candidate_id, source_type, evidence_hash) DO UPDATE
           SET last_seen_at = now(),
               source_observed_at = GREATEST(
@@ -116,7 +124,10 @@ export async function upsertCandidate(
               source_description = EXCLUDED.source_description,
               source_categories = EXCLUDED.source_categories,
               source_public_url = EXCLUDED.source_public_url,
-              source_invite_code = EXCLUDED.source_invite_code
+              source_invite_code = EXCLUDED.source_invite_code,
+              source_contact_email = EXCLUDED.source_contact_email,
+              source_audience = EXCLUDED.source_audience,
+              source_focus = EXCLUDED.source_focus
       `,
       [
         row.id,
@@ -130,6 +141,9 @@ export async function upsertCandidate(
         listing.categories,
         listing.publicUrl,
         listing.inviteCode,
+        listing.contactEmail,
+        listing.audience,
+        listing.focus,
       ],
     );
     await client.query("COMMIT");
@@ -150,14 +164,18 @@ export async function upsertCandidate(
 export function normalizeCandidateSourceListing(
   listing: CandidateSourceListing | undefined,
 ): {
+  audience: string | null;
   categories: string[];
+  contactEmail: string | null;
   description: string | null;
   displayName: string | null;
+  focus: FocusSlug | null;
   inviteCode: string | null;
   publicUrl: string | null;
 } {
   const displayName = normalizePublicRelayText(listing?.displayName, 80);
   const description = normalizePublicRelayText(listing?.description, 500);
+  const audience = normalizePublicRelayText(listing?.audience, 300);
   const publicUrl =
     typeof listing?.publicUrl === "string" && /^https:\/\//i.test(listing.publicUrl)
       ? listing.publicUrl.slice(0, 500)
@@ -166,30 +184,35 @@ export function normalizeCandidateSourceListing(
     typeof listing?.inviteCode === "string" && listing.inviteCode.trim()
       ? listing.inviteCode.trim().slice(0, 200)
       : null;
+  const contactEmail =
+    typeof listing?.contactEmail === "string" &&
+    /^[^@\s]+@[^@\s]+\.[^@\s]+$/u.test(listing.contactEmail.trim()) &&
+    listing.contactEmail.trim().length <= 254
+      ? listing.contactEmail.trim().toLowerCase()
+      : null;
+  const focus = isFocusSlug(listing?.focus) ? listing.focus : null;
   const categories = [
     ...new Set(
       (listing?.categories ?? [])
         .map((category) => category.trim().toLowerCase())
         .filter((category) =>
-          [
-            "bitcoin",
-            "builders",
-            "culture",
-            "gtm",
-            "labs",
-            "privacy",
-          ].includes(category),
+          (SUBMISSION_CATEGORY_SLUGS as readonly string[]).includes(
+            category,
+          ),
         ),
     ),
   ].slice(0, 5);
 
   return {
+    audience,
     categories,
+    contactEmail,
     description,
     displayName:
       displayName && Array.from(displayName).length >= 2
         ? displayName
         : null,
+    focus,
     inviteCode,
     publicUrl,
   };

@@ -448,22 +448,37 @@ function buildMessageFilter(options: ReadMessagesOptions): Filter {
 }
 
 /**
- * Best-effort NIP-42 auth. Relays that never issue a challenge do not require
- * auth and report that by throwing rather than hanging, so that case is
- * swallowed; every other failure propagates.
+ * NIP-42 auth that returns only once the connection is actually authenticated.
+ * The relay issues its AUTH challenge shortly *after* connect, so a single
+ * `relay.auth()` call often lands before the challenge and throws "no
+ * challenge". The old code swallowed that and returned un-authenticated, which
+ * made the very first REQ (channel enumeration) race the challenge and come
+ * back empty — the roster read silently returned 0. We now retry until the
+ * challenge arrives and auth completes. A relay that never challenges is
+ * genuinely no-auth, so we give up quietly after the deadline.
  */
+const AUTH_SETTLE_TIMEOUT_MS = 5_000;
+
 async function authenticate(
   relay: Relay,
   privateKey: Uint8Array,
 ): Promise<void> {
-  try {
-    await relay.auth(
-      async (template: EventTemplate) =>
-        finalizeEvent(template, privateKey) as VerifiedEvent,
-    );
-  } catch (error) {
-    if (isMissingChallenge(error)) return;
-    throw error;
+  const deadline = Date.now() + AUTH_SETTLE_TIMEOUT_MS;
+  for (;;) {
+    try {
+      await relay.auth(
+        async (template: EventTemplate) =>
+          finalizeEvent(template, privateKey) as VerifiedEvent,
+      );
+      return;
+    } catch (error) {
+      if (isMissingChallenge(error)) {
+        if (Date.now() >= deadline) return;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        continue;
+      }
+      throw error;
+    }
   }
 }
 

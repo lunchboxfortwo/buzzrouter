@@ -184,6 +184,7 @@ export default async function CommunityPage({
           </div>
           <div className={styles.heroActions}>
             <JoinButton
+              candidateId={community.candidateId}
               className={styles.cta}
               communityName={community.displayName}
               inviteCode={community.inviteCode}

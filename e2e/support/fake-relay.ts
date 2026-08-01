@@ -98,9 +98,21 @@ interface RelayFilter {
  * unchanged, the connector's real code path runs for real here — only the relay
  * on the far end is a test double.
  */
+/** Opt-in join-policy fixture: when set, the relay serves the ToS/age handshake. */
+export interface FakeJoinPolicy {
+  ageAttestationRequired: boolean;
+  version: string;
+  termsMarkdown?: string;
+  privacyMarkdown?: string;
+  /** Receipt returned by accept-policy; defaults to a fixed test value. */
+  receipt?: string;
+}
+
 export async function startFakeRelay(
   groups: FakeRelayGroup[],
+  options: { joinPolicy?: FakeJoinPolicy } = {},
 ): Promise<FakeRelay> {
+  const joinPolicy = options.joinPolicy;
   const stored = new Map<string, Event>();
   // subscriptionId -> filters, per connected socket, so injected events can be
   // pushed live to whatever the connector is currently listening for.
@@ -174,6 +186,35 @@ export async function startFakeRelay(
       req.resume();
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    // Opt-in ToS/age handshake, so the receipt-minting consent flow
+    // (`/join/[candidateId]` → /api/invite-receipt) can be exercised end to end.
+    if (joinPolicy && req.method === "GET" && req.url === "/api/join-policy") {
+      req.resume();
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          policy: {
+            age_attestation_required: joinPolicy.ageAttestationRequired,
+            privacy_markdown: joinPolicy.privacyMarkdown,
+            terms_markdown: joinPolicy.termsMarkdown,
+            version: joinPolicy.version,
+          },
+        }),
+      );
+      return;
+    }
+    if (
+      joinPolicy &&
+      req.method === "POST" &&
+      req.url === "/api/invites/accept-policy"
+    ) {
+      req.resume();
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({ receipt: joinPolicy.receipt ?? "fake-receipt" }),
+      );
       return;
     }
     res.writeHead(404);

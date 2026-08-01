@@ -328,6 +328,7 @@ function CommunityRow({
             className={styles.indexRowJoin}
             communityName={community.displayName}
             joinTarget={{
+              candidateId: community.candidateId,
               inviteCode: community.inviteCode,
               publicUrl: community.publicUrl,
               relayUrl: community.canonicalRelayUrl,
@@ -433,6 +434,7 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
           />
         </div>
         <JoinButton
+          candidateId={community.candidateId}
           className={styles.copyButton}
           communityName={community.displayName}
           inviteCode={community.inviteCode}

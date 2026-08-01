@@ -9,16 +9,7 @@ const MAX_LIMIT = 200;
 
 export async function GET(request: Request): Promise<Response> {
   const searchParams = new URL(request.url).searchParams;
-  // `?joinable=true`      — a join will actually LAND with just the code (a bare
-  //                         claim / deep link succeeds): the honest one-tap feed.
-  // `?joinable=handshake` — additionally includes communities behind a Buzz
-  //                         ToS/age gate, which a client that completes the full
-  //                         policy handshake (e.g. the BuzzRouter agent's
-  //                         auto-join) can still join. NOT one-tap; excluded from
-  //                         `=true` so a bare deep link is never advertised for it.
-  const joinable = searchParams.get("joinable");
-  const joinableOnly = joinable === "true";
-  const handshakeJoinable = joinable === "handshake";
+  const joinableOnly = searchParams.get("joinable") === "true";
   const limit = clampLimit(searchParams.get("limit"));
 
   const allCommunities = await listDirectoryCommunities(getDatabasePool(), {
@@ -26,23 +17,20 @@ export async function GET(request: Request): Promise<Response> {
   });
 
   const communities = allCommunities
-    // "joinable" must mean a join will actually land, not just "we hold a code".
-    // A public web-join URL always works; an invite code only counts once a
-    // probe confirms it. `=true` demands a bare claim succeeds (`open`); the
-    // `handshake` feed also allows `policy_gated` (joinable after the ToS/age
-    // handshake) and as-yet-unconfirmed codes, but never a code we KNOW is
-    // owner-only/allowlist (`restricted`) or dead (`stale`). Everything else is
-    // still listed — just not advertised as joinable.
-    .filter((community) => {
-      if (!joinableOnly && !handshakeJoinable) return true;
-      if (community.publicUrl) return true;
-      if (joinableOnly) return community.joinStatus === "open";
-      return (
-        Boolean(community.inviteCode) &&
-        community.joinStatus !== "restricted" &&
-        community.joinStatus !== "stale"
-      );
-    })
+    // "joinable" means a user CAN join, not "the claim is frictionless". A
+    // public web-join URL always works; an invite code is joinable unless a
+    // probe found the door genuinely closed — owner-only/allowlist
+    // (`restricted`). A ToS/age gate (`policy_gated`) is one consent click, not a
+    // dead end (`/join/[candidateId]` mints a policy receipt), so it stays
+    // joinable; `stale`/unconfirmed codes degrade gracefully into the same flow
+    // rather than being hidden. Only a known-`restricted` code is withheld — the
+    // row still lists, with "Request an invite" instead of a join button.
+    .filter(
+      (community) =>
+        !joinableOnly ||
+        community.publicUrl ||
+        (Boolean(community.inviteCode) && community.joinStatus !== "restricted"),
+    )
     .map((community) => ({
       host: community.relayHost,
       relayUrl: community.canonicalRelayUrl,

@@ -14,10 +14,9 @@ import { AUTO_JOIN_QUEUE, REFRESH_SUMMARIES_QUEUE } from "./queues";
  * Auto-joins every joinable community advertised by the public directory that
  * the BuzzRouter Agent is not already a member of.
  *
- * The job reads the directory's `GET /api/communities?joinable=handshake` feed
- * (the agent completes the full policy handshake, so it can join ToS/age-gated
- * communities too — not just the bare-claim-`open` set that `?joinable=true`
- * advertises to one-tap clients), skips any host already recorded in
+ * The job reads the directory's `GET /api/communities?joinable=true` feed (every
+ * community a user could join — anything with a code the probe did not find
+ * owner-only/allowlist), skips any host already recorded in
  * `presence_communities`, and for each remaining community that carries an
  * invite code claims the invite as the agent —
  * explicitly accepting Block's Terms of Service plus the 18+ age attestation
@@ -71,15 +70,9 @@ export interface AutoJoinResult {
 
 const DEFAULT_ORIGIN = "https://buzzrouter.com";
 
-/**
- * Builds the agent's joinable-communities directory endpoint. Uses the
- * `handshake` scope (not `true`): the agent accepts Block's ToS + age
- * attestation, so it can join policy-gated communities a bare-claim client
- * cannot — while still skipping communities a probe found owner-only/allowlist
- * or expired.
- */
+/** Builds the joinable-communities directory endpoint from an origin. */
 export function joinableCommunitiesEndpoint(origin: string): string {
-  return `${origin.replace(/\/+$/, "")}/api/communities?joinable=handshake`;
+  return `${origin.replace(/\/+$/, "")}/api/communities?joinable=true`;
 }
 
 /**

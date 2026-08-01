@@ -24,6 +24,61 @@ export interface JoinProbeTarget {
   code: string;
 }
 
+/** The relay + advertised invite code for one candidate, keyed by its id. */
+export interface CandidateInviteTarget {
+  candidateId: string;
+  host: string;
+  /** Canonical `wss://host` URL, validated at insert by the origin-only CHECK. */
+  canonicalRelayUrl: string;
+  code: string;
+}
+
+/**
+ * Resolves the relay + newest advertised invite code for a candidate, keyed by
+ * its id. Returns null when the candidate is unknown or has no invite code.
+ *
+ * The host and relay URL come straight from our own `community_candidates`
+ * record (the URL is constrained to a bare `wss://host` origin at insert), never
+ * from caller input — so a receipt/claim built from this target cannot be
+ * steered at an attacker-chosen host. Keep it that way: callers pass a candidate
+ * id, not a URL.
+ */
+export async function getCandidateInviteTarget(
+  pool: Pool,
+  candidateId: string,
+): Promise<CandidateInviteTarget | null> {
+  const result = await pool.query<{
+    host: string;
+    canonical_relay_url: string;
+    code: string;
+  }>(
+    `
+      SELECT candidates.host AS host,
+             candidates.canonical_relay_url AS canonical_relay_url,
+             invite.code AS code
+      FROM community_candidates AS candidates
+      JOIN LATERAL (
+        SELECT source_invite_code AS code
+        FROM community_sources
+        WHERE candidate_id = candidates.id
+          AND source_invite_code IS NOT NULL
+        ORDER BY source_observed_at DESC
+        LIMIT 1
+      ) AS invite ON true
+      WHERE candidates.id = $1
+    `,
+    [candidateId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    canonicalRelayUrl: row.canonical_relay_url,
+    candidateId,
+    code: row.code,
+    host: row.host,
+  };
+}
+
 /** Records (upserts) the latest claimability verdict for a candidate. */
 export async function recordJoinProbe(
   pool: Pool,

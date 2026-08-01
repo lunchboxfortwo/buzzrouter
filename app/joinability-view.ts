@@ -1,18 +1,18 @@
 import type { JoinStatus } from "../src/directory/joinability";
 
 /**
- * Turns a community's probed claimability into what the directory should show,
- * so the web surface never presents a one-tap join that a claim will refuse.
+ * Turns a community's probed claimability into what the directory should show.
  *
- * `join`           — a working join path: a public web-join URL, a probed-open
- *                    invite, or an as-yet-unprobed / gated code we still reach
- *                    through the relay's hosted `/invite` onboarding link
- *                    (which runs the full policy handshake in Buzz's own flow).
+ * `join`           — a user can join: a public web-join URL, or any invite code
+ *                    we did NOT find owner-only/allowlist. A ToS/age gate is one
+ *                    consent click (`/join/[candidateId]` mints a policy
+ *                    receipt), not a dead end, so `policy_gated` — and a
+ *                    `stale`/unconfirmed code, which degrades into the same
+ *                    consent flow rather than being hidden — are joinable.
  * `request-invite` — admission is restricted (owner-only / allowlist); a code
  *                    alone will not get in, so we say so instead of a dead-end
  *                    join button.
- * `none`           — the code is stale (expired/invalid) and there is no other
- *                    join path; the community is still listed, just not joinable.
+ * `none`           — nothing to join with (no code and no public URL).
  */
 export type JoinAffordance = "join" | "request-invite" | "none";
 
@@ -26,9 +26,9 @@ export function joinAffordance(community: JoinabilityView): JoinAffordance {
   if (community.publicUrl) return "join";
   if (!community.inviteCode) return "none";
   if (community.joinStatus === "restricted") return "request-invite";
-  if (community.joinStatus === "stale") return "none";
-  // open, policy_gated, unknown, or not-yet-probed: reachable via the hosted
-  // invite link, which completes the join in Buzz's own onboarding flow.
+  // open, policy_gated, stale, unknown, or not-yet-probed: the consent flow at
+  // /join/[candidateId] handles the ToS/age handshake (and surfaces a stale code
+  // legibly) rather than hiding a community over one extra click.
   return "join";
 }
 

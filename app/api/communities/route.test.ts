@@ -77,9 +77,9 @@ describe("GET /api/communities", () => {
     );
   });
 
-  it("filters ?joinable=true to a probed-open code or a public URL only", async () => {
+  it("filters ?joinable=true to everything joinable, excluding only known-restricted codes", async () => {
     listDirectoryCommunities.mockResolvedValue([
-      // A genuinely open invite (a bare claim lands) — MUST appear.
+      // A genuinely open invite (a bare claim lands) — joinable.
       buildCommunity({
         candidateId: "candidate-1",
         inviteCode: "abc123",
@@ -95,8 +95,7 @@ describe("GET /api/communities", () => {
         publicUrl: "https://has-url.example",
         relayHost: "has-url.example",
       }),
-      // Holds a code but a bare claim is refused with join_policy_required —
-      // MUST NOT appear (the reported bug).
+      // Behind a ToS/age gate — joinable via one consent click, NOT a dead end.
       buildCommunity({
         candidateId: "candidate-3",
         inviteCode: "gated-code",
@@ -104,15 +103,16 @@ describe("GET /api/communities", () => {
         publicUrl: null,
         relayHost: "policy-gated.example",
       }),
-      // Owner-only / allowlist admission — MUST NOT appear.
+      // Code present but never probed / verdict decayed — degrade gracefully into
+      // the consent flow rather than hide it.
       buildCommunity({
         candidateId: "candidate-4",
-        inviteCode: "owner-code",
-        joinStatus: "restricted",
+        inviteCode: "unprobed-code",
+        joinStatus: null,
         publicUrl: null,
-        relayHost: "restricted.example",
+        relayHost: "unprobed.example",
       }),
-      // Expired/invalid code — MUST NOT appear.
+      // A stale (expired) probe is not proof of a closed door — still shown.
       buildCommunity({
         candidateId: "candidate-5",
         inviteCode: "dead-code",
@@ -120,14 +120,21 @@ describe("GET /api/communities", () => {
         publicUrl: null,
         relayHost: "stale.example",
       }),
-      // Code present but never probed / verdict decayed — MUST NOT appear until
-      // a probe confirms it (fail closed).
+      // Owner-only / allowlist admission — the one case that is withheld.
       buildCommunity({
         candidateId: "candidate-6",
-        inviteCode: "unprobed-code",
+        inviteCode: "owner-code",
+        joinStatus: "restricted",
+        publicUrl: null,
+        relayHost: "restricted.example",
+      }),
+      // No code and no public URL — nothing to join with.
+      buildCommunity({
+        candidateId: "candidate-7",
+        inviteCode: null,
         joinStatus: null,
         publicUrl: null,
-        relayHost: "unprobed.example",
+        relayHost: "no-target.example",
       }),
     ]);
     const { GET } = await import("./route");
@@ -137,62 +144,12 @@ describe("GET /api/communities", () => {
     );
     const body = await response.json();
 
-    expect(body.count).toBe(2);
     expect(body.communities.map((c: { host: string }) => c.host)).toEqual([
       "open-invite.example",
       "has-url.example",
-    ]);
-  });
-
-  it("includes policy-gated + unprobed codes under ?joinable=handshake but never restricted/stale", async () => {
-    listDirectoryCommunities.mockResolvedValue([
-      buildCommunity({
-        candidateId: "candidate-1",
-        inviteCode: "abc123",
-        joinStatus: "open",
-        publicUrl: null,
-        relayHost: "open-invite.example",
-      }),
-      buildCommunity({
-        candidateId: "candidate-2",
-        inviteCode: "gated-code",
-        joinStatus: "policy_gated",
-        publicUrl: null,
-        relayHost: "policy-gated.example",
-      }),
-      buildCommunity({
-        candidateId: "candidate-3",
-        inviteCode: "unprobed-code",
-        joinStatus: null,
-        publicUrl: null,
-        relayHost: "unprobed.example",
-      }),
-      buildCommunity({
-        candidateId: "candidate-4",
-        inviteCode: "owner-code",
-        joinStatus: "restricted",
-        publicUrl: null,
-        relayHost: "restricted.example",
-      }),
-      buildCommunity({
-        candidateId: "candidate-5",
-        inviteCode: "dead-code",
-        joinStatus: "stale",
-        publicUrl: null,
-        relayHost: "stale.example",
-      }),
-    ]);
-    const { GET } = await import("./route");
-
-    const response = await GET(
-      new Request("https://buzzrouter.com/api/communities?joinable=handshake"),
-    );
-    const body = await response.json();
-
-    expect(body.communities.map((c: { host: string }) => c.host)).toEqual([
-      "open-invite.example",
       "policy-gated.example",
       "unprobed.example",
+      "stale.example",
     ]);
   });
 

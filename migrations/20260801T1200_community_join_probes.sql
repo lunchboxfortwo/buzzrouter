@@ -1,16 +1,17 @@
 -- The directory advertised a community as joinable whenever we had ANY invite
--- code for it, regardless of whether a claim would actually be accepted. Buzz
+-- code for it, regardless of whether the join would actually be accepted. Buzz
 -- communities gate joins (an age/ToS handshake, and per-community admission —
--- owner-only / allowlist / anyone), so a harvested code is not proof the join
--- will land. A user tapped "Open in Buzz", the deep link's bare claim was
--- refused (`join_policy_required`), and the client showed a silent spinner.
+-- owner-only / allowlist / anyone). A user tapped "Open in Buzz", the deep
+-- link's bare claim was refused (`join_policy_required`), and the client spun.
 --
--- This records the OUTCOME of actually probing claimability per candidate, so
--- the directory can only claim "joinable" when a claim genuinely succeeds, can
--- say "request an invite" where admission is restricted, and can DECAY a stale
--- verdict (`probed_at`) since a policy can change and codes expire. `probed_code`
--- pins the verdict to the exact code we probed, so rotating in a fresh invite
--- invalidates a prior verdict instead of inheriting it.
+-- This records the OUTCOME of probing claimability per candidate, so the
+-- directory can RECLASSIFY rather than over-promise: a ToS/age gate
+-- (`policy_gated`) stays joinable through the consent flow (which mints a policy
+-- receipt), owner-only/allowlist (`restricted`) is shown as "request an invite"
+-- instead of a dead-end join, and a verdict DECAYS (`probed_at`) since policies
+-- change and codes expire. `probed_code` pins the verdict to the exact code we
+-- probed, so rotating in a fresh invite invalidates a prior verdict instead of
+-- inheriting it.
 CREATE TABLE IF NOT EXISTS community_join_probes (
   candidate_id uuid PRIMARY KEY
     REFERENCES community_candidates (id) ON DELETE CASCADE,

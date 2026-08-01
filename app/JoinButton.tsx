@@ -18,6 +18,7 @@ import { launchJoin } from "./joinCascade";
  *   client needs to connect.
  */
 export function JoinButton({
+  candidateId = null,
   className,
   communityName,
   inviteCode,
@@ -25,6 +26,7 @@ export function JoinButton({
   publicUrl,
   relayUrl,
 }: {
+  candidateId?: string | null;
   className?: string;
   communityName: string;
   inviteCode: string | null;
@@ -35,14 +37,15 @@ export function JoinButton({
   const [copied, setCopied] = useState(false);
 
   const openInApp = useCallback(() => {
-    launchJoin({ inviteCode, publicUrl: null, relayUrl });
-  }, [inviteCode, relayUrl]);
+    launchJoin({ candidateId, inviteCode, publicUrl: null, relayUrl });
+  }, [candidateId, inviteCode, relayUrl]);
 
   // A restricted (owner-only / allowlist) community can't be joined with a code:
   // surface that instead of a launch button that would be refused.
   const restricted = !publicUrl && joinStatus === "restricted";
-  // A stale (expired/invalid) code has no working join path; don't offer it.
-  const codeJoinable = !!inviteCode && joinStatus !== "stale" && !restricted;
+  // Any other code (open / policy-gated / stale / unconfirmed) routes through the
+  // consent flow, which handles the ToS handshake and surfaces a dead code.
+  const codeJoinable = !!inviteCode && !restricted;
 
   const copyRelay = useCallback(async () => {
     try {

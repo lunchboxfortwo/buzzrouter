@@ -104,7 +104,12 @@ describe("parseBlurb", () => {
   it("parses a clean JSON object", () => {
     expect(
       parseBlurb('{"goals":"Build things","recentProjects":["A","B"]}'),
-    ).toEqual({ focus: null, goals: "Build things", recentProjects: ["A", "B"] });
+    ).toEqual({
+      focus: null,
+      goals: "Build things",
+      recentProjects: ["A", "B"],
+      tagline: null,
+    });
   });
 
   it("extracts JSON embedded in prose / code fences", () => {
@@ -113,6 +118,7 @@ describe("parseBlurb", () => {
       focus: null,
       goals: "G",
       recentProjects: ["X"],
+      tagline: null,
     });
   });
 
@@ -121,13 +127,36 @@ describe("parseBlurb", () => {
       focus: null,
       goals: "A friendly builders community.",
       recentProjects: [],
+      tagline: null,
     });
   });
 
   it("drops non-string project entries", () => {
     expect(
       parseBlurb('{"goals":"G","recentProjects":["A",1,null,"B"]}'),
-    ).toEqual({ focus: null, goals: "G", recentProjects: ["A", "B"] });
+    ).toEqual({
+      focus: null,
+      goals: "G",
+      recentProjects: ["A", "B"],
+      tagline: null,
+    });
+  });
+
+  it("normalizes a tagline: trims, collapses space, drops a trailing period", () => {
+    expect(
+      parseBlurb('{"goals":"G","recentProjects":[],"tagline":"  Vim  fans  in Japan. "}')
+        .tagline,
+    ).toBe("Vim fans in Japan");
+  });
+
+  it("clips an over-long tagline to a whole word within the budget", () => {
+    const long = "Privacy-first Monero builders operators and researchers worldwide";
+    const out = parseBlurb(
+      `{"goals":"G","recentProjects":[],"tagline":${JSON.stringify(long)}}`,
+    ).tagline;
+    expect(out).not.toBeNull();
+    expect((out as string).length).toBeLessThanOrEqual(42);
+    expect(long.startsWith(out as string)).toBe(true); // cut on a word boundary
   });
 
   it("keeps a focus that is a known vocabulary slug", () => {
@@ -253,7 +282,12 @@ describe("summarizeMessages", () => {
         apiKey: "k",
         fetchImpl: valid as unknown as typeof fetch,
       }),
-    ).toEqual({ focus: null, goals: "Ship", recentProjects: ["A", "B"] });
+    ).toEqual({
+      focus: null,
+      goals: "Ship",
+      recentProjects: ["A", "B"],
+      tagline: null,
+    });
 
     const malformed = vi.fn(async () => completion("totally not json"));
     expect(
@@ -261,7 +295,12 @@ describe("summarizeMessages", () => {
         apiKey: "k",
         fetchImpl: malformed as unknown as typeof fetch,
       }),
-    ).toEqual({ focus: null, goals: "totally not json", recentProjects: [] });
+    ).toEqual({
+      focus: null,
+      goals: "totally not json",
+      recentProjects: [],
+      tagline: null,
+    });
   });
 
   it("throws on a non-OK OpenRouter response", async () => {
@@ -284,7 +323,7 @@ describe("buildCommunitySummary", () => {
     const fetchImpl = vi.fn(async () =>
       completion(
         '{"goals":"A builder guild","recentProjects":["Relay work"],' +
-          '"focus":"building"}',
+          '"focus":"building","tagline":"Builder guild HQ"}',
       ),
     );
     const summary = await buildCommunitySummary(messages, {
@@ -301,6 +340,7 @@ describe("buildCommunitySummary", () => {
       goals: "A builder guild",
       messageCount: 2,
       recentProjects: ["Relay work"],
+      tagline: "Builder guild HQ",
       totalMemberCount: 42,
       windowDays: 7,
     });

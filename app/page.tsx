@@ -271,7 +271,6 @@ function CommunityRow({
   selected: boolean;
 }) {
   const tone = insigniaTone(community.relayHost);
-  const summary = summaryLine(community);
 
   return (
     <CommunityRowLink
@@ -312,8 +311,8 @@ function CommunityRow({
               </span>
             ) : null}
           </span>
-          {summary ? (
-            <small className={styles.indexSummary}>{summary}</small>
+          {community.tagline ? (
+            <small className={styles.indexSummary}>{community.tagline}</small>
           ) : null}
         </span>
       </span>

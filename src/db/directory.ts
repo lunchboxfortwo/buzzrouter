@@ -34,6 +34,8 @@ export interface DirectoryCommunity {
   softwareVersion: string | null;
   sourceTypes: string[];
   supportedNips: number[];
+  /** Short (~40 char) row tagline from the agent's summary, or null. */
+  tagline: string | null;
   websocketOpenMs: number | null;
 }
 
@@ -101,6 +103,7 @@ export async function listDirectoryCommunities(
     software_version: string | null;
     source_types: string[];
     supported_nips: number[];
+    tagline: string | null;
     ws_open_ms: number | null;
   }>(
     `
@@ -188,6 +191,7 @@ export async function listDirectoryCommunities(
           join_target.invite_code,
           candidates.first_seen_at,
           communities.focus,
+          presence.tagline,
           communities.display_name_override,
           COALESCE(metrics.reliability_score, 0)::text AS reliability_score,
           COALESCE(metrics.adoption_pubkeys, 0) AS adoption_pubkeys,
@@ -322,6 +326,7 @@ export async function listDirectoryCommunities(
     softwareVersion: row.software_version,
     sourceTypes: row.source_types,
     supportedNips: row.supported_nips,
+    tagline: row.tagline,
     websocketOpenMs: row.ws_open_ms,
   }));
 }

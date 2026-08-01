@@ -14,6 +14,7 @@ function summary(overrides: Partial<CommunitySummary> = {}): CommunitySummary {
     goals: "Build things",
     messageCount: 4,
     recentProjects: ["Relay work"],
+    tagline: null,
     windowDays: 7,
     ...overrides,
   };

@@ -13,6 +13,7 @@ import {
 import { focusLabel } from "../src/ranking/focus";
 
 import { AutoSubmitSelect } from "./AutoSubmitSelect";
+import { AddInviteCta } from "./AddInviteCta";
 import { CommunityRowLink } from "./CommunityRowLink";
 import { RowJoinButton } from "./RowJoinButton";
 import { JoinButton } from "./JoinButton";
@@ -351,6 +352,7 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
   const statusClass = reliabilityStatusClass(label);
   const tone = insigniaTone(community.relayHost);
   const hasActivity = hasActivitySummary(community);
+  const keyless = !community.inviteCode && !community.publicUrl;
   const overview = summaryLine(community);
   const about = aboutText(community.description);
   const work = currentWork({
@@ -562,6 +564,12 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
         </div>
       )}
       </MobileCollapsible>
+
+      {keyless ? (
+        <div className={styles.inspectorInviteCta}>
+          <AddInviteCta host={community.relayHost} variant="quiet" />
+        </div>
+      ) : null}
 
       <footer className={styles.inspectorFooter}>
         <a href={`/communities/${encodeURIComponent(community.relayHost)}`}>

@@ -12,6 +12,7 @@ import { registerProbeCandidateWorker } from "./jobs/probe-candidate";
 import { registerRefreshSummariesWorker } from "./jobs/refresh-community-summaries";
 import { registerRefreshInvitesWorker } from "./jobs/refresh-invites";
 import { registerReliabilityRollupWorker } from "./jobs/reliability-rollup";
+import { registerValidateSubmissionsPoller } from "./jobs/validate-submissions";
 import {
   AUTO_JOIN_QUEUE,
   configureQueues,
@@ -49,6 +50,7 @@ boss.on("error", (error) => {
 
 let bossStarted = false;
 let connectorSupervisor: ConnectorSupervisor | undefined;
+let stopValidationPoller: (() => void) | undefined;
 try {
   await assertDiscoveryDatabaseReady(pool);
   await boss.start();
@@ -63,6 +65,11 @@ try {
   await registerHarvestInvitesWorker(boss, pool);
   await registerHarvestXInvitesWorker(boss, pool);
   await registerRefreshInvitesWorker(boss, pool);
+  // Settle synchronous invite validations from the submit flow: the web tier
+  // (which has no agent key) inserts a pending row, this poller claims it and
+  // joins with the invite to verify + admit the agent. Runs off pg-boss on a
+  // short interval so the web request's brief wait usually resolves in-band.
+  stopValidationPoller = registerValidateSubmissionsPoller(pool);
   // Kick one summary refresh on startup so a redeploy/restart populates
   // community summaries right away instead of waiting for the next 4h tick.
   // Best-effort: the job itself is per-community fault-tolerant, and a failed
@@ -120,6 +127,7 @@ try {
 }
 
 async function shutdown(): Promise<void> {
+  stopValidationPoller?.();
   await connectorSupervisor?.stop();
   await boss.stop({ graceful: true, timeout: 30_000 });
   await pool.end();

@@ -191,13 +191,39 @@ to touch without coordinating.
 
 | Owner | Paths |
 | --- | --- |
-| Bridge / directory (this agent) | `src/shared-channels/`, `app/shared-channels/`, `app/submit/`, `app/create-community/`, `src/submissions/` |
+| Bridge / directory (this agent) | `src/shared-channels/`, `src/hosted-signup/`, `app/shared-channels/`, `app/submit/`, `app/create-community/`, `src/submissions/` |
 | Presence agent | `src/presence/`, `src/jobs/auto-join-communities.ts`, `src/jobs/harvest-invites.ts`, `src/jobs/refresh-community-summaries.ts`, `src/jobs/refresh-invites.ts` |
 | SHARED — rebase immediately before touching, keep the diff minimal | `migrations/`, `vitest.config.ts`, `app/SiteMasthead.tsx`, `PRODUCT.md`, `README.md`, `package.json`, `.github/workflows/`, `src/db/` |
 
 New migrations use a timestamp prefix (`YYYYMMDDTHHmm_name.sql`), not the
 next number in the old sequence — see `migrations/README.md`. Existing
 `000N_` files keep their numbers forever; never rename them.
+
+## Hosted-community "Create" flow (Builderlab)
+
+- `src/hosted-signup/` binds a SELF-GENERATED Nostr key to Block's hosted Buzz
+  (Builderlab) and creates a hosted community owned by it — no desktop app, no
+  key-provenance check (proven live 2026-07-31). The whole HTTP contract lives
+  in ONE place, `builderlab-client.ts`, with the kind-24243 binding event shape
+  and every path cited from Block's `github.com/block/buzz` source in comments.
+  The exact shapes are NOT re-derivable from this repo — trust that file's
+  citations. `create-community.ts` orchestrates the sequence.
+- `signed_payload` on `/verify` is the raw event JSON as a STRING (not
+  `v1.`+base64url), and the kind-24243 tag ORDER is load-bearing (the server
+  recomputes the event id). Custody reuses `encryptConnectorPrivateKey` from
+  `shared-channels/store.ts`, scoped to the bind PUBKEY as AAD (available before
+  the community exists) — the secret is never returned, logged, or stored in
+  plaintext.
+- Ordered to be RECOVERABLE: validate name → check availability → encrypt +
+  PERSIST the key → bind → create. The key is durably persisted BEFORE the
+  irreversible bind, so a post-bind failure never loses it; a retry resumes with
+  `existingSecretKey` and tolerates `identity_already_bound` only after `/current`
+  confirms the bound identity is ours.
+- Live calls are opt-in: `resolveLiveBuilderlabConfig` (and the
+  `BuilderlabClient` constructor when the base URL is the real host) refuse
+  unless `BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE=1`. Tests inject a fake endpoint +
+  fake fetch and never touch the real service. The one interactive step (OAuth
+  login → `exchangeLoginCode`) is deliberately NOT automated.
 
 ## Maintaining this file
 

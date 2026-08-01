@@ -66,9 +66,10 @@ interface RelayFilter {
  *     listGroups() finds the seeded kind-39000 group metadata, readRoster()
  *     finds the kind-13534 roster, and a confirmation kind-9 injected after the
  *     connector subscribes is actually delivered);
- *   - never send an AUTH challenge, so the connector's best-effort NIP-42
- *     `authenticate()` no-ops exactly as it does against a relay that doesn't
- *     require auth.
+ *   - never send an AUTH challenge, so the connector's `authenticate()` waits
+ *     out its full settle deadline and then no-ops exactly as it does against
+ *     a relay that genuinely doesn't require auth (tests that hit this path
+ *     allow extra time for that bounded wait).
  *
  * It serves real TLS (`wss://`) with a committed self-signed cert for
  * 127.0.0.1, because candidate relay URLs must be `wss://` (a production check

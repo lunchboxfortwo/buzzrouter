@@ -63,6 +63,22 @@ Key routing rules:
   migration legitimately runs ahead of the deploying revision's newest file, and
   a newest-to-newest compare reports that good deploy as a false failure.
 
+## NIP-42 auth is a bounded wait, not an instant no-op
+
+- Both `NostrRelayConnection.authenticate()` (`src/shared-channels/connector.ts`)
+  and presence's `authenticate()` (`src/presence/reader.ts`) retry `relay.auth()`
+  until the relay's AUTH challenge lands, giving up only after a settle deadline
+  (~5s). A relay that never challenges is genuinely auth-free, but this path now
+  costs the full deadline instead of returning instantly — the old code treated
+  a "no challenge" throw as proof of that (racy: the challenge frequently arrives
+  *after* the first `auth()` call, so it falsely no-op'd on relays that DO
+  require auth and silently returned unauthenticated connections). The two
+  copies aren't merged because `reader.ts`'s helper is module-private and the
+  two modules' retry call sites (publish-retry, `listGroups` retry) differ.
+  `e2e/support/fake-relay.ts` never sends a challenge on purpose (it tests the
+  no-auth fallback), so any e2e assertion that waits on a connector's first
+  relay read needs a timeout past that settle deadline.
+
 ## Shared-channel bot admission
 
 - Owners admit the BuzzRouter bridge to their community three ways, in

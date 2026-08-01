@@ -42,6 +42,7 @@ const CONNECT_TIMEOUT_MS = 5_000;
 const EVENT_LOOKUP_TIMEOUT_MS = 3_000;
 const GROUP_LIST_TIMEOUT_MS = 4_000;
 const ROSTER_LIST_TIMEOUT_MS = 4_000;
+const AUTH_SETTLE_TIMEOUT_MS = 5_000;
 const GROUP_METADATA_KIND = 39_000;
 const ROSTER_KIND = 13_534;
 const MAX_WEBSOCKET_MESSAGE_BYTES = 512 * 1_024;
@@ -601,8 +602,8 @@ export function createRelayConnectionFactory(): RelayConnectionFactory {
 /**
  * Buzz relays reject publishes and subscriptions until the session completes
  * NIP-42. Setting `onauth` alone does not authenticate — nostr-tools only
- * signs when `auth()` is called — so authenticate eagerly, and retry once if
- * the challenge lands after connect.
+ * signs when `auth()` is called — so {@link NostrRelayConnection.authenticate}
+ * waits for the challenge and completes auth before connect returns.
  */
 function isAuthRequired(error: unknown): boolean {
   return (
@@ -623,18 +624,32 @@ export class NostrRelayConnection implements RelayConnection {
   ) {}
 
   /**
-   * Best effort: relays that never send a challenge do not need NIP-42, and
-   * `auth()` reports that by throwing rather than hanging.
+   * Returns only once the connection is actually authenticated. The relay's
+   * AUTH challenge often arrives just after connect, so a single `auth()`
+   * call can land first and throw "no challenge" for a relay that DOES
+   * require auth; swallowing that (as this used to) returns an
+   * unauthenticated connection whose first REQ then races the challenge and
+   * comes back empty. Retry until the challenge lands and auth completes,
+   * and give up quietly only after the deadline — a relay that never
+   * challenges genuinely needs no auth.
    */
   async authenticate(): Promise<void> {
-    try {
-      await this.relay.auth(
-        async (template: EventTemplate) =>
-          finalizeEvent(template, this.privateKey) as VerifiedEvent,
-      );
-    } catch (error) {
-      if (isMissingChallenge(error)) return;
-      throw error;
+    const deadline = Date.now() + AUTH_SETTLE_TIMEOUT_MS;
+    for (;;) {
+      try {
+        await this.relay.auth(
+          async (template: EventTemplate) =>
+            finalizeEvent(template, this.privateKey) as VerifiedEvent,
+        );
+        return;
+      } catch (error) {
+        if (isMissingChallenge(error)) {
+          if (Date.now() >= deadline) return;
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          continue;
+        }
+        throw error;
+      }
     }
   }
 

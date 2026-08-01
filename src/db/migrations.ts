@@ -5,6 +5,9 @@ import type { Pool } from "pg";
 
 const MIGRATION_LOCK_ID = 1_923_746_111;
 
+// Applied-by-filename, sorted lexically (see migrations/README.md for the
+// naming convention new migrations must follow).
+
 export async function runMigrations(
   pool: Pool,
   migrationsDirectory = path.join(process.cwd(), "migrations"),

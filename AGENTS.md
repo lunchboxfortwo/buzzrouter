@@ -148,6 +148,27 @@ Key routing rules:
   time via the same GitHub API call, falling back to the releases page on
   any failure — never a fabricated direct file URL.
 
+## Two agents commit to main — ownership map
+
+Two autonomous agents work this repo concurrently: this one (bridge /
+directory / shared channels) and a presence agent (auto-join, invite
+harvest, LLM community summaries). Every collision so far — a duplicate
+migration number, a broken test on main, duplicated NIP-42 work — happened
+in the SHARED row below. Main now has branch protection (strict status
+checks, "Verify application" required, branches must be up to date before
+merging), so GitHub enforces the rebase; you still need to know what's safe
+to touch without coordinating.
+
+| Owner | Paths |
+| --- | --- |
+| Bridge / directory (this agent) | `src/shared-channels/`, `app/shared-channels/`, `app/submit/`, `app/create-community/`, `src/submissions/` |
+| Presence agent | `src/presence/`, `src/jobs/auto-join-communities.ts`, `src/jobs/harvest-invites.ts`, `src/jobs/refresh-community-summaries.ts`, `src/jobs/refresh-invites.ts` |
+| SHARED — rebase immediately before touching, keep the diff minimal | `migrations/`, `vitest.config.ts`, `app/SiteMasthead.tsx`, `PRODUCT.md`, `README.md`, `package.json`, `.github/workflows/`, `src/db/` |
+
+New migrations use a timestamp prefix (`YYYYMMDDTHHmm_name.sql`), not the
+next number in the old sequence — see `migrations/README.md`. Existing
+`000N_` files keep their numbers forever; never rename them.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

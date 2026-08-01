@@ -45,11 +45,13 @@ describe("refreshCommunitySummaries", () => {
     const messages: PresenceMessage[] = [];
     const readCommunity = vi.fn(async () => messages);
     const buildSummary = vi.fn(async () => summary());
+    const readMemberCount = vi.fn(async () => 5);
 
     const result = await refreshCommunitySummaries({
       buildSummary,
       pool,
       readCommunity,
+      readMemberCount,
     });
 
     expect(result).toEqual({ failed: 0, ok: 2 });
@@ -62,6 +64,8 @@ describe("refreshCommunitySummaries", () => {
     expect(updates).toHaveLength(2);
     expect(updates[0]?.[1]?.[0]).toBe("a.example");
     expect(updates[1]?.[1]?.[0]).toBe("b.example");
+    // Roster (5) >= active (2) → surfaced as total_member_count (param $6).
+    expect(updates[0]?.[1]?.[5]).toBe(5);
   });
 
   it("isolates a failing community so the others still succeed", async () => {
@@ -90,6 +94,7 @@ describe("refreshCommunitySummaries", () => {
       buildSummary,
       pool,
       readCommunity,
+      readMemberCount: vi.fn(async () => 3),
     });
 
     expect(result).toEqual({ failed: 1, ok: 1 });
@@ -104,6 +109,51 @@ describe("refreshCommunitySummaries", () => {
     expect(errorSpy.mock.calls[0]?.[0]).toContain("bad.example");
   });
 
+  it("omits the total when the visible roster is smaller than the active count", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { pool, query } = poolWith([
+      { community_id: null, relay_host: "a.example", relay_url: "wss://a.example" },
+    ]);
+
+    const result = await refreshCommunitySummaries({
+      buildSummary: vi.fn(async () => summary({ activeMemberCount: 5 })),
+      pool,
+      readCommunity: vi.fn(async () => [] as PresenceMessage[]),
+      readMemberCount: vi.fn(async () => 3),
+    });
+
+    expect(result).toEqual({ failed: 0, ok: 1 });
+    const updates = query.mock.calls.filter(([sql]) =>
+      /UPDATE presence_communities/.test(sql as string),
+    );
+    // Roster (3) < active (5) → total omitted rather than a nonsensical "5 of 3".
+    expect(updates[0]?.[1]?.[5]).toBeNull();
+  });
+
+  it("still upserts when the roster read fails (best-effort total)", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { pool, query } = poolWith([
+      { community_id: null, relay_host: "a.example", relay_url: "wss://a.example" },
+    ]);
+
+    const result = await refreshCommunitySummaries({
+      buildSummary: vi.fn(async () => summary()),
+      pool,
+      readCommunity: vi.fn(async () => [] as PresenceMessage[]),
+      readMemberCount: vi.fn(async () => {
+        throw new Error("roster unreachable");
+      }),
+    });
+
+    expect(result).toEqual({ failed: 0, ok: 1 });
+    const updates = query.mock.calls.filter(([sql]) =>
+      /UPDATE presence_communities/.test(sql as string),
+    );
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.[1]?.[5]).toBeNull();
+  });
+
   it("returns a zero tally when nothing is joined", async () => {
     const { pool } = poolWith([]);
     await expect(
@@ -111,6 +161,7 @@ describe("refreshCommunitySummaries", () => {
         buildSummary: vi.fn(),
         pool,
         readCommunity: vi.fn(),
+        readMemberCount: vi.fn(),
       }),
     ).resolves.toEqual({ failed: 0, ok: 0 });
   });

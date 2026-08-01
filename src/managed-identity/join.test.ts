@@ -4,6 +4,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   alreadyRows: [] as { id: string }[],
+  inviteTarget: {
+    candidateId: "11111111-1111-4111-8111-111111111111",
+    canonicalRelayUrl: "wss://relay.example.com/",
+    code: "inv123",
+    host: "relay.example.com",
+  } as {
+    candidateId: string;
+    canonicalRelayUrl: string;
+    code: string;
+    host: string;
+  } | null,
   community: null as {
     canonicalRelayUrl: string;
     displayName: string | null;
@@ -13,6 +24,10 @@ const state = vi.hoisted(() => ({
   privateKey: new Uint8Array(32) as Uint8Array,
   pubkey: "",
   recordMembership: vi.fn(),
+}));
+
+vi.mock("../db/join-probes", () => ({
+  getCandidateInviteTarget: vi.fn(async () => state.inviteTarget),
 }));
 
 vi.mock("../db/directory", () => ({
@@ -32,6 +47,12 @@ vi.mock("./store", () => ({
 
 import { joinCommunityWithManagedIdentity } from "./join";
 
+const JOIN_INPUT = {
+  candidateId: "11111111-1111-4111-8111-111111111111",
+  identityId: "id-1",
+  policyReceipt: "receipt-123",
+};
+
 function fakePool(): Pool {
   return {
     query: vi.fn(async () => ({ rows: state.alreadyRows })),
@@ -46,6 +67,12 @@ beforeEach(() => {
   state.privateKey = generateSecretKey();
   state.pubkey = getPublicKey(state.privateKey);
   state.alreadyRows = [];
+  state.inviteTarget = {
+    candidateId: JOIN_INPUT.candidateId,
+    canonicalRelayUrl: "wss://relay.example.com/",
+    code: "inv123",
+    host: "relay.example.com",
+  };
   state.community = {
     canonicalRelayUrl: "wss://relay.example.com/",
     displayName: "Example Community",
@@ -72,7 +99,7 @@ describe("joinCommunityWithManagedIdentity", () => {
 
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -82,6 +109,7 @@ describe("joinCommunityWithManagedIdentity", () => {
       role: "member",
       status: "joined",
     });
+    expect(JSON.stringify(outcome)).not.toContain(JOIN_INPUT.policyReceipt);
     expect(state.recordMembership).toHaveBeenCalledTimes(1);
 
     // SSRF: the claim is pinned to the community's on-record relay over https,
@@ -91,20 +119,22 @@ describe("joinCommunityWithManagedIdentity", () => {
       RequestInit,
     ];
     expect(url).toBe("https://relay.example.com/api/invites/claim");
-    expect(init.body).toBe(JSON.stringify({ code: "inv123" }));
+    expect(init.body).toBe(
+      JSON.stringify({ code: "inv123", policy_receipt: "receipt-123" }),
+    );
     expect(String((init.headers as Record<string, string>).authorization)).toMatch(
       /^Nostr /,
     );
   });
 
-  it("returns a clear 'refused' outcome for join_policy_required (no membership recorded)", async () => {
+  it("does not hide a relay rejection when a fresh receipt is refused", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse(403, { error: "join_policy_required" }),
     );
 
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -120,7 +150,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     const fetchImpl = vi.fn(async () => jsonResponse(403, {}));
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -136,7 +166,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     );
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -149,7 +179,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     });
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -160,7 +190,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     const fetchImpl = vi.fn(async () => jsonResponse(500, {}));
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -172,7 +202,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     const fetchImpl = vi.fn();
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -180,17 +210,12 @@ describe("joinCommunityWithManagedIdentity", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("is not_joinable when the community exposes no invite code", async () => {
-    state.community = {
-      canonicalRelayUrl: "wss://relay.example.com/",
-      displayName: "Example",
-      inviteCode: null,
-      relayHost: "relay.example.com",
-    };
+  it("is not_joinable when the candidate no longer has an invite", async () => {
+    state.inviteTarget = null;
     const fetchImpl = vi.fn();
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -202,7 +227,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     state.community = null;
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "nope.example.com" },
+      JOIN_INPUT,
       undefined,
       (vi.fn() as unknown) as typeof fetch,
     );
@@ -215,7 +240,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     );
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );

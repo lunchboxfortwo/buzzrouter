@@ -1,4 +1,5 @@
 import { getDatabasePool } from "../../../../src/db/pool";
+import { isUuid } from "../../../../src/claims/http";
 import { ApiError } from "../../../../src/http/api-error";
 import {
   clientIp,
@@ -30,7 +31,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     const ref = await resolveIdentitySession(pool, token);
 
-    const relayHost = readRelayHost(await request.json().catch(() => null));
+    const input = readJoinRequest(await request.json().catch(() => null));
 
     const ip = clientIp(request);
     const limit = checkRateLimit([
@@ -54,8 +55,9 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const outcome = await joinCommunityWithManagedIdentity(pool, {
+      candidateId: input.candidateId,
       identityId: ref.identityId,
-      relayHost,
+      policyReceipt: input.policyReceipt,
     });
     return Response.json(
       { outcome },
@@ -66,19 +68,26 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
-function readRelayHost(body: unknown): string {
-  const value =
+function readJoinRequest(body: unknown): {
+  candidateId: string;
+  policyReceipt: string;
+} {
+  const input =
     body && typeof body === "object"
-      ? (body as { relayHost?: unknown }).relayHost
-      : undefined;
-  if (typeof value !== "string" || value.trim().length === 0 || value.length > 253) {
-    throw new ApiError("invalid_input", "A community host is required.");
+      ? (body as { candidateId?: unknown; policyReceipt?: unknown })
+      : {};
+  if (typeof input.candidateId !== "string" || !isUuid(input.candidateId)) {
+    throw new ApiError("invalid_input", "A valid community id is required.");
   }
-  // Bare host only — no scheme, path, or whitespace. The server resolves the
-  // actual relay URL and pins the claim to it; this is just the directory key.
-  const host = value.trim().toLowerCase();
-  if (!/^[a-z0-9.-]+(?::[0-9]{1,5})?$/.test(host)) {
-    throw new ApiError("invalid_input", "The community host is invalid.");
+  if (
+    typeof input.policyReceipt !== "string" ||
+    input.policyReceipt.length === 0 ||
+    input.policyReceipt.length > 4096
+  ) {
+    throw new ApiError("invalid_input", "A fresh join approval is required.");
   }
-  return host;
+  return {
+    candidateId: input.candidateId,
+    policyReceipt: input.policyReceipt,
+  };
 }

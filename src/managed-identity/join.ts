@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 
 import { getCommunityByHost } from "../db/directory";
+import { getCandidateInviteTarget } from "../db/join-probes";
 import { signNip98 } from "../http/nip98-client";
 import type { WrappingKeyProvider } from "../shared-channels/connector";
 import { createFileWrappingKeyProvider } from "../shared-channels/connector";
@@ -36,20 +37,21 @@ export type JoinOutcome =
 
 /**
  * The HTTP claim, hardened for click-to-join: it inspects the relay's status
- * instead of throwing, so a REFUSED claim (403 join_policy_required — the exact
- * silent-spin bug the joinable-truth fix targets) returns a clear outcome rather
- * than an exception the caller might retry. The signed request body carries only
- * the invite code; nothing here logs or returns key material.
+ * instead of throwing, so a relay rejection returns a clear outcome rather than
+ * an exception the caller might retry. The signed request carries the server-
+ * resolved invite code and the consent-minted receipt; nothing here logs or
+ * returns key material.
  */
 async function claimInvite(
   privateKey: Buffer,
   claimUrl: string,
   code: string,
+  policyReceipt: string,
   relayHost: string,
   displayName: string,
   fetchImpl: typeof fetch,
 ): Promise<JoinOutcome> {
-  const body = JSON.stringify({ code });
+  const body = JSON.stringify({ code, policy_receipt: policyReceipt });
   const authorization = signNip98(Uint8Array.from(privateKey), {
     body,
     method: "POST",
@@ -130,22 +132,31 @@ function refusalReason(rawText: string): string {
 
 /**
  * Click-to-join with a managed identity. Resolves the community server-side from
- * its relay host (never trusting a client-supplied invite code), claims the
- * invite with the identity's key, and returns a real outcome. Idempotent: a
+ * its candidate id (never trusting a client-supplied relay or invite code),
+ * claims the invite with the identity's key, and returns a real outcome. Idempotent: a
  * community already joined short-circuits without another upstream claim, so we
  * do not amplify claim traffic against other people's relays.
  */
 export async function joinCommunityWithManagedIdentity(
   pool: Pool,
-  input: { identityId: string; relayHost: string },
+  input: { candidateId: string; identityId: string; policyReceipt: string },
   wrappingKeys: WrappingKeyProvider = createFileWrappingKeyProvider(),
   fetchImpl: typeof fetch = fetch,
 ): Promise<JoinOutcome> {
-  const community = await getCommunityByHost(pool, input.relayHost);
+  const inviteTarget = await getCandidateInviteTarget(pool, input.candidateId);
+  if (!inviteTarget) {
+    return {
+      displayName: "Community",
+      relayHost: "",
+      status: "not_joinable",
+    };
+  }
+
+  const community = await getCommunityByHost(pool, inviteTarget.host);
   if (!community) {
     return {
-      displayName: input.relayHost,
-      relayHost: input.relayHost,
+      displayName: inviteTarget.host,
+      relayHost: inviteTarget.host,
       status: "not_joinable",
     };
   }
@@ -163,13 +174,9 @@ export async function joinCommunityWithManagedIdentity(
     return { displayName, relayHost: community.relayHost, status: "already_joined" };
   }
 
-  if (!community.inviteCode) {
-    return { displayName, relayHost: community.relayHost, status: "not_joinable" };
-  }
-
   const target = resolveInviteClaimTarget(
-    community.canonicalRelayUrl,
-    community.inviteCode,
+    inviteTarget.canonicalRelayUrl,
+    inviteTarget.code,
   );
 
   const outcome = await withIdentitySecret(
@@ -180,6 +187,7 @@ export async function joinCommunityWithManagedIdentity(
         privateKey,
         target.claimUrl,
         target.code,
+        input.policyReceipt,
         community.relayHost,
         displayName,
         fetchImpl,

@@ -7,7 +7,9 @@ test("leads with the one-page create form and normalizes the name", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "Create", exact: true }).click();
+  await page
+    .getByRole("link", { name: "Create a community", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/create-community$/);
 
   await expect(

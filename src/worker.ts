@@ -7,6 +7,7 @@ import {
 import { assertDiscoveryDatabaseReady } from "./db/readiness";
 import { registerAutoJoinWorker } from "./jobs/auto-join-communities";
 import { registerHarvestInvitesWorker } from "./jobs/harvest-invites";
+import { registerHarvestXInvitesWorker } from "./jobs/harvest-x-invites";
 import { registerProbeCandidateWorker } from "./jobs/probe-candidate";
 import { registerRefreshSummariesWorker } from "./jobs/refresh-community-summaries";
 import { registerRefreshInvitesWorker } from "./jobs/refresh-invites";
@@ -17,6 +18,7 @@ import {
   HARVEST_INVITES_QUEUE,
   REFRESH_INVITES_QUEUE,
   REFRESH_SUMMARIES_QUEUE,
+  SOURCE_X_QUEUE,
 } from "./jobs/queues";
 import { registerDueProbeScheduler } from "./jobs/schedule-due-probes";
 import { registerSourceWorkers } from "./jobs/source-workers";
@@ -59,6 +61,7 @@ try {
   await registerRefreshSummariesWorker(boss, pool);
   await registerAutoJoinWorker(boss, pool);
   await registerHarvestInvitesWorker(boss, pool);
+  await registerHarvestXInvitesWorker(boss, pool);
   await registerRefreshInvitesWorker(boss, pool);
   // Kick one summary refresh on startup so a redeploy/restart populates
   // community summaries right away instead of waiting for the next 4h tick.
@@ -92,6 +95,13 @@ try {
     await boss.send(REFRESH_INVITES_QUEUE, null);
   } catch (error) {
     console.error("initial invite freshness refresh enqueue failed", error);
+  }
+  // Kick one X invite search on startup when enabled so a redeploy picks up
+  // public invite posts without waiting for the next 30m tick.
+  try {
+    await boss.send(SOURCE_X_QUEUE, null);
+  } catch (error) {
+    console.error("initial X invite harvest enqueue failed", error);
   }
   connectorSupervisor = new ConnectorSupervisor(
     pool,

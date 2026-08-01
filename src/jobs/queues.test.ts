@@ -15,6 +15,7 @@ import {
   SOURCE_GITHUB_QUEUE,
   SOURCE_NIP65_QUEUE,
   SOURCE_NIP66_QUEUE,
+  SOURCE_X_QUEUE,
 } from "./queues";
 
 describe("configureQueues", () => {
@@ -60,6 +61,10 @@ describe("configureQueues", () => {
       SOURCE_NIP65_QUEUE,
       expect.objectContaining({ retryLimit: 2 }),
     );
+    expect(createQueue).toHaveBeenCalledWith(
+      SOURCE_X_QUEUE,
+      expect.objectContaining({ retryLimit: 2 }),
+    );
     expect(schedule).toHaveBeenCalledWith(
       SOURCE_GITHUB_QUEUE,
       "5 0 * * *",
@@ -77,6 +82,12 @@ describe("configureQueues", () => {
       "30 2 * * *",
       null,
       { key: "phase2-nip65", tz: "UTC" },
+    );
+    expect(schedule).toHaveBeenCalledWith(
+      SOURCE_X_QUEUE,
+      "*/30 * * * *",
+      null,
+      { key: "phase2-x-invites", tz: "UTC" },
     );
   });
 

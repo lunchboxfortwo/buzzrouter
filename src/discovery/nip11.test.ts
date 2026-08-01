@@ -4,6 +4,7 @@ import {
   hashPublicIcon,
   parseNip11Document,
   parsePublicIconDataUri,
+  parseUploadedIcon,
 } from "./nip11";
 
 describe("parseNip11Document", () => {
@@ -85,6 +86,43 @@ describe("parseNip11Document", () => {
       parsePublicIconDataUri(
         `data:image/png;base64,${Buffer.alloc(256 * 1024 + 1).toString("base64")}`,
       ),
+    ).toBeNull();
+  });
+});
+
+describe("parseUploadedIcon", () => {
+  const pngBytes = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.from("test"),
+  ]);
+
+  it("accepts bytes whose magic number matches the declared type", () => {
+    expect(parseUploadedIcon(pngBytes, "image/png")).toEqual({
+      bytes: pngBytes,
+      contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      contentType: "image/png",
+    });
+  });
+
+  it("is case-insensitive and trims the declared content type", () => {
+    expect(parseUploadedIcon(pngBytes, "  IMAGE/PNG  ")).not.toBeNull();
+  });
+
+  it("rejects a content type outside the image allowlist", () => {
+    expect(parseUploadedIcon(pngBytes, "image/svg+xml")).toBeNull();
+    expect(parseUploadedIcon(pngBytes, "text/html")).toBeNull();
+  });
+
+  it("rejects bytes that don't match the declared type", () => {
+    expect(
+      parseUploadedIcon(Buffer.from("this is not a png"), "image/png"),
+    ).toBeNull();
+  });
+
+  it("rejects empty and oversized uploads", () => {
+    expect(parseUploadedIcon(Buffer.alloc(0), "image/png")).toBeNull();
+    expect(
+      parseUploadedIcon(Buffer.alloc(256 * 1024 + 1, 0x89), "image/png"),
     ).toBeNull();
   });
 });

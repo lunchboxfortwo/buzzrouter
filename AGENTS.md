@@ -225,6 +225,61 @@ next number in the old sequence — see `migrations/README.md`. Existing
   fake fetch and never touch the real service. The one interactive step (OAuth
   login → `exchangeLoginCode`) is deliberately NOT automated.
 
+## List-a-community intake (`app/submit/`)
+
+- The intake form (`app/submit/SubmitForm.tsx`, client) collects contact
+  email (required), community name, one-line description, an audience
+  blurb, and optional focus/categories — stored pre-verification on
+  `community_sources` (`source_contact_email`, `source_audience`,
+  `source_focus` added in `migrations/20260801T1000_submission_intake.sql`; name/
+  description/categories reuse the existing `source_display_name` /
+  `source_description` / `source_categories` columns from
+  `migrations/0005_catalog_discovery.sql`). `communities.description`/
+  `categories`/`focus` aren't touched — those rows don't exist until claim
+  (`src/claims/store.ts`), and nothing currently promotes `community_sources`
+  submission data onto them; the public directory only reads `catalog`
+  sources typed `'buzzdir'` (`src/db/directory.ts`), not `'submission'`.
+- Focus options come from `src/ranking/focus.ts` (`FOCUS_SLUGS`); categories
+  from `src/submissions/categories.ts` (`SUBMISSION_CATEGORY_SLUGS`) — kept
+  import-free so a client component can use it without pulling in
+  `src/db/candidates.ts`'s Node-only imports (`node:crypto`).
+- `GET /api/submissions/prefill?relayUrl=` (`src/db/directory.ts`'s
+  `getSubmissionPrefill`) looks up already-known display name/description/
+  categories/focus for a relay that's already a candidate (from prior
+  discovery, probes, or a claimed public listing), so a submitter isn't
+  asked to retype what BuzzRouter already knows. It does not live-fetch
+  NIP-11 from the relay; unknown relays just get an empty form.
+- `POST /api/submissions` requires a valid contact email
+  (`src/submissions/validation.ts`'s `parseContactEmail`) and rejects
+  otherwise with `?status=invalid`; the `source_locator` written alongside
+  every source row must be `https://` (`src/discovery/source-locator.ts`),
+  so posting the form against a plain-`http://` dev server always fails with
+  `?status=failed` — this is pre-existing and unrelated to the submitted
+  fields, not a regression to chase. `e2e/submit-intake.spec.ts` covers
+  client-side validation/prefill instead of a full submit-to-DB round trip
+  for this reason.
+- A submitter can also upload a logo, written straight into the existing
+  `community_icons` table (candidate_id PK, served by
+  `app/api/community-icons/[candidateId]/route.ts`) — the same place the
+  NIP-11 probe-icon path (`recordProbeResult` in `src/db/candidates.ts`)
+  writes to. Both now go through the shared `upsertCommunityIcon`, and both
+  validate through `src/discovery/nip11.ts`'s magic-byte signature check
+  (`hasExpectedImageSignature`) rather than trusting a declared content
+  type — `parsePublicIconDataUri` for the NIP-11 data-URI icon,
+  `parseUploadedIcon` for a direct upload. The size cap and allowed-type
+  list (`png`/`jpeg`/`gif`/`webp`, deliberately no `svg` — it's executable)
+  live in the import-free `src/discovery/image-types.ts` so the client form
+  can enforce the same rule before ever hitting the server.
+- `POST /api/submissions` accepts `multipart/form-data` for the logo case
+  and legacy `application/x-www-form-urlencoded` for logo-less posts (still
+  what the existing unit/integration tests send). In
+  `readBoundedBody` (`app/api/submissions/route.ts`), do not
+  `reader.cancel()` a stream once the size cap is exceeded — cancelling a
+  `FormData`-sourced `Request` body mid-read races undici's internal pull
+  loop and throws `"ReadableStream is already closed"` as an unhandled
+  rejection (reproduces reliably under Vitest, not just in production);
+  drain to completion instead and throw only after the loop ends.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

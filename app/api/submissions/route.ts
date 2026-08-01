@@ -1,11 +1,17 @@
-import { upsertCandidate } from "../../../src/db/candidates";
+import { upsertCandidate, upsertCommunityIcon } from "../../../src/db/candidates";
 import { getDatabasePool } from "../../../src/db/pool";
+import { MAX_PUBLIC_ICON_BYTES } from "../../../src/discovery/image-types";
+import { parseUploadedIcon, type PublicRelayIcon } from "../../../src/discovery/nip11";
 import {
   createSubmissionValidation,
   getSubmissionValidation,
 } from "../../../src/db/submission-validations";
 import { checkSubmissionRateLimit } from "../../../src/http/rate-limit";
 import {
+  parseCategories,
+  parseContactEmail,
+  parseFocus,
+  parseListingText,
   parseRelaySubmission,
   SubmissionValidationError,
 } from "../../../src/submissions/validation";
@@ -15,7 +21,8 @@ export const runtime = "nodejs";
 /** How long the request waits for the worker to settle an invite validation. */
 const VALIDATION_WAIT_MS = 8_000;
 const VALIDATION_POLL_MS = 500;
-const MAX_BODY_BYTES = 4 * 1_024;
+const MAX_TEXT_BODY_BYTES = 4 * 1_024;
+const MAX_MULTIPART_BODY_BYTES = MAX_PUBLIC_ICON_BYTES + 8 * 1_024;
 
 type SubmissionStatus =
   | "failed"
@@ -26,8 +33,37 @@ type SubmissionStatus =
   | "verified"
   | "verifying";
 
-function extractInviteCode(value: FormDataEntryValue | null): string | null {
-  if (typeof value !== "string") return null;
+interface ParsedSubmission {
+  file(name: string): File | null;
+  get(name: string): string | null;
+  getAll(name: string): string[];
+}
+
+function fromUrlEncoded(params: URLSearchParams): ParsedSubmission {
+  return {
+    file: () => null,
+    get: (name) => params.get(name),
+    getAll: (name) => params.getAll(name),
+  };
+}
+
+function fromMultipart(form: FormData): ParsedSubmission {
+  return {
+    file: (name) => {
+      const value = form.get(name);
+      return value instanceof File ? value : null;
+    },
+    get: (name) => {
+      const value = form.get(name);
+      return typeof value === "string" ? value : null;
+    },
+    getAll: (name) =>
+      form.getAll(name).filter((value): value is string => typeof value === "string"),
+  };
+}
+
+function extractInviteCode(value: string | null): string | null {
+  if (!value) return null;
   const match = /\/invite\/([^/?#\s]+)/u.exec(value);
   return match ? decodeURIComponent(match[1]).slice(0, 200) : null;
 }
@@ -68,6 +104,29 @@ async function waitForValidation(
   return "verifying";
 }
 
+async function extractLogoUpload(
+  form: ParsedSubmission,
+): Promise<PublicRelayIcon | null> {
+  const file = form.file("logo");
+  if (!file || file.size === 0) {
+    return null;
+  }
+  if (file.size > MAX_PUBLIC_ICON_BYTES) {
+    throw new SubmissionValidationError(
+      "Logo image is too large (max 256KB).",
+    );
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const icon = parseUploadedIcon(bytes, file.type);
+  if (!icon) {
+    throw new SubmissionValidationError(
+      "Logo must be a PNG, JPEG, GIF, or WEBP image.",
+    );
+  }
+  return icon;
+}
+
 export async function POST(request: Request): Promise<Response> {
   const requestOrigin = new URL(request.url).origin;
   const publicOrigin = process.env.PUBLIC_APP_ORIGIN ?? requestOrigin;
@@ -81,22 +140,38 @@ export async function POST(request: Request): Promise<Response> {
     return redirectToSubmission(publicOrigin, "rate_limited");
   }
 
+  const contentType =
+    request.headers.get("content-type")?.split(";", 1)[0] ?? "";
+  const isMultipart = contentType === "multipart/form-data";
+  if (!isMultipart && contentType !== "application/x-www-form-urlencoded") {
+    return redirectToSubmission(publicOrigin, "invalid");
+  }
+
+  const maxBodyBytes = isMultipart ? MAX_MULTIPART_BODY_BYTES : MAX_TEXT_BODY_BYTES;
   const contentLength = request.headers.get("content-length");
   if (
     contentLength &&
-    (!/^\d+$/.test(contentLength) || Number(contentLength) > MAX_BODY_BYTES)
-  ) {
-    return redirectToSubmission(publicOrigin, "invalid");
-  }
-  if (
-    request.headers.get("content-type")?.split(";", 1)[0] !==
-    "application/x-www-form-urlencoded"
+    (!/^\d+$/.test(contentLength) || Number(contentLength) > maxBodyBytes)
   ) {
     return redirectToSubmission(publicOrigin, "invalid");
   }
 
   try {
-    const form = new URLSearchParams(await readBoundedBody(request));
+    const bodyBytes = await readBoundedBody(request, maxBodyBytes);
+    const form: ParsedSubmission = isMultipart
+      ? fromMultipart(
+          await new Request(request.url, {
+            body: new Blob([Buffer.from(bodyBytes)]),
+            headers: request.headers,
+            method: "POST",
+          }).formData(),
+        )
+      : fromUrlEncoded(
+          new URLSearchParams(
+            new TextDecoder("utf-8", { fatal: true }).decode(bodyBytes),
+          ),
+        );
+
     if (String(form.get("website") ?? "").trim()) {
       // Honeypot filled — a bot. Silently pretend success.
       return redirectToSubmission(publicOrigin, "queued");
@@ -116,6 +191,9 @@ export async function POST(request: Request): Promise<Response> {
     if (inviteCode) {
       // Invite present → validate synchronously: the worker joins with it (which
       // both verifies the code and admits the agent) and we wait for the verdict.
+      // This is the fast "add an invite" path (per-community CTA, or a bare
+      // invite link pasted into the full intake form below) — it doesn't collect
+      // the rich intake fields, matching how it already behaves in production.
       const id = await createSubmissionValidation(getDatabasePool(), {
         inviteCode,
         relayHost: relay.host,
@@ -125,12 +203,36 @@ export async function POST(request: Request): Promise<Response> {
       return redirectToSubmission(publicOrigin, outcome, relay.host);
     }
 
-    // Bare relay URL, no invite → ingest for the async probe pipeline as before.
+    // Bare relay URL, no invite → the full intake form: collect what other
+    // people need to care about this community, then ingest for the async
+    // probe pipeline as before.
+    const contactEmail = parseContactEmail(form.get("contactEmail"));
+    const displayName = parseListingText(form.get("communityName"), 80);
+    const description = parseListingText(form.get("description"), 500);
+    const audience = parseListingText(form.get("audience"), 300);
+    const focus = parseFocus(form.get("focus"));
+    const categories = parseCategories(form.getAll("categories"));
+    const logo = await extractLogoUpload(form);
+
     const candidate = await upsertCandidate(getDatabasePool(), relay, {
       evidenceId: relay.canonicalRelayUrl,
+      listing: {
+        audience,
+        categories,
+        contactEmail,
+        description,
+        displayName,
+        focus,
+        inviteCode,
+      },
       locator: `${publicOrigin}/submit`,
       type: "submission",
     });
+
+    if (logo) {
+      await upsertCommunityIcon(getDatabasePool(), candidate.id, logo);
+    }
+
     return redirectToSubmission(publicOrigin, "queued", relay.host, candidate.id);
   } catch (error) {
     if (
@@ -143,7 +245,10 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
-async function readBoundedBody(request: Request): Promise<string> {
+async function readBoundedBody(
+  request: Request,
+  maxBytes: number,
+): Promise<Uint8Array> {
   if (!request.body) {
     throw new SubmissionValidationError("Submission body is required.");
   }
@@ -151,16 +256,25 @@ async function readBoundedBody(request: Request): Promise<string> {
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let bytes = 0;
+  let exceeded = false;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
 
     bytes += value.byteLength;
-    if (bytes > MAX_BODY_BYTES) {
-      await reader.cancel();
-      throw new SubmissionValidationError("Submission body is too large.");
+    if (bytes > maxBytes) {
+      // Drain to completion instead of reader.cancel(): cancelling a
+      // FormData-sourced stream mid-read races undici's internal pull loop
+      // ("ReadableStream is already closed"). Bytes past the limit are
+      // discarded, not buffered, so memory stays bounded.
+      exceeded = true;
+      continue;
     }
     chunks.push(value);
+  }
+
+  if (exceeded) {
+    throw new SubmissionValidationError("Submission body is too large.");
   }
 
   const body = new Uint8Array(bytes);
@@ -169,7 +283,7 @@ async function readBoundedBody(request: Request): Promise<string> {
     body.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder("utf-8", { fatal: true }).decode(body);
+  return body;
 }
 
 function redirectToSubmission(

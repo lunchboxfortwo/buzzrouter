@@ -58,10 +58,21 @@
   margin-top: 12px;
 }
 
+.statusMessages:empty {
+  display: none;
+}
+
+.formLayout {
+  align-items: start;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  margin-top: 32px;
+}
+
 .formPanel {
   background: var(--surface);
   border: 1px solid var(--line);
-  margin-top: 32px;
   padding: 28px;
 }
 
@@ -78,16 +89,69 @@
   grid-column: 1 / -1;
 }
 
-.formPanel input {
+.formPanel input,
+.formPanel select {
   background: #fafbfc;
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--ink);
   font: inherit;
   font-size: 14px;
+  grid-column: 1 / -1;
   min-height: 42px;
   min-width: 0;
   padding: 0 12px;
+}
+
+.formPanel input#relay-url,
+.formPanel input#contact-email {
+  grid-column: 1 / 2;
+}
+
+.categoryFieldset {
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0;
+}
+
+.categoryFieldset legend {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  padding: 0;
+  width: 100%;
+}
+
+.categoryOption {
+  align-items: center;
+  color: var(--ink);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 500;
+  gap: 6px;
+  text-transform: none;
+}
+
+.categoryOption input {
+  min-height: auto;
+}
+
+.fieldHint {
+  color: var(--muted);
+  font-size: 11px;
+  grid-column: 1 / -1;
+  margin-top: -4px;
+}
+
+.fieldError {
+  color: #9d2b22;
+  font-size: 12px;
+  font-weight: 600;
+  grid-column: 1 / -1;
 }
 
 .formPanel button {
@@ -99,38 +163,106 @@
   font: inherit;
   font-size: 13px;
   font-weight: 650;
+  grid-column: 2 / -1;
+  justify-self: start;
   min-height: 42px;
   padding: 0 18px;
 }
 
-.formPanel dl {
+.policyNote {
   border-top: 1px solid var(--line);
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 28px 0 0;
-  padding-top: 22px;
-}
-
-.formPanel dl div {
-  border-left: 1px solid var(--line);
-  padding: 0 18px;
-}
-
-.formPanel dl div:first-child {
-  border-left: 0;
-  padding-left: 0;
-}
-
-.formPanel dt {
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.formPanel dd {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
-  margin: 6px 0 0;
+  margin: 22px 0 0;
+  padding-top: 16px;
+}
+
+.preview {
+  background: var(--surface-muted, #f8f9fb);
+  border: 1px solid var(--line);
+  padding: 20px;
+  position: sticky;
+  top: 24px;
+}
+
+.previewLabel {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+.previewCard {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+}
+
+.previewCard strong {
+  font-size: 16px;
+}
+
+.previewHeading {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.previewLogo,
+.previewLogoPlaceholder {
+  border-radius: 6px;
+  flex-shrink: 0;
+  height: 32px;
+  width: 32px;
+}
+
+.previewLogo {
+  object-fit: cover;
+}
+
+.previewLogoPlaceholder {
+  background: var(--surface-muted, #f1f1f4);
+  border: 1px dashed var(--line);
+}
+
+.previewCard p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.previewFocus {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.previewAudience {
+  color: var(--ink) !important;
+}
+
+.previewTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.previewTag {
+  background: var(--surface-muted, #f1f1f4);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 2px 8px;
 }
 
 .success,
@@ -174,6 +306,10 @@
     font-size: 28px;
   }
 
+  .formLayout {
+    grid-template-columns: 1fr;
+  }
+
   .formPanel {
     padding: 20px 16px;
   }
@@ -182,18 +318,17 @@
     grid-template-columns: 1fr;
   }
 
-  .formPanel dl {
-    grid-template-columns: 1fr;
+  .formPanel input#relay-url,
+  .formPanel input#contact-email {
+    grid-column: 1 / -1;
   }
 
-  .formPanel dl div,
-  .formPanel dl div:first-child {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-    padding: 14px 0;
+  .formPanel button {
+    grid-column: 1 / -1;
+    justify-self: stretch;
   }
 
-  .formPanel dl div:first-child {
-    border-top: 0;
+  .preview {
+    position: static;
   }
 }

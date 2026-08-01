@@ -110,6 +110,22 @@ export async function startFakeRelay(
   }
 
   const server: Server = createServer({ cert: tlsCert, key: tlsKey });
+  // The bridge redeems a pasted invite by POSTing to the relay's HTTP
+  // /api/invites/claim (NIP-98 signed). The real contract lives on the Buzz
+  // relay, not this repo; here we only need a 2xx so the signer-free
+  // begin-from-invite flow can run end to end. WS upgrades are handled
+  // separately by WebSocketServer's own 'upgrade' listener, so this plain
+  // request handler never sees them.
+  server.on("request", (req, res) => {
+    if (req.method === "POST" && req.url === "/api/invites/claim") {
+      req.resume();
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
   const wss = new WebSocketServer({ server });
   wss.on("connection", (socket: WebSocket) => {
     subscriptions.set(socket, new Map());

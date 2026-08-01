@@ -132,6 +132,36 @@ Key routing rules:
   fake relay; the auth branches (owner ok / member / unreadable roster / replay
   / expired) are covered in `store.integration.test.ts`.
 
+## Signer-free "Link" flow (mobile, no NIP-07)
+
+- The `/shared-channels` page (`current="shared-channels"`, heading "Link", nav
+  label "Link") leads with a signer-free flow so a phone with no browser
+  extension can link. `SignerFreeLink` in `shared-channels-client.tsx`; the old
+  browser-signer workspace (`OwnerTools`) is kept below as an optional power path
+  (needed for outbound propose to an ARBITRARY community + full route
+  management) — that path still requires NIP-98.
+- `POST /api/community-connections/begin-from-invite` (UNSIGNED,
+  `beginConnectionFromInvite`) identifies the community from the pasted invite
+  LINK's relay host (`findVerifiedCommunityByRelayUrl`), reuses the existing
+  signed-owner install path with the community's RECORDED owner pubkey, redeems +
+  activates, then mints a short-lived, community-scoped **owner session**
+  (`src/shared-channels/owner-session.ts`, `connection_owner_sessions`,
+  migration `20260801T0900_connection_owner_sessions.sql`). The session rides in
+  the `x-owner-session` header in place of
+  a signature.
+- `POST /api/shared-channels/connect-featured` (session-authed,
+  `connectFeaturedCommunity`) is the one-press "Connect with the BuzzRouter
+  community" CTA: **BuzzRouter is the source** proposing to the caller so the
+  caller reuses the unchanged roster-gated ACCEPT path (arm→code→confirm). The
+  source channel id is `buzzrouter:<callerCommunityId>` — scoped per caller
+  precisely to dodge the `(community_id, local_channel_id)` unique index on active
+  endpoints (BuzzRouter cannot reuse one shared source channel across partners).
+- The session only substitutes for the owner signature; the roster-signed
+  in-channel code is still the real bind authority (unchanged). E2e:
+  `shared-channel-signer-free.spec.ts` (the fake relay now serves a stub
+  `POST /api/invites/claim`); the connect-featured + code branch is in
+  `store.integration.test.ts`.
+
 ## Create-community front door
 
 - `app/create-community/` sends visitors to the real hosted Buzz signup

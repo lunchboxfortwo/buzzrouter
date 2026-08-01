@@ -77,7 +77,211 @@ async function postInstallerAction<T>(
   return result;
 }
 
+interface BeginFromInviteResponse {
+  communityId: string;
+  displayName: string;
+  expiresAt: string;
+  relayUrl: string;
+  session: string;
+}
+
+// A session-authorized POST for the signer-free flow. The community-scoped owner
+// session (minted from the invite admission) rides in a header in place of a
+// NIP-98 signature; the server still requires the roster-signed in-channel code
+// before anything binds.
+async function postSessionAction<T>(
+  path: string,
+  session: string,
+  body: Record<string, unknown>,
+): Promise<T> {
+  const response = await fetch(path, {
+    body: JSON.stringify(body),
+    headers: {
+      "content-type": "application/json",
+      "x-owner-session": session,
+    },
+    method: "POST",
+  });
+  const result = (await response.json()) as T & {
+    error?: string;
+    message?: string;
+  };
+  if (!response.ok) {
+    throw new Error(result.message ?? result.error ?? "Request failed.");
+  }
+  return result;
+}
+
+/**
+ * The whole page. The signer-free "Link" flow leads — a phone with no browser
+ * extension can paste an invite link and connect. The browser-signer workspace
+ * is kept below as an optional power path (propose to any community, manage
+ * every route); it is no longer a wall in front of the page.
+ */
 export function SharedChannelsClient() {
+  return (
+    <div className={styles.stack}>
+      <SignerFreeLink />
+      <section className={styles.advanced}>
+        <h2 className={styles.advancedHeading}>
+          Prefer a browser signer?
+        </h2>
+        <p className={styles.advancedNote}>
+          Sign in with the Nostr key that owns your community to propose links
+          to any community and manage every route.
+        </p>
+        <OwnerTools />
+      </section>
+    </div>
+  );
+}
+
+function SignerFreeLink() {
+  const [invite, setInvite] = useState("");
+  const [admitting, setAdmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [community, setCommunity] = useState<BeginFromInviteResponse | null>(
+    null,
+  );
+  const [channelId, setChannelId] = useState("");
+  const [channelName, setChannelName] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [confirmation, setConfirmation] =
+    useState<ArmConfirmationResponse | null>(null);
+
+  async function admit(event: FormEvent) {
+    event.preventDefault();
+    const trimmed = invite.trim();
+    if (!trimmed) return;
+    setAdmitting(true);
+    setError("");
+    try {
+      const result = await postInstallerAction<BeginFromInviteResponse>(
+        "/api/community-connections/begin-from-invite",
+        { invite: trimmed },
+      );
+      setCommunity(result);
+      setInvite("");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setAdmitting(false);
+    }
+  }
+
+  async function connectFeatured() {
+    if (!community) return;
+    setConnecting(true);
+    setError("");
+    try {
+      const result = await postSessionAction<ArmConfirmationResponse>(
+        "/api/shared-channels/connect-featured",
+        community.session,
+        {
+          idempotencyKey: crypto.randomUUID(),
+          localChannelId: channelId.trim(),
+          localChannelName: channelName.trim(),
+        },
+      );
+      setConfirmation(result);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  if (confirmation) {
+    return (
+      <section className={styles.linkCard}>
+        <h2>One step left</h2>
+        <p className={styles.linkLead}>
+          Post this code as a message in{" "}
+          <strong>{confirmation.localChannelName}</strong> from your Buzz app.
+          You&apos;re linked the moment an owner or admin sends it &mdash; no
+          one else can.
+        </p>
+        <code className={styles.confirmCode}>{confirmation.code}</code>
+        <p className={styles.linkNote}>
+          Connected to the BuzzRouter community. You can close this page once
+          you&apos;ve sent the code.
+        </p>
+      </section>
+    );
+  }
+
+  if (community) {
+    return (
+      <section className={styles.linkCard}>
+        <h2>Connected: {community.displayName}</h2>
+        <p className={styles.linkLead}>
+          Pick the channel to share, then link it with the BuzzRouter
+          community in one tap.
+        </p>
+        <label>
+          Channel to share
+          <input
+            aria-label="Channel to share name"
+            maxLength={80}
+            onChange={(event) => setChannelName(event.target.value)}
+            placeholder="e.g. general"
+            value={channelName}
+          />
+        </label>
+        <label>
+          Channel ID
+          <input
+            aria-label="Channel to share ID"
+            maxLength={200}
+            onChange={(event) => setChannelId(event.target.value)}
+            placeholder="The channel's ID in your Buzz app"
+            value={channelId}
+          />
+        </label>
+        <button
+          className={styles.primaryCta}
+          disabled={connecting || !channelId.trim() || !channelName.trim()}
+          onClick={connectFeatured}
+          type="button"
+        >
+          {connecting ? "Connecting…" : "Connect with the BuzzRouter community"}
+        </button>
+        {error ? <p className={styles.notice}>{error}</p> : null}
+      </section>
+    );
+  }
+
+  return (
+    <section className={styles.linkCard}>
+      <form onSubmit={admit}>
+        <label>
+          Your Buzz invite link
+          <input
+            aria-label="Invite link from your Buzz app"
+            onChange={(event) => setInvite(event.target.value)}
+            placeholder="https://your-relay/invite/…"
+            value={invite}
+          />
+        </label>
+        <p className={styles.linkNote}>
+          Open your community&apos;s invite in Buzz, tap <strong>Copy
+          link</strong>, and paste it here. No browser extension needed &mdash;
+          works on your phone.
+        </p>
+        <button
+          className={styles.primaryCta}
+          disabled={admitting || !invite.trim()}
+          type="submit"
+        >
+          {admitting ? "Connecting…" : "Add your community"}
+        </button>
+      </form>
+      {error ? <p className={styles.notice}>{error}</p> : null}
+    </section>
+  );
+}
+
+function OwnerTools() {
   const [workspace, setWorkspace] =
     useState<SharedChannelAdminWorkspace | null>(null);
   const [activeCommunityId, setActiveCommunityId] = useState("");
@@ -278,12 +482,13 @@ export function SharedChannelsClient() {
         </button>
         {!signerPresent ? (
           <p className={styles.signerHelp}>
-            No Nostr signer was detected in this browser. Install a NIP-07
-            signer extension such as{" "}
+            No browser signer here &mdash; that&apos;s fine, most people should
+            use the invite-link flow above. This power path needs a NIP-07
+            extension (
             <a href="https://getalby.com" rel="noopener noreferrer" target="_blank">
               Alby
-            </a>{" "}
-            or{" "}
+            </a>
+            ,{" "}
             <a
               href="https://github.com/fiatjaf/nos2x"
               rel="noopener noreferrer"
@@ -291,24 +496,13 @@ export function SharedChannelsClient() {
             >
               nos2x
             </a>
-            , import the key that owns your community, and reload this page.
-            BuzzRouter never asks for the private key itself &mdash; the
-            extension signs requests on your behalf.
-            <br />
-            <br />
-            Prefer not to use a browser extension? Every action on this page
-            is also available from a terminal:{" "}
-            <code className={styles.commandShape}>
-              BUZZROUTER_ADMIN_KEY=nsec... npm run admin -- GET
-              /api/shared-channels
-            </code>{" "}
-            signs the same request with a local key. See{" "}
+            ) or the{" "}
             <a
               href="https://github.com/lunchboxfortwo/buzzrouter/blob/main/docs/admin-without-a-browser-signer.md"
               rel="noopener noreferrer"
               target="_blank"
             >
-              the CLI guide
+              CLI
             </a>
             .
           </p>

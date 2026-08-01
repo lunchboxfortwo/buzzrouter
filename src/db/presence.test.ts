@@ -190,6 +190,7 @@ describe("upsertSummary", () => {
       goals: "Build things",
       messageCount: 40,
       recentProjects: ["Relay work", "Docs"],
+      tagline: "Builder guild HQ",
       totalMemberCount: 12,
       windowDays: 7,
     };
@@ -209,6 +210,7 @@ describe("upsertSummary", () => {
       40,
       3,
       7,
+      "Builder guild HQ",
     ]);
   });
 
@@ -224,6 +226,7 @@ describe("upsertSummary", () => {
       goals: "Too quiet to tell.",
       messageCount: 0,
       recentProjects: [],
+      tagline: null,
       windowDays: 7,
     });
 

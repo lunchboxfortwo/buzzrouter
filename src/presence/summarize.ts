@@ -32,11 +32,16 @@ const MAX_PROMPT_MESSAGES = 200;
 
 export type ActivityLevel = "quiet" | "light" | "active" | "busy";
 
+/** Max characters for the row tagline — a few words that fit one dense line. */
+export const TAGLINE_MAX_LENGTH = 42;
+
 export interface CommunitySummary {
   goals: string;
   recentProjects: string[];
   /** Best-fit directory focus slug from real activity, or null if unclear. */
   focus: FocusSlug | null;
+  /** A ≤42-char row tagline (a few words), or null when there is too little. */
+  tagline: string | null;
   activityLevel: ActivityLevel;
   activeMemberCount: number;
   totalMemberCount?: number;
@@ -51,6 +56,8 @@ export interface CommunityBlurb {
   recentProjects: string[];
   /** One of FOCUS_SLUGS, or null when the activity does not clearly fit one. */
   focus: FocusSlug | null;
+  /** A ≤42-char tagline for the dense directory row, or null. */
+  tagline: string | null;
 }
 
 export interface ActivityMetrics {
@@ -155,13 +162,19 @@ const SYSTEM_PROMPT = [
   "Your reader is a prospective member deciding whether to JOIN this community.",
   "You are given recent public messages, each with a channel, content, and",
   "timestamp — nothing that identifies who wrote them.",
-  "Produce a JSON object with exactly three fields:",
+  "Produce a JSON object with exactly four fields:",
   '  "goals": a 1-2 sentence description of what the community is about and its',
   "    overall purpose.",
   "The reader is already browsing a directory of Buzz communities and knows every",
   "listing is one — do NOT state that this is a Buzz community, and do NOT use the",
   "word 'Buzz' to classify it; open the goals with what makes THIS community",
   "distinct (its topic, who it's for, what it does).",
+  '  "tagline": a VERY short label for a dense directory row — at most 5 words',
+  `    and at most ${TAGLINE_MAX_LENGTH} characters — capturing what this`,
+  "    community is, so a reader scanning a list instantly gets it. No trailing",
+  "    period, no 'Buzz', no generic filler like 'community' or 'hive' on its",
+  "    own. Good: 'Monero privacy & open source', 'AI agent builders', 'Vim",
+  "    users in Japan'. Use null only if there is genuinely too little to tell.",
   '  "recentProjects": an array of 2-4 short strings, each a single interesting',
   "    thing the community has recently been working on or discussing.",
   '  "focus": the ONE category from the list below that best fits this',
@@ -173,8 +186,25 @@ const SYSTEM_PROMPT = [
   "pubkeys, npubs, or any IDs. Do NOT quote messages verbatim — paraphrase.",
   "Do NOT invent facts not supported by the messages. If there is too little",
   'activity to tell, say so plainly in "goals", return an empty "recentProjects"',
-  'array, and set "focus" to null. Respond with ONLY the JSON object.',
+  'array, and set "focus" and "tagline" to null. Respond with ONLY the JSON',
+  "object.",
 ].join("\n");
+
+/**
+ * Normalizes a raw tagline: collapse whitespace, drop a trailing period, and
+ * keep it under the row's character budget by trimming to a whole-word boundary.
+ * Empty or non-string input yields null so the row simply shows nothing.
+ */
+export function normalizeTagline(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const text = raw.trim().replace(/\s+/g, " ").replace(/\.$/, "").trim();
+  if (text.length === 0) return null;
+  if (text.length <= TAGLINE_MAX_LENGTH) return text;
+  const clipped = text.slice(0, TAGLINE_MAX_LENGTH);
+  const lastSpace = clipped.lastIndexOf(" ");
+  const trimmed = (lastSpace > 0 ? clipped.slice(0, lastSpace) : clipped).trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 /**
  * The LLM half of the summary. Strips every pubkey before the messages leave
@@ -261,6 +291,7 @@ export async function buildCommunitySummary(
     goals: blurb.goals,
     messageCount: metrics.messageCount,
     recentProjects: blurb.recentProjects,
+    tagline: blurb.tagline,
     windowDays: metrics.windowDays,
   };
   if (typeof options.totalMemberCount === "number") {
@@ -284,6 +315,7 @@ export function parseBlurb(content: string): CommunityBlurb {
       goals?: unknown;
       recentProjects?: unknown;
       focus?: unknown;
+      tagline?: unknown;
     };
     const goals =
       typeof parsed.goals === "string" && parsed.goals.trim().length > 0
@@ -296,9 +328,10 @@ export function parseBlurb(content: string): CommunityBlurb {
           .filter((item) => item.length > 0)
       : [];
     const focus = isFocusSlug(parsed.focus) ? parsed.focus : null;
-    return { focus, goals, recentProjects };
+    const tagline = normalizeTagline(parsed.tagline);
+    return { focus, goals, recentProjects, tagline };
   } catch {
-    return { focus: null, goals: trimmed, recentProjects: [] };
+    return { focus: null, goals: trimmed, recentProjects: [], tagline: null };
   }
 }
 

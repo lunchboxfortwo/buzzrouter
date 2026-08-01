@@ -88,6 +88,7 @@ export async function upsertSummary(
           message_count = $7,
           channel_count = $8,
           window_days = $9,
+          tagline = $10,
           last_summarized_at = now()
       WHERE relay_host = $1
     `,
@@ -101,6 +102,7 @@ export async function upsertSummary(
       summary.messageCount,
       summary.channelCount,
       summary.windowDays,
+      summary.tagline,
     ],
   );
 }
@@ -272,6 +274,7 @@ export async function deleteInviteCandidate(
 
 export interface StoredCommunitySummary {
   goals: string;
+  tagline: string | null;
   recentProjects: string[];
   activityLevel: string;
   activeMemberCount: number;
@@ -293,6 +296,7 @@ export async function getCommunitySummary(
 ): Promise<StoredCommunitySummary | null> {
   const result = await pool.query<{
     goals: string | null;
+    tagline: string | null;
     recent_projects: unknown;
     activity_level: string | null;
     active_member_count: number | null;
@@ -303,7 +307,7 @@ export async function getCommunitySummary(
     last_summarized_at: Date | string;
   }>(
     `
-      SELECT goals, recent_projects, activity_level, active_member_count,
+      SELECT goals, tagline, recent_projects, activity_level, active_member_count,
              total_member_count, message_count, channel_count, window_days,
              last_summarized_at
       FROM presence_communities
@@ -326,6 +330,7 @@ export async function getCommunitySummary(
     recentProjects: Array.isArray(row.recent_projects)
       ? (row.recent_projects as string[])
       : [],
+    tagline: row.tagline,
     totalMemberCount: row.total_member_count,
     windowDays: row.window_days ?? 7,
   };

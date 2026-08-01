@@ -64,6 +64,19 @@ function joined(host: string): {
   return { community_id: null, relay_host: host, relay_url: `wss://${host}` };
 }
 
+/** An invite token whose payload carries the given Unix-seconds expiry. */
+function codeExpiring(atSeconds: number): string {
+  const payload = Buffer.from(JSON.stringify({ c: "x", e: atSeconds }), "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return `${payload}.sig`;
+}
+
+const NOW = 1_800_000_000;
+const DAY = 24 * 60 * 60;
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -81,6 +94,7 @@ describe("refreshStaleInvites", () => {
     expect(result).toEqual({
       checked: 1,
       errors: 0,
+      expiringNoCandidate: 0,
       live: 1,
       replaced: 0,
       stillStale: 0,
@@ -103,6 +117,7 @@ describe("refreshStaleInvites", () => {
     expect(result).toEqual({
       checked: 1,
       errors: 0,
+      expiringNoCandidate: 0,
       live: 0,
       replaced: 1,
       stillStale: 0,
@@ -130,6 +145,77 @@ describe("refreshStaleInvites", () => {
     const logged = warnSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(logged).toContain("home.example");
     expect(logged).not.toContain("STALE");
+  });
+
+  it("proactively swaps a live-but-expiring code for a longer-lived candidate", async () => {
+    const soon = codeExpiring(NOW + 2 * DAY); // live, within the 7-day window
+    const fresh = codeExpiring(NOW + 60 * DAY); // live, lasts much longer
+    const { pool, replaceCalls, deleteCalls } = makePool({
+      candidatesByHost: { "home.example": [{ code: fresh }] },
+      directoryByHost: { "home.example": { candidate_id: "cand-1", code: soon } },
+      joined: [joined("home.example")],
+    });
+    const probe = probeReturning({ [fresh]: "live", [soon]: "live" });
+
+    const result = await refreshStaleInvites({ now: NOW, pool, privateKey: KEY, probe });
+
+    expect(result).toMatchObject({ expiringNoCandidate: 0, live: 0, replaced: 1 });
+    expect(replaceCalls).toEqual([["cand-1", fresh]]);
+    expect(deleteCalls).toEqual([["home.example", fresh]]);
+  });
+
+  it("flags a live-but-expiring code with no fresher candidate (nudge signal)", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const soon = codeExpiring(NOW + 2 * DAY);
+    const { pool, replaceCalls } = makePool({
+      directoryByHost: { "home.example": { candidate_id: "cand-1", code: soon } },
+      joined: [joined("home.example")],
+    });
+    const probe = probeReturning({ [soon]: "live" });
+
+    const result = await refreshStaleInvites({ now: NOW, pool, privateKey: KEY, probe });
+
+    expect(result).toMatchObject({
+      expiringNoCandidate: 1,
+      live: 0,
+      replaced: 0,
+      stillStale: 0,
+    });
+    expect(replaceCalls).toHaveLength(0);
+  });
+
+  it("does not churn a live-but-expiring code for an equally-soon candidate", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const soon = codeExpiring(NOW + 2 * DAY);
+    const sooner = codeExpiring(NOW + 1 * DAY); // live but does NOT last longer
+    const { pool, replaceCalls, deleteCalls } = makePool({
+      candidatesByHost: { "home.example": [{ code: sooner }] },
+      directoryByHost: { "home.example": { candidate_id: "cand-1", code: soon } },
+      joined: [joined("home.example")],
+    });
+    const probe = probeReturning({ [sooner]: "live", [soon]: "live" });
+
+    const result = await refreshStaleInvites({ now: NOW, pool, privateKey: KEY, probe });
+
+    expect(result).toMatchObject({ expiringNoCandidate: 1, replaced: 0 });
+    expect(replaceCalls).toHaveLength(0);
+    expect(deleteCalls).toHaveLength(0); // the not-better candidate is left intact
+  });
+
+  it("leaves a live code with plenty of runway untouched", async () => {
+    const far = codeExpiring(NOW + 60 * DAY);
+    const { pool } = makePool({
+      candidatesByHost: { "home.example": [{ code: codeExpiring(NOW + 90 * DAY) }] },
+      directoryByHost: { "home.example": { candidate_id: "cand-1", code: far } },
+      joined: [joined("home.example")],
+    });
+    const probe = probeReturning({ [far]: "live" });
+
+    const result = await refreshStaleInvites({ now: NOW, pool, privateKey: KEY, probe });
+
+    expect(result).toMatchObject({ expiringNoCandidate: 0, live: 1, replaced: 0 });
+    // A comfortable code never even probes its candidates.
+    expect(probe).toHaveBeenCalledTimes(1);
   });
 
   it("does not count a community without a directory invite", async () => {

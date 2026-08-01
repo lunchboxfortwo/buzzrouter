@@ -222,7 +222,10 @@ test("a new owner completes the whole shared-channel journey through real UI and
   // ── Step 4: reach the proposal form and pick a channel from the relay-backed
   // picker (PR #24) rather than typing an id.
   const sourcePicker = page.getByLabel("Local channel", { exact: true });
-  await expect(sourcePicker).toBeEnabled();
+  // The fake relay never sends a NIP-42 challenge, so the connector's
+  // authenticate() now (correctly) waits out its full settle deadline before
+  // treating that as no-auth-required, rather than the old instant no-op.
+  await expect(sourcePicker).toBeEnabled({ timeout: 10_000 });
   await sourcePicker.selectOption({ label: "general" });
   await page.getByLabel("Shared name").fill("benchmark-review");
   await page
@@ -244,7 +247,7 @@ test("a new owner completes the whole shared-channel journey through real UI and
     .filter({ hasText: "benchmark-review" });
   await expect(route).toBeVisible();
   const acceptPicker = route.getByLabel("Local channel", { exact: true });
-  await expect(acceptPicker).toBeEnabled();
+  await expect(acceptPicker).toBeEnabled({ timeout: 10_000 });
   await acceptPicker.selectOption({ label: "builders" });
   await route.getByRole("button", { name: "Accept" }).click();
 

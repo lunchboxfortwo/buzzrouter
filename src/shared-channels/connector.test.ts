@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { Event } from "nostr-tools/core";
 import type { Relay } from "nostr-tools/relay";
@@ -52,17 +52,72 @@ describe("NostrRelayConnection", () => {
   });
 
   it("treats a relay without a challenge as not requiring NIP-42", async () => {
-    const { relay, state } = fakeRelay({
-      challenge: false,
-      rejectFirstPublish: false,
-    });
-    const connection = new NostrRelayConnection(relay, randomBytes(32));
+    vi.useFakeTimers();
+    try {
+      const { relay, state } = fakeRelay({
+        challenge: false,
+        rejectFirstPublish: false,
+      });
+      const connection = new NostrRelayConnection(relay, randomBytes(32));
 
-    await expect(connection.authenticate()).resolves.toBeUndefined();
-    await connection.publish({ id: "f".repeat(64) } as never);
+      const authenticated = connection.authenticate();
+      await vi.advanceTimersByTimeAsync(6_000);
+      await expect(authenticated).resolves.toBeUndefined();
+      await connection.publish({ id: "f".repeat(64) } as never);
 
-    expect(state.authCalls).toBe(0);
-    expect(state.publishCalls).toBe(1);
+      expect(state.authCalls).toBe(0);
+      expect(state.publishCalls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not treat a pre-challenge auth failure as no-auth-required: it waits and succeeds once the challenge lands", async () => {
+    vi.useFakeTimers();
+    try {
+      const state = { authCalls: 0, attempts: 0 };
+      const relay = {
+        async auth() {
+          state.attempts += 1;
+          // The challenge only lands after a couple of retries — mirrors a
+          // real relay whose AUTH challenge arrives shortly after connect.
+          if (state.attempts < 3) {
+            throw new Error("can't perform auth, no challenge was received");
+          }
+          state.authCalls += 1;
+          return "";
+        },
+      } as unknown as Relay;
+      const connection = new NostrRelayConnection(relay, randomBytes(32));
+
+      const authenticated = connection.authenticate();
+      await vi.advanceTimersByTimeAsync(500);
+      await expect(authenticated).resolves.toBeUndefined();
+
+      expect(state.authCalls).toBe(1);
+      expect(state.attempts).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up quietly after the deadline when the relay never challenges, without hanging", async () => {
+    vi.useFakeTimers();
+    try {
+      const { relay, state } = fakeRelay({
+        challenge: false,
+        rejectFirstPublish: false,
+      });
+      const connection = new NostrRelayConnection(relay, randomBytes(32));
+
+      const authenticated = connection.authenticate();
+      await vi.advanceTimersByTimeAsync(6_000);
+      await expect(authenticated).resolves.toBeUndefined();
+
+      expect(state.authCalls).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

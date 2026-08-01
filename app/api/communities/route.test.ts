@@ -21,6 +21,7 @@ function buildCommunity(overrides: Record<string, unknown> = {}) {
     categories: ["dev"],
     joinMode: "invite",
     inviteCode: "abc123",
+    joinStatus: "open",
     publicUrl: null,
     lastVerifiedAt: "2026-07-01T00:00:00.000Z",
     slug: "builders",
@@ -76,25 +77,57 @@ describe("GET /api/communities", () => {
     );
   });
 
-  it("filters to joinable rows when ?joinable=true is set", async () => {
+  it("filters ?joinable=true to a probed-open code or a public URL only", async () => {
     listDirectoryCommunities.mockResolvedValue([
+      // A genuinely open invite (a bare claim lands) — MUST appear.
       buildCommunity({
         candidateId: "candidate-1",
         inviteCode: "abc123",
+        joinStatus: "open",
         publicUrl: null,
-        relayHost: "has-invite.example",
+        relayHost: "open-invite.example",
       }),
+      // A public web-join URL — always joinable.
       buildCommunity({
         candidateId: "candidate-2",
         inviteCode: null,
+        joinStatus: null,
         publicUrl: "https://has-url.example",
         relayHost: "has-url.example",
       }),
+      // Holds a code but a bare claim is refused with join_policy_required —
+      // MUST NOT appear (the reported bug).
       buildCommunity({
         candidateId: "candidate-3",
-        inviteCode: null,
+        inviteCode: "gated-code",
+        joinStatus: "policy_gated",
         publicUrl: null,
-        relayHost: "no-target.example",
+        relayHost: "policy-gated.example",
+      }),
+      // Owner-only / allowlist admission — MUST NOT appear.
+      buildCommunity({
+        candidateId: "candidate-4",
+        inviteCode: "owner-code",
+        joinStatus: "restricted",
+        publicUrl: null,
+        relayHost: "restricted.example",
+      }),
+      // Expired/invalid code — MUST NOT appear.
+      buildCommunity({
+        candidateId: "candidate-5",
+        inviteCode: "dead-code",
+        joinStatus: "stale",
+        publicUrl: null,
+        relayHost: "stale.example",
+      }),
+      // Code present but never probed / verdict decayed — MUST NOT appear until
+      // a probe confirms it (fail closed).
+      buildCommunity({
+        candidateId: "candidate-6",
+        inviteCode: "unprobed-code",
+        joinStatus: null,
+        publicUrl: null,
+        relayHost: "unprobed.example",
       }),
     ]);
     const { GET } = await import("./route");
@@ -106,8 +139,60 @@ describe("GET /api/communities", () => {
 
     expect(body.count).toBe(2);
     expect(body.communities.map((c: { host: string }) => c.host)).toEqual([
-      "has-invite.example",
+      "open-invite.example",
       "has-url.example",
+    ]);
+  });
+
+  it("includes policy-gated + unprobed codes under ?joinable=handshake but never restricted/stale", async () => {
+    listDirectoryCommunities.mockResolvedValue([
+      buildCommunity({
+        candidateId: "candidate-1",
+        inviteCode: "abc123",
+        joinStatus: "open",
+        publicUrl: null,
+        relayHost: "open-invite.example",
+      }),
+      buildCommunity({
+        candidateId: "candidate-2",
+        inviteCode: "gated-code",
+        joinStatus: "policy_gated",
+        publicUrl: null,
+        relayHost: "policy-gated.example",
+      }),
+      buildCommunity({
+        candidateId: "candidate-3",
+        inviteCode: "unprobed-code",
+        joinStatus: null,
+        publicUrl: null,
+        relayHost: "unprobed.example",
+      }),
+      buildCommunity({
+        candidateId: "candidate-4",
+        inviteCode: "owner-code",
+        joinStatus: "restricted",
+        publicUrl: null,
+        relayHost: "restricted.example",
+      }),
+      buildCommunity({
+        candidateId: "candidate-5",
+        inviteCode: "dead-code",
+        joinStatus: "stale",
+        publicUrl: null,
+        relayHost: "stale.example",
+      }),
+    ]);
+    const { GET } = await import("./route");
+
+    const response = await GET(
+      new Request("https://buzzrouter.com/api/communities?joinable=handshake"),
+    );
+    const body = await response.json();
+
+    expect(body.communities.map((c: { host: string }) => c.host)).toEqual([
+      "open-invite.example",
+      "policy-gated.example",
+      "unprobed.example",
     ]);
   });
 

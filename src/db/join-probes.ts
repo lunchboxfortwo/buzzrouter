@@ -1,0 +1,96 @@
+import type { Pool } from "pg";
+
+import type { JoinStatus } from "../directory/joinability";
+
+/**
+ * Persistence for the join-probe verdicts that gate the directory's "joinable"
+ * claim. One row per candidate (`community_join_probes`), pinned to the exact
+ * code that was probed so a rotated invite invalidates the verdict rather than
+ * inheriting it. See `migrations/20260801T1200_community_join_probes.sql`.
+ */
+
+export interface JoinProbeInput {
+  candidateId: string;
+  /** The advertised invite code that was probed, or null for a code-less probe. */
+  code: string | null;
+  status: JoinStatus;
+  detail?: string | null;
+}
+
+/** A candidate whose claimability is due to be (re)probed. */
+export interface JoinProbeTarget {
+  candidateId: string;
+  host: string;
+  code: string;
+}
+
+/** Records (upserts) the latest claimability verdict for a candidate. */
+export async function recordJoinProbe(
+  pool: Pool,
+  input: JoinProbeInput,
+): Promise<void> {
+  await pool.query(
+    `
+      INSERT INTO community_join_probes
+        (candidate_id, probed_code, status, detail, probed_at)
+      VALUES ($1, $2, $3, $4, now())
+      ON CONFLICT (candidate_id) DO UPDATE
+        SET probed_code = EXCLUDED.probed_code,
+            status = EXCLUDED.status,
+            detail = EXCLUDED.detail,
+            probed_at = EXCLUDED.probed_at
+    `,
+    [input.candidateId, input.code, input.status, input.detail ?? null],
+  );
+}
+
+/**
+ * Lists verified Buzz candidates that carry an advertised invite code and whose
+ * claimability verdict is missing or STALE (probed before `staleBefore`, or
+ * recorded against a since-rotated code). Oldest verdict first — and never
+ * probed first — so a bounded batch keeps the whole set fresh over time. This is
+ * the decay hook: a `probed_at` older than the caller's window makes a prior
+ * verdict eligible for re-probing, so an `open` community that later closes (or
+ * whose code expires) stops reading as joinable.
+ */
+export async function listCandidatesForJoinProbe(
+  pool: Pool,
+  options: { staleBefore: Date; limit: number },
+): Promise<JoinProbeTarget[]> {
+  const result = await pool.query<{
+    candidate_id: string;
+    host: string;
+    code: string;
+  }>(
+    `
+      SELECT candidates.id AS candidate_id,
+             candidates.host AS host,
+             invite.code AS code
+      FROM community_candidates AS candidates
+      JOIN LATERAL (
+        SELECT source_invite_code AS code
+        FROM community_sources
+        WHERE candidate_id = candidates.id
+          AND source_invite_code IS NOT NULL
+        ORDER BY source_observed_at DESC
+        LIMIT 1
+      ) AS invite ON true
+      LEFT JOIN community_join_probes AS probe
+        ON probe.candidate_id = candidates.id
+      WHERE candidates.state = 'verified_buzz'
+        AND (
+          probe.candidate_id IS NULL
+          OR probe.probed_at < $1
+          OR probe.probed_code IS DISTINCT FROM invite.code
+        )
+      ORDER BY probe.probed_at ASC NULLS FIRST
+      LIMIT $2
+    `,
+    [options.staleBefore, options.limit],
+  );
+  return result.rows.map((row) => ({
+    candidateId: row.candidate_id,
+    code: row.code,
+    host: row.host,
+  }));
+}

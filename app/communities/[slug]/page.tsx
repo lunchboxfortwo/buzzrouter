@@ -13,6 +13,7 @@ import { getCommunitySummary } from "../../../src/db/presence";
 import { reliabilityLabel } from "../../../src/ranking/explain";
 import { focusLabel } from "../../../src/ranking/focus";
 import { AddInviteCta } from "../../AddInviteCta";
+import { accessFlag, joinAffordance } from "../../joinability-view";
 import { JoinButton } from "../../JoinButton";
 import { ShareOnX } from "../../ShareOnX";
 import styles from "./community.module.css";
@@ -76,11 +77,6 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function accessKind(c: DirectoryCommunity): "open" | "invite" | null {
-  if (c.publicUrl) return "open";
-  if (c.inviteCode) return "invite";
-  return null;
-}
 
 function statusOf(c: DirectoryCommunity): string {
   return reliabilityLabel({
@@ -139,8 +135,8 @@ export default async function CommunityPage({
   );
 
   const status = statusOf(community);
-  const access = accessKind(community);
-  const joinable = Boolean(community.inviteCode || community.publicUrl);
+  const access = accessFlag(community);
+  const affordance = joinAffordance(community);
   const tone = insigniaTone(community.relayHost);
   const shareUrl = `${pageOrigin()}/communities/${encodeURIComponent(community.relayHost)}`;
   const shareText = `${community.displayName} — a real, live Buzz community, verified by @buzzrouter`;
@@ -191,6 +187,7 @@ export default async function CommunityPage({
               className={styles.cta}
               communityName={community.displayName}
               inviteCode={community.inviteCode}
+              joinStatus={community.joinStatus}
               publicUrl={community.publicUrl}
               relayUrl={community.canonicalRelayUrl}
             />
@@ -205,7 +202,7 @@ export default async function CommunityPage({
 
         <AddInviteCta
           host={community.relayHost}
-          variant={joinable ? "quiet" : "prominent"}
+          variant={affordance === "join" ? "quiet" : "prominent"}
         />
 
         {summary ? (

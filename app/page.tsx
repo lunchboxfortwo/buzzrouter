@@ -17,6 +17,7 @@ import { AddInviteCta } from "./AddInviteCta";
 import { CommunityRowLink } from "./CommunityRowLink";
 import { RowJoinButton } from "./RowJoinButton";
 import { JoinButton } from "./JoinButton";
+import { accessFlag, joinAffordance } from "./joinability-view";
 import { MobileCollapsible } from "./MobileCollapsible";
 import { ShareOnX } from "./ShareOnX";
 import { SiteMasthead } from "./SiteMasthead";
@@ -273,7 +274,7 @@ function CommunityRow({
   selected: boolean;
 }) {
   const tone = insigniaTone(community.relayHost);
-  const joinable = Boolean(community.inviteCode || community.publicUrl);
+  const affordance = joinAffordance(community);
 
   return (
     <div
@@ -303,11 +304,11 @@ function CommunityRow({
         <span className={styles.indexCommunityCopy}>
           <span className={styles.indexNameLine}>
             <strong className={styles.indexName}>{community.displayName}</strong>
-            {accessKind(community) === "open" ? (
+            {accessFlag(community) === "open" ? (
               <span className={`${styles.accessFlag} ${styles.accessFlagOpen}`}>
                 Open to join
               </span>
-            ) : accessKind(community) === "invite" ? (
+            ) : accessFlag(community) === "invite" ? (
               <span className={`${styles.accessFlag} ${styles.accessFlagInvite}`}>
                 Invite-only
               </span>
@@ -322,7 +323,7 @@ function CommunityRow({
         {community.focus ? focusLabel(community.focus) : "—"}
       </span>
       <span className={styles.indexRowTrailing}>
-        {joinable ? (
+        {affordance === "join" ? (
           <RowJoinButton
             className={styles.indexRowJoin}
             communityName={community.displayName}
@@ -332,6 +333,8 @@ function CommunityRow({
               relayUrl: community.canonicalRelayUrl,
             }}
           />
+        ) : affordance === "request-invite" ? (
+          <span className={styles.indexRowRequest}>Request invite</span>
         ) : (
           <svg
             aria-hidden="true"
@@ -404,11 +407,11 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
             {label}
           </span>
           <span>Checked {relativeTime(community.lastVerifiedAt)}</span>
-          {accessKind(community) === "open" ? (
+          {accessFlag(community) === "open" ? (
             <span className={`${styles.accessFlag} ${styles.accessFlagOpen}`}>
               Open to join
             </span>
-          ) : accessKind(community) === "invite" ? (
+          ) : accessFlag(community) === "invite" ? (
             <span className={`${styles.accessFlag} ${styles.accessFlagInvite}`}>
               Invite-only
             </span>
@@ -433,6 +436,7 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
           className={styles.copyButton}
           communityName={community.displayName}
           inviteCode={community.inviteCode}
+          joinStatus={community.joinStatus}
           publicUrl={community.publicUrl}
           relayUrl={community.canonicalRelayUrl}
         />
@@ -623,19 +627,6 @@ function hasActivitySummary(community: DirectoryCommunity): boolean {
   return (
     community.lastSummarizedAt !== null && community.activeMemberCount !== null
   );
-}
-
-/**
- * Joinability from observed catalog data, never from the relay's NIP-42 auth
- * flag. Returns null when we have no join signal, so the row claims nothing
- * rather than mislabelling.
- */
-function accessKind(
-  community: DirectoryCommunity,
-): "open" | "invite" | null {
-  if (community.publicUrl) return "open";
-  if (community.inviteCode) return "invite";
-  return null;
 }
 
 function monogram(displayName: string): string {

@@ -224,7 +224,7 @@ to touch without coordinating.
 
 | Owner | Paths |
 | --- | --- |
-| Bridge / directory (this agent) | `src/shared-channels/`, `src/hosted-signup/`, `app/shared-channels/`, `app/submit/`, `app/create-community/`, `src/submissions/` |
+| Bridge / directory (this agent) | `src/shared-channels/`, `src/hosted-signup/`, `app/shared-channels/`, `app/submit/`, `app/create-community/`, `src/submissions/`, `src/directory/`, `src/db/join-probes.ts`, `src/jobs/probe-joinability.ts` |
 | Presence agent | `src/presence/`, `src/jobs/auto-join-communities.ts`, `src/jobs/harvest-invites.ts`, `src/jobs/refresh-community-summaries.ts`, `src/jobs/refresh-invites.ts` |
 | SHARED — rebase immediately before touching, keep the diff minimal | `migrations/`, `vitest.config.ts`, `app/SiteMasthead.tsx`, `PRODUCT.md`, `README.md`, `package.json`, `.github/workflows/`, `src/db/` |
 
@@ -312,6 +312,34 @@ next number in the old sequence — see `migrations/README.md`. Existing
   loop and throws `"ReadableStream is already closed"` as an unhandled
   rejection (reproduces reliably under Vitest, not just in production);
   drain to completion instead and throw only after the loop ends.
+
+## Directory "joinable" is probed, not assumed
+
+- Holding an invite code is NOT proof a join will land. Buzz gates joins two
+  ways: a ToS/age handshake (a bare `POST /api/invites/claim {"code"}` without a
+  policy receipt is refused `403 join_policy_required` — verified live) and
+  per-community admission (owner-only / allowlist / anyone). So the directory
+  probes claimability and stores a verdict per candidate
+  (`community_join_probes`, `src/db/join-probes.ts`), refreshed by the hourly
+  `directory.probe-joinability` job (`src/jobs/probe-joinability.ts`).
+- The probe (`src/directory/joinability.ts`) is deliberately CHEAP: the public
+  `GET /api/join-policy` `age_attestation_required` flag alone settles an
+  age-gated community as `policy_gated` with NO claim; only an un-gated community
+  costs ONE bare claim (throwaway key = a new user; only "consumes" a use on a
+  genuine `open`). Never batch-claim to test — claims are rate-limited 10/60s per
+  pubkey. Reuse `getJoinPolicy`/`claimInvite` (they normalize the host via
+  `normalizeHost` — do not hand-build third-party URLs, keep the SSRF guard).
+- `src/db/directory.ts` exposes `joinStatus`, trusting a verdict only while fresh
+  (12h decay window, kept in step with `STALE_AFTER_MS`) AND pinned to the still-
+  advertised code. `GET /api/communities?joinable=true` (the honest one-tap feed)
+  returns only `open` (+ public-URL) communities; `?joinable=handshake` also
+  includes `policy_gated`/un-probed for the AGENT's auto-join, which completes the
+  full handshake — never `restricted`/`stale`. The web surface
+  (`app/joinability-view.ts`) shows "Request an invite" for `restricted`.
+- Empirically, essentially every Buzz community is age-gated, so almost nothing is
+  bare-claim `open`; that is expected. A community can be genuinely joinable via
+  the hosted `/invite/<code>` onboarding link (full handshake) yet still be
+  excluded from `?joinable=true` — the two are different by design.
 
 ## Maintaining this file
 

@@ -221,6 +221,11 @@ test("a new owner completes the whole shared-channel journey through real UI and
 
   // ── Step 4: reach the proposal form and pick a channel from the relay-backed
   // picker (PR #24) rather than typing an id.
+  // Creating a fresh channel is the default now; this spec exercises the
+  // alternative — binding a channel the community already has — so switch to it.
+  await page
+    .getByRole("radio", { name: "Use a channel I already have" })
+    .click();
   const sourcePicker = page.getByLabel("Local channel", { exact: true });
   // The fake relay never sends a NIP-42 challenge, so the connector's
   // authenticate() now (correctly) waits out its full settle deadline before
@@ -246,6 +251,9 @@ test("a new owner completes the whole shared-channel journey through real UI and
     .locator("article")
     .filter({ hasText: "benchmark-review" });
   await expect(route).toBeVisible();
+  await route
+    .getByRole("radio", { name: "Use a channel I already have" })
+    .click();
   const acceptPicker = route.getByLabel("Local channel", { exact: true });
   await expect(acceptPicker).toBeEnabled({ timeout: 10_000 });
   await acceptPicker.selectOption({ label: "builders" });

@@ -729,6 +729,11 @@ export async function createSharedChannel(
       client,
       input.sourceCommunityId,
     );
+    await assertChannelNotRouted(
+      client,
+      input.sourceCommunityId,
+      input.sourceChannelId,
+    );
 
     const channelResult = await client.query<SharedChannelRow>(
       `
@@ -893,6 +898,11 @@ export async function armSharedChannelConfirmation(
     const connection = await requireActiveConnection(
       client,
       input.communityId,
+    );
+    await assertChannelNotRouted(
+      client,
+      input.communityId,
+      input.localChannelId,
     );
 
     await client.query(
@@ -2436,6 +2446,39 @@ async function requireActiveConnection(
     );
   }
   return { id: row.id, relayUrl: row.relay_url_snapshot };
+}
+
+/**
+ * A local channel may back exactly one active/paused shared channel per
+ * community — enforced by `shared_channel_endpoints_local_channel_idx`. Reject a
+ * reuse with a clear product error here (409) instead of letting the insert trip
+ * a raw Postgres unique-violation (23505 → 500). The DEFAULT link flow now
+ * creates a fresh channel per link, so this only bites when someone hand-picks a
+ * channel that is already routed.
+ */
+async function assertChannelNotRouted(
+  client: PoolClient,
+  communityId: string,
+  localChannelId: string,
+): Promise<void> {
+  const result = await client.query(
+    `
+      SELECT 1
+      FROM shared_channel_endpoints
+      WHERE community_id = $1
+        AND local_channel_id = $2
+        AND state IN ('active', 'paused')
+      LIMIT 1
+    `,
+    [communityId, localChannelId],
+  );
+  if (result.rows.length > 0) {
+    throw new ApiError(
+      "channel_already_routed",
+      "That channel is already connected to another shared channel. Pick a different channel or create a new one.",
+      409,
+    );
+  }
 }
 
 async function lockIdempotencyKey(

@@ -959,6 +959,12 @@
   padding: 0;
 }
 
+/* The live-activity variant carries three numbers (activity, members,
+   messages) rather than two probe metrics. */
+.inspectorActivity {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
 .metricTile {
   min-width: 0;
   padding: 18px 20px;

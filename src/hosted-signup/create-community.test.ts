@@ -1,14 +1,18 @@
-import { verifyEvent } from "nostr-tools/pure";
+import { getPublicKey, verifyEvent } from "nostr-tools/pure";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { decryptConnectorPrivateKey } from "../shared-channels/store";
 import {
   BuilderlabClient,
   buildBindingEvent,
   type BuilderlabChallenge,
   type BuilderlabClientConfig,
 } from "./builderlab-client";
-import { createHostedCommunity } from "./create-community";
+import {
+  createHostedCommunity,
+  decryptHostedIdentityKey,
+  type CreateHostedCommunityDeps,
+  type PersistedHostedCustody,
+} from "./create-community";
 
 const FIXED_NOW = Date.parse("2026-07-31T21:50:00.000Z");
 const ORIGIN = "https://fake.builderlab.test";
@@ -77,11 +81,19 @@ function fakeBuilderlab(respond: Responder): {
   };
 }
 
-/** Happy-path responder: challenge → verify → create all succeed. */
+/** Happy-path responder: availability → challenge → verify → create succeed. */
 function happyResponder(
   challenge: BuilderlabChallenge = freshChallenge(),
 ): Responder {
   return (path, body) => {
+    if (path === "/v1/buzz/communities/availability") {
+      return {
+        json: {
+          available: true,
+          normalized_host: `${body.name}.communities.buzz.xyz`,
+        },
+      };
+    }
     if (path === "/v1/buzz/nostr-identities/challenge") {
       return { json: challenge };
     }
@@ -94,7 +106,10 @@ function happyResponder(
       return {
         json: {
           correlation_id: "6b94606b-9334-404c-bec5-8ebb2c3dc016",
-          identity: { npub: `npub1${event.pubkey.slice(0, 8)}`, pubkey_hex: event.pubkey },
+          identity: {
+            npub: `npub1${event.pubkey.slice(0, 8)}`,
+            pubkey_hex: event.pubkey,
+          },
         },
       };
     }
@@ -113,9 +128,17 @@ function happyResponder(
   };
 }
 
-function deps(config: BuilderlabClientConfig) {
+function makeDeps(
+  config: BuilderlabClientConfig,
+  persisted: PersistedHostedCustody[] = [],
+  onPersist?: (record: PersistedHostedCustody) => void,
+): CreateHostedCommunityDeps {
   return {
     client: new BuilderlabClient(config),
+    persistCustody: async (record) => {
+      onPersist?.(record);
+      persisted.push(record);
+    },
     wrappingKeys: { getKey: async () => WRAPPING_KEY },
   };
 }
@@ -150,25 +173,28 @@ describe("createHostedCommunity", () => {
 
   it("binds a self-generated key and returns encrypted custody", async () => {
     const { config, requests } = fakeBuilderlab(happyResponder());
+    const persisted: PersistedHostedCustody[] = [];
     const result = await createHostedCommunity(
       { name: "selfkeyproof0731", sessionCredential: SESSION },
-      deps(config),
+      makeDeps(config, persisted),
     );
 
     expect(result.community.normalized_host).toBe(
       "selfkeyproof0731.communities.buzz.xyz",
     );
-    // Custody decrypts back to a valid 32-byte secret whose pubkey owns the id.
-    const secret = decryptConnectorPrivateKey(
-      result.custody,
+    // Custody decrypts back to a valid 32-byte secret whose pubkey is the id.
+    const secret = decryptHostedIdentityKey(
+      result.custody!,
       WRAPPING_KEY,
-      result.community.id,
+      result.bindPubkey,
     );
     expect(secret.byteLength).toBe(32);
-    expect(result.identity.pubkey_hex).toMatch(/^[0-9a-f]{64}$/);
+    expect(getPublicKey(secret)).toBe(result.bindPubkey);
+    expect(result.identity.pubkey_hex).toBe(result.bindPubkey);
 
-    // Sequence + auth: challenge, verify, create — each session-authenticated.
+    // Availability is pre-checked before the irreversible bind.
     expect(requests.map((r) => r.path)).toEqual([
+      "/v1/buzz/communities/availability",
       "/v1/buzz/nostr-identities/challenge",
       "/v1/buzz/nostr-identities/verify",
       "/v1/buzz/communities",
@@ -179,7 +205,166 @@ describe("createHostedCommunity", () => {
     }
   });
 
-  it("fails fast on an expired challenge and never calls /verify", async () => {
+  it("persists the encrypted key BEFORE the bind (F1)", async () => {
+    let pathsAtPersist: string[] = [];
+    const { config, requests } = fakeBuilderlab(happyResponder());
+    await createHostedCommunity(
+      { name: "ordered", sessionCredential: SESSION },
+      makeDeps(config, [], () => {
+        pathsAtPersist = requests.map((r) => r.path);
+      }),
+    );
+
+    // At persist time, only availability had been called — never verify/create.
+    expect(pathsAtPersist).toEqual(["/v1/buzz/communities/availability"]);
+    expect(pathsAtPersist).not.toContain("/v1/buzz/nostr-identities/verify");
+  });
+
+  it("rejects a bad name before generating or binding a key (F1)", async () => {
+    const { config, requests } = fakeBuilderlab(happyResponder());
+    const persisted: PersistedHostedCustody[] = [];
+    await expect(
+      createHostedCommunity(
+        { name: "Bad_Name", sessionCredential: SESSION },
+        makeDeps(config, persisted),
+      ),
+    ).rejects.toMatchObject({ code: "invalid_community_name" });
+
+    // No live call, no key persisted — nothing was bound.
+    expect(requests).toHaveLength(0);
+    expect(persisted).toHaveLength(0);
+  });
+
+  it("pre-empts a taken name before binding (F2)", async () => {
+    const { config, requests } = fakeBuilderlab((path, body) => {
+      if (path === "/v1/buzz/communities/availability") {
+        return { json: { available: false, normalized_host: "x" } };
+      }
+      return happyResponder()(path, body);
+    });
+    await expect(
+      createHostedCommunity(
+        { name: "taken", sessionCredential: SESSION },
+        makeDeps(config),
+      ),
+    ).rejects.toMatchObject({ code: "community_name_taken" });
+
+    // Only availability ran — the identity was never bound.
+    expect(requests.map((r) => r.path)).toEqual([
+      "/v1/buzz/communities/availability",
+    ]);
+  });
+
+  it("keeps the key recoverable when create fails after a good bind (F1/F2)", async () => {
+    const { config, requests } = fakeBuilderlab((path, body) => {
+      if (path === "/v1/buzz/communities") {
+        return { json: { error: "server_blip" }, status: 500 };
+      }
+      return happyResponder()(path, body);
+    });
+    const persisted: PersistedHostedCustody[] = [];
+
+    await expect(
+      createHostedCommunity(
+        { name: "orphaned", sessionCredential: SESSION },
+        makeDeps(config, persisted),
+      ),
+    ).rejects.toMatchObject({ code: "builderlab_rejected" });
+
+    // The bind happened AND the key was persisted first, so it is recoverable.
+    expect(requests.map((r) => r.path)).toContain(
+      "/v1/buzz/nostr-identities/verify",
+    );
+    expect(persisted).toHaveLength(1);
+    const recovered = decryptHostedIdentityKey(
+      persisted[0].custody,
+      WRAPPING_KEY,
+      persisted[0].bindPubkey,
+    );
+    expect(getPublicKey(recovered)).toBe(persisted[0].bindPubkey);
+  });
+
+  it("resumes with the persisted key and tolerates identity_already_bound (F2)", async () => {
+    // First attempt: create fails after bind, leaving a persisted, bound key.
+    const first = fakeBuilderlab((path, body) => {
+      if (path === "/v1/buzz/communities") {
+        return { json: { error: "server_blip" }, status: 500 };
+      }
+      return happyResponder()(path, body);
+    });
+    const persisted: PersistedHostedCustody[] = [];
+    await expect(
+      createHostedCommunity(
+        { name: "resume-me", sessionCredential: SESSION },
+        makeDeps(first.config, persisted),
+      ),
+    ).rejects.toMatchObject({ code: "builderlab_rejected" });
+
+    const record = persisted[0];
+    const recovered = decryptHostedIdentityKey(
+      record.custody,
+      WRAPPING_KEY,
+      record.bindPubkey,
+    );
+
+    // Second attempt: same session is already bound to OUR key; create succeeds.
+    const second = fakeBuilderlab((path, body) => {
+      if (path === "/v1/buzz/nostr-identities/verify") {
+        return { json: { error: "identity_already_bound" }, status: 409 };
+      }
+      if (path === "/v1/buzz/nostr-identities/current") {
+        return {
+          json: {
+            identity: { npub: record.npub, pubkey_hex: record.bindPubkey },
+          },
+        };
+      }
+      return happyResponder()(path, body);
+    });
+
+    const result = await createHostedCommunity(
+      {
+        existingSecretKey: recovered,
+        name: "resume-me",
+        sessionCredential: SESSION,
+      },
+      makeDeps(second.config, []),
+    );
+
+    expect(result.identity.pubkey_hex).toBe(record.bindPubkey);
+    expect(result.community.normalized_host).toBe(
+      "resume-me.communities.buzz.xyz",
+    );
+    // Resume confirmed the bound key via /current, then created the community.
+    expect(second.requests.map((r) => r.path)).toEqual([
+      "/v1/buzz/communities/availability",
+      "/v1/buzz/nostr-identities/challenge",
+      "/v1/buzz/nostr-identities/verify",
+      "/v1/buzz/nostr-identities/current",
+      "/v1/buzz/communities",
+    ]);
+  });
+
+  it("refuses to proceed if the session is bound to a DIFFERENT key", async () => {
+    const { config } = fakeBuilderlab((path, body) => {
+      if (path === "/v1/buzz/nostr-identities/verify") {
+        return { json: { error: "identity_already_bound" }, status: 409 };
+      }
+      if (path === "/v1/buzz/nostr-identities/current") {
+        return { json: { identity: { pubkey_hex: "f".repeat(64) } } };
+      }
+      return happyResponder()(path, body);
+    });
+
+    await expect(
+      createHostedCommunity(
+        { name: "wedged", sessionCredential: SESSION },
+        makeDeps(config),
+      ),
+    ).rejects.toMatchObject({ code: "identity_bound_to_other_key" });
+  });
+
+  it("fails fast on an expired challenge without calling /verify", async () => {
     const expired = freshChallenge({
       expires_at: new Date(FIXED_NOW - 60_000).toISOString(),
     });
@@ -188,14 +373,13 @@ describe("createHostedCommunity", () => {
     await expect(
       createHostedCommunity(
         { name: "late", sessionCredential: SESSION },
-        deps(config),
+        makeDeps(config),
       ),
     ).rejects.toMatchObject({ code: "challenge_expired" });
 
-    // Only the challenge was requested; we never signed against a dead nonce.
-    expect(requests.map((r) => r.path)).toEqual([
-      "/v1/buzz/nostr-identities/challenge",
-    ]);
+    expect(requests.map((r) => r.path)).not.toContain(
+      "/v1/buzz/nostr-identities/verify",
+    );
   });
 
   it("surfaces a /verify rejection and creates no community", async () => {
@@ -209,14 +393,14 @@ describe("createHostedCommunity", () => {
     await expect(
       createHostedCommunity(
         { name: "rejected", sessionCredential: SESSION },
-        deps(config),
+        makeDeps(config),
       ),
     ).rejects.toMatchObject({ code: "builderlab_rejected" });
 
     expect(requests.some((r) => r.path === "/v1/buzz/communities")).toBe(false);
   });
 
-  it("never logs the secret nor puts it in any request body", async () => {
+  it("never logs the secret nor puts it in any request or custody plaintext", async () => {
     const logs: string[] = [];
     for (const method of ["log", "info", "warn", "error", "debug"] as const) {
       vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
@@ -225,21 +409,22 @@ describe("createHostedCommunity", () => {
     }
 
     const { config, requests } = fakeBuilderlab(happyResponder());
+    const persisted: PersistedHostedCustody[] = [];
     const result = await createHostedCommunity(
       { name: "quiet", sessionCredential: SESSION },
-      deps(config),
+      makeDeps(config, persisted),
     );
 
     // Recover the real secret from custody, then prove it leaked nowhere.
-    const secretHex = decryptConnectorPrivateKey(
-      result.custody,
+    const secretHex = decryptHostedIdentityKey(
+      result.custody!,
       WRAPPING_KEY,
-      result.community.id,
+      result.bindPubkey,
     ).toString("hex");
     expect(secretHex).toMatch(/^[0-9a-f]{64}$/);
 
-    const outbound = JSON.stringify(requests);
-    expect(outbound).not.toContain(secretHex);
+    expect(JSON.stringify(requests)).not.toContain(secretHex);
+    expect(JSON.stringify(persisted)).not.toContain(secretHex);
     expect(logs.join("\n")).not.toContain(secretHex);
   });
 });

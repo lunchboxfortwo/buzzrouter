@@ -90,14 +90,11 @@ export interface BuilderlabClientOptions {
 export function resolveLiveBuilderlabConfig(
   options: BuilderlabClientOptions = {},
 ): BuilderlabClientConfig {
-  if (process.env.BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE !== "1") {
-    throw new ApiError(
-      "hosted_signup_live_disabled",
-      "Live hosted-signup calls are disabled. Set " +
-        "BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE=1 to enable them.",
-      503,
-    );
-  }
+  const baseUrl =
+    options.baseUrl ??
+    process.env.BUZZROUTER_BUILDERLAB_BASE_URL ??
+    DEFAULT_BUILDERLAB_BASE_URL;
+  assertLiveEgressAllowed(baseUrl, { requireRealHost: false });
   const fetchImpl = options.fetch ?? globalThis.fetch;
   if (typeof fetchImpl !== "function") {
     throw new ApiError(
@@ -107,10 +104,7 @@ export function resolveLiveBuilderlabConfig(
     );
   }
   return {
-    baseUrl:
-      options.baseUrl ??
-      process.env.BUZZROUTER_BUILDERLAB_BASE_URL ??
-      DEFAULT_BUILDERLAB_BASE_URL,
+    baseUrl,
     fetch: fetchImpl,
     now: options.now ?? (() => Date.now()),
     origin:
@@ -124,6 +118,11 @@ export class BuilderlabClient {
   private readonly config: BuilderlabClientConfig;
 
   constructor(config: BuilderlabClientConfig) {
+    // Defense-in-depth: the live-egress flag guards `resolveLiveBuilderlabConfig`,
+    // but the class is directly constructable, so also enforce the flag here
+    // when the base URL points at the real hosted service. Fake/test hosts are
+    // unaffected.
+    assertLiveEgressAllowed(config.baseUrl);
     this.config = config;
   }
 
@@ -214,6 +213,32 @@ export class BuilderlabClient {
     };
   }
 
+  /**
+   * Reads the identity currently bound to this session
+   * (`/v1/buzz/nostr-identities/current`). Used ONLY on recovery: when a bind
+   * returns `identity_already_bound`, this confirms whether it is OUR key
+   * before we proceed. The `current` response shape isn't fully quoted in the
+   * live-proof report, so parse leniently (nested `identity` or flat).
+   */
+  async getCurrentIdentity(
+    sessionCredential: string,
+  ): Promise<{ pubkey_hex: string }> {
+    const body = await this.post(
+      "/v1/buzz/nostr-identities/current",
+      {},
+      sessionCredential,
+    );
+    const source =
+      typeof body.identity === "object" &&
+      body.identity !== null &&
+      !Array.isArray(body.identity)
+        ? (body.identity as Record<string, unknown>)
+        : body;
+    return {
+      pubkey_hex: asNonEmptyString(source.pubkey_hex, "pubkey_hex"),
+    };
+  }
+
   async checkCommunityAvailability(
     sessionCredential: string,
     name: string,
@@ -285,8 +310,26 @@ export class BuilderlabClient {
       );
     }
     if (!response.ok) {
+      // 429 gets a distinct code + Retry-After so a caller can back off. We
+      // never auto-retry here: verify/create are not idempotent, and a blind
+      // retry after a successful-but-slow bind is exactly the key-loss trap.
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("retry-after");
+        throw new ApiError(
+          "builderlab_rate_limited",
+          `The hosted Buzz service is rate-limiting ${path}` +
+            (retryAfter ? ` (retry after ${retryAfter}).` : "."),
+          429,
+        );
+      }
+      // Surface a KNOWN upstream error code verbatim (e.g. identity_already_bound)
+      // so the orchestrator can make recovery decisions; the body never carries
+      // our secret, only the server's own error string.
+      const upstream = await readUpstreamErrorCode(response);
       throw new ApiError(
-        "builderlab_rejected",
+        upstream && KNOWN_UPSTREAM_CODES.has(upstream)
+          ? upstream
+          : "builderlab_rejected",
         `The hosted Buzz service rejected ${path} (status ${response.status}).`,
         502,
       );
@@ -433,4 +476,64 @@ function asObject(value: unknown, field: string): Record<string, unknown> {
     );
   }
   return value as Record<string, unknown>;
+}
+
+/** Upstream error strings the orchestrator branches on for recovery. */
+const KNOWN_UPSTREAM_CODES = new Set([
+  "identity_already_bound",
+  "community_name_taken",
+]);
+
+async function readUpstreamErrorCode(
+  response: Response,
+): Promise<string | null> {
+  try {
+    const body = await response.json();
+    if (
+      typeof body === "object" &&
+      body !== null &&
+      !Array.isArray(body) &&
+      typeof (body as Record<string, unknown>).error === "string"
+    ) {
+      const error = (body as Record<string, string>).error;
+      return error.length > 0 ? error : null;
+    }
+  } catch {
+    // Non-JSON error body — nothing to extract.
+  }
+  return null;
+}
+
+function pointsAtRealHost(baseUrl: string): boolean {
+  let host: string;
+  try {
+    host = new URL(baseUrl).host;
+  } catch {
+    return false;
+  }
+  return (
+    host === new URL(DEFAULT_BUILDERLAB_BASE_URL).host ||
+    host === new URL(DEFAULT_BUILDERLAB_ORIGIN).host
+  );
+}
+
+/**
+ * Enforces the `BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE` opt-in. With
+ * `requireRealHost: false` the flag is required unconditionally (the caller is
+ * explicitly asking for a live config). With `requireRealHost: true` (the
+ * constructor's default) the flag is required only when `baseUrl` points at the
+ * real hosted service, so fake/test hosts construct freely.
+ */
+function assertLiveEgressAllowed(
+  baseUrl: string,
+  opts: { requireRealHost: boolean } = { requireRealHost: true },
+): void {
+  if (process.env.BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE === "1") return;
+  if (opts.requireRealHost && !pointsAtRealHost(baseUrl)) return;
+  throw new ApiError(
+    "hosted_signup_live_disabled",
+    "Live hosted-signup calls are disabled. Set " +
+      "BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE=1 to enable them.",
+    503,
+  );
 }

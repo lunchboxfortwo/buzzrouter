@@ -1145,6 +1145,20 @@
   padding: 12px 20px;
 }
 
+/* Owner "add an invite" echo on the desktop inspector card only — the mobile
+   pinned card is already dense, so it is hidden there (owners go to the full
+   profile on a phone). */
+.inspectorInviteCta {
+  border-top: 1px solid var(--line);
+  padding: 16px 20px;
+}
+
+@media (max-width: 920px) {
+  .inspectorInviteCta {
+    display: none;
+  }
+}
+
 .inspectorFooter a {
   color: var(--accent-strong);
   font-size: 0.82rem;

@@ -12,6 +12,7 @@ import {
 import { getCommunitySummary } from "../../../src/db/presence";
 import { reliabilityLabel } from "../../../src/ranking/explain";
 import { focusLabel } from "../../../src/ranking/focus";
+import { AddInviteCta } from "../../AddInviteCta";
 import { JoinButton } from "../../JoinButton";
 import { ShareOnX } from "../../ShareOnX";
 import styles from "./community.module.css";
@@ -139,6 +140,7 @@ export default async function CommunityPage({
 
   const status = statusOf(community);
   const access = accessKind(community);
+  const joinable = Boolean(community.inviteCode || community.publicUrl);
   const tone = insigniaTone(community.relayHost);
   const shareUrl = `${pageOrigin()}/communities/${encodeURIComponent(community.relayHost)}`;
   const shareText = `${community.displayName} — a real, live Buzz community, verified by @buzzrouter`;
@@ -200,6 +202,11 @@ export default async function CommunityPage({
             />
           </div>
         </div>
+
+        <AddInviteCta
+          host={community.relayHost}
+          variant={joinable ? "quiet" : "prominent"}
+        />
 
         {summary ? (
           <section className={styles.pulse}>

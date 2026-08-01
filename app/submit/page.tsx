@@ -63,6 +63,37 @@ export default async function SubmitPage({
               The submission could not be queued. Try again shortly.
             </div>
           ) : null}
+          {status === "verified" ? (
+            <div className={styles.success} role="status">
+              <strong>Verified — your invite works</strong>
+              <span>
+                {host
+                  ? `${host} is now listed and joinable, and our agent is in.`
+                  : "The community is now listed and joinable."}
+              </span>
+            </div>
+          ) : null}
+          {status === "verifying" ? (
+            <div className={styles.success} role="status">
+              <strong>Verifying your invite…</strong>
+              <span>
+                This is taking a moment. Your listing will appear shortly once
+                the invite is confirmed — no need to resubmit.
+              </span>
+            </div>
+          ) : null}
+          {status === "invite_invalid" ? (
+            <div className={styles.error} role="alert">
+              That invite didn&rsquo;t work — it may be expired, single-use, or
+              for a different community. Mint a fresh one in Buzz and try again.
+            </div>
+          ) : null}
+          {status === "rate_limited" ? (
+            <div className={styles.error} role="alert">
+              Too many submissions from your connection. Wait a minute and try
+              again.
+            </div>
+          ) : null}
 
           <form action="/api/submissions" method="post">
             <label htmlFor="relay-url">Relay or invite URL</label>

@@ -5,6 +5,7 @@ export const SCHEDULE_DUE_PROBES_QUEUE = "discovery.schedule-due-probes";
 export const SOURCE_GITHUB_QUEUE = "discovery.source-github";
 export const SOURCE_NIP66_QUEUE = "discovery.source-nip66";
 export const SOURCE_NIP65_QUEUE = "discovery.source-nip65";
+export const SOURCE_X_QUEUE = "discovery.source-x";
 export const RELIABILITY_ROLLUP_QUEUE = "discovery.reliability-rollup";
 export const REFRESH_SUMMARIES_QUEUE = "presence.refresh-summaries";
 export const AUTO_JOIN_QUEUE = "presence.auto-join";
@@ -89,6 +90,7 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
     SOURCE_GITHUB_QUEUE,
     SOURCE_NIP66_QUEUE,
     SOURCE_NIP65_QUEUE,
+    SOURCE_X_QUEUE,
   ]) {
     await boss.createQueue(sourceQueue, {
       deleteAfterSeconds: 7 * 24 * 60 * 60,
@@ -120,6 +122,11 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
   });
   await boss.schedule(SOURCE_NIP65_QUEUE, "30 2 * * *", null, {
     key: "phase2-nip65",
+    tz: "UTC",
+  });
+  // Public X invite posts: every 30 minutes (cheap at invite volume; cursored).
+  await boss.schedule(SOURCE_X_QUEUE, "*/30 * * * *", null, {
+    key: "phase2-x-invites",
     tz: "UTC",
   });
   await boss.schedule(RELIABILITY_ROLLUP_QUEUE, "45 * * * *", null, {
@@ -170,6 +177,7 @@ export async function enqueueSourceReconciliation(
     SOURCE_GITHUB_QUEUE,
     SOURCE_NIP66_QUEUE,
     SOURCE_NIP65_QUEUE,
+    SOURCE_X_QUEUE,
   ]) {
     await boss.send(queue, null, {
       singletonKey: "manual-reconciliation",

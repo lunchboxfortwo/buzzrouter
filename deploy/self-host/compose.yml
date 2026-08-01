@@ -95,6 +95,8 @@ services:
       BUZZ_AGENT_KEY: ${BUZZ_AGENT_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai}
+      DISCOVERY_X_ENABLED: ${DISCOVERY_X_ENABLED:-false}
+      X_BEARER_TOKEN: ${X_BEARER_TOKEN:-}
     volumes:
       - ${BUZZROUTER_CONFIG_DIR:-/etc/buzzrouter}/connector-wrapping-keys.json:/run/secrets/connector-wrapping-keys.json:ro
     command: ["npm", "run", "worker"]

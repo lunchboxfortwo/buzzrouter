@@ -17,6 +17,7 @@ export const SOURCE_TYPES = [
   "buzzdir",
   "submission",
   "harvest",
+  "x",
 ] as const;
 
 export type SourceType = (typeof SOURCE_TYPES)[number];

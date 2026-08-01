@@ -65,21 +65,21 @@ export function SiteMasthead({
             className={styles.navLink}
             href="/create-community"
           >
-            Create a community
+            Create
           </Link>
           <Link
             aria-current={current === "shared-channels" ? "page" : undefined}
             className={styles.navLink}
             href="/shared-channels"
           >
-            Shared channels
+            Link
           </Link>
           <Link
             aria-current={current === "submit" ? "page" : undefined}
             className={styles.navLink}
             href="/submit"
           >
-            List a community
+            List
           </Link>
         </nav>
 

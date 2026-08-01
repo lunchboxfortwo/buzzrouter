@@ -1618,6 +1618,145 @@ export async function getSharedChannelAdminWorkspace(
   };
 }
 
+export interface VerifiedCommunityIdentity {
+  communityId: string;
+  displayName: string;
+  ownerPubkey: string;
+  relayUrl: string;
+}
+
+/**
+ * Resolve the verified, owned community whose relay matches a pasted invite
+ * link, so the signer-free "Link" flow can identify the community from the
+ * invite alone — no owner signature. The recorded owner pubkey travels with it
+ * so a minted session acts strictly as that owner for that one community.
+ */
+export async function findVerifiedCommunityByRelayUrl(
+  pool: Pool,
+  canonicalRelayUrl: string,
+): Promise<VerifiedCommunityIdentity> {
+  const result = await pool.query<{
+    display_name: string;
+    id: string;
+    owner_pubkey: string;
+    relay_url: string;
+  }>(
+    `
+      SELECT
+        communities.id,
+        communities.owner_pubkey,
+        COALESCE(
+          communities.display_name,
+          communities.slug,
+          candidates.host
+        ) AS display_name,
+        candidates.canonical_relay_url AS relay_url
+      FROM communities
+      JOIN community_candidates AS candidates
+        ON candidates.id = communities.candidate_id
+      WHERE candidates.canonical_relay_url = $1
+        AND communities.owner_pubkey IS NOT NULL
+        AND communities.claim_state = ANY($2::text[])
+        AND candidates.state = 'verified_buzz'
+      ORDER BY communities.id
+      LIMIT 1
+    `,
+    [canonicalRelayUrl, VERIFIED_CLAIM_STATES],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new ApiError(
+      "invite_community_unknown",
+      "That invite link is for a community BuzzRouter has not verified yet. List it first.",
+      404,
+    );
+  }
+  return {
+    communityId: row.id,
+    displayName: row.display_name,
+    ownerPubkey: row.owner_pubkey,
+    relayUrl: row.relay_url,
+  };
+}
+
+export interface ConnectFeaturedInput {
+  communityId: string;
+  idempotencyKey: string;
+  localChannelId: string;
+  localChannelName: string;
+  ownerPubkey: string;
+}
+
+/**
+ * One-press "Connect with the BuzzRouter community" for the signer-free flow.
+ * BuzzRouter's own community proposes the shared channel (so the caller's
+ * community is the DESTINATION and reuses the unchanged, roster-gated
+ * arm→code→confirm accept path); the caller then types the returned code into
+ * their chosen channel to finish. BuzzRouter's source endpoint uses a channel id
+ * scoped to the partner community so the per-community unique index is never hit.
+ */
+export async function connectFeaturedCommunity(
+  pool: Pool,
+  input: ConnectFeaturedInput,
+): Promise<ArmSharedChannelConfirmationResult> {
+  const featured = await pool.query<{
+    id: string;
+    owner_pubkey: string;
+  }>(
+    `
+      SELECT communities.id, communities.owner_pubkey
+      FROM communities
+      JOIN community_candidates AS candidates
+        ON candidates.id = communities.candidate_id
+      JOIN community_connections AS connections
+        ON connections.community_id = communities.id
+      WHERE candidates.host = $1
+        AND communities.owner_pubkey IS NOT NULL
+        AND communities.claim_state = ANY($2::text[])
+        AND candidates.state = 'verified_buzz'
+        AND connections.state = 'active'
+      ORDER BY communities.id
+      LIMIT 1
+    `,
+    [homeCommunityHost(), VERIFIED_CLAIM_STATES],
+  );
+  const home = featured.rows[0];
+  if (!home) {
+    throw new ApiError(
+      "featured_unavailable",
+      "The BuzzRouter community is not accepting links right now.",
+      503,
+    );
+  }
+  if (home.id === input.communityId) {
+    throw new ApiError(
+      "featured_is_self",
+      "This is the BuzzRouter community — link it with someone else.",
+      409,
+    );
+  }
+
+  const channel = await createSharedChannel(pool, {
+    destinationCommunityId: input.communityId,
+    idempotencyKey: `featured-connect:${input.communityId}`,
+    ownerPubkey: home.owner_pubkey,
+    proposedName: "buzzrouter",
+    purpose: "Connect with the BuzzRouter community.",
+    sourceChannelId: `buzzrouter:${input.communityId}`,
+    sourceChannelName: "BuzzRouter",
+    sourceCommunityId: home.id,
+  });
+
+  return armSharedChannelConfirmation(pool, {
+    communityId: input.communityId,
+    idempotencyKey: input.idempotencyKey,
+    localChannelId: input.localChannelId,
+    localChannelName: input.localChannelName,
+    ownerPubkey: input.ownerPubkey,
+    sharedChannelId: channel.id,
+  });
+}
+
 export async function listActiveConnectorConfigs(
   pool: Pool,
 ): Promise<ActiveConnectorConfig[]> {

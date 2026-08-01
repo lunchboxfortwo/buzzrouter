@@ -45,12 +45,18 @@ import {
   verifyAndActivateCommunityConnection,
 } from "./installer";
 import {
+  mintOwnerSession,
+  resolveOwnerSession,
+} from "./owner-session";
+import {
   activateCommunityConnection,
   armSharedChannelConfirmation,
   beginCommunityConnectionInstall,
   confirmSharedChannelBinding,
+  connectFeaturedCommunity,
   createSharedChannel,
   disconnectSharedChannel,
+  findVerifiedCommunityByRelayUrl,
   getSharedChannelAdminWorkspace,
   ingestBridgeMessage,
   listSharedChannelEndpoints,
@@ -821,7 +827,195 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
       ).toBe("pending");
     });
   });
+
+  describe("signer-free link flow", () => {
+    async function makeFeatured(pool: Pool): Promise<CommunityFixture> {
+      const featured = await createConnectedCommunity(pool, "featured");
+      await pool.query(
+        `
+          UPDATE community_candidates
+          SET host = $2
+          WHERE id = (
+            SELECT candidate_id FROM communities WHERE id = $1
+          )
+        `,
+        [featured.communityId, homeHost],
+      );
+      return featured;
+    }
+
+    it("identifies a verified community from its relay url", async () => {
+      const community = await createVerifiedCommunity(pool, "by-relay");
+      const found = await findVerifiedCommunityByRelayUrl(
+        pool,
+        community.relayUrl,
+      );
+      expect(found).toMatchObject({
+        communityId: community.communityId,
+        ownerPubkey: community.ownerPubkey,
+        relayUrl: community.relayUrl,
+      });
+
+      await expect(
+        findVerifiedCommunityByRelayUrl(pool, "wss://nobody.example.com"),
+      ).rejects.toMatchObject({
+        code: "invite_community_unknown",
+        status: 404,
+      });
+    });
+
+    it("mints and resolves a community-scoped owner session", async () => {
+      const community = await createVerifiedCommunity(pool, "session");
+      const minted = await mintOwnerSession(pool, {
+        communityId: community.communityId,
+        ownerPubkey: community.ownerPubkey,
+      });
+      await expect(
+        resolveOwnerSession(pool, minted.session),
+      ).resolves.toEqual({
+        communityId: community.communityId,
+        ownerPubkey: community.ownerPubkey,
+      });
+
+      await pool.query(
+        `
+          UPDATE connection_owner_sessions
+          SET expires_at = now() - interval '1 second'
+        `,
+      );
+      await expect(
+        resolveOwnerSession(pool, minted.session),
+      ).rejects.toMatchObject({ code: "owner_session_invalid", status: 401 });
+    });
+
+    it("arms a BuzzRouter link the caller finishes with the roster code", async () => {
+      const previous = process.env.BUZZROUTER_HOME_COMMUNITY_HOST;
+      process.env.BUZZROUTER_HOME_COMMUNITY_HOST = homeHost;
+      try {
+        const featured = await makeFeatured(pool);
+        const caller = await createConnectedCommunity(pool, "caller");
+
+        const armed = await connectFeaturedCommunity(pool, {
+          communityId: caller.communityId,
+          idempotencyKey: `featured-${randomUUID()}`,
+          localChannelId: randomUUID(),
+          localChannelName: "welcome",
+          ownerPubkey: caller.ownerPubkey,
+        });
+        expect(armed.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
+
+        const endpoints = await listSharedChannelEndpoints(
+          pool,
+          armed.sharedChannelId,
+        );
+        const source = endpoints.find((e) => e.role === "source");
+        const destination = endpoints.find((e) => e.role === "destination");
+        // BuzzRouter proposes (so the caller reuses the roster-gated accept
+        // path) on a channel id scoped to the caller — never the shared one
+        // that would trip the per-community unique index.
+        expect(source).toMatchObject({
+          communityId: featured.communityId,
+          localChannelId: `buzzrouter:${caller.communityId}`,
+          state: "active",
+        });
+        expect(destination).toMatchObject({
+          communityId: caller.communityId,
+          state: "pending",
+        });
+
+        // The roster-signed code the caller types is still the real authority.
+        const confirmation = await pool.query<{ id: string }>(
+          `
+            SELECT id FROM shared_channel_confirmations
+            WHERE shared_channel_id = $1 AND state = 'pending'
+          `,
+          [armed.sharedChannelId],
+        );
+        const result = await confirmSharedChannelBinding(pool, {
+          actorCreatedAt: Math.floor(Date.now() / 1_000),
+          actorEventId: hex(32),
+          actorPubkey: caller.ownerPubkey,
+          confirmationId: confirmation.rows[0].id,
+        });
+        expect(result.activated).toBe(true);
+        expect(
+          await endpointState(
+            pool,
+            armed.sharedChannelId,
+            caller.communityId,
+          ),
+        ).toBe("active");
+      } finally {
+        restoreHomeHost(previous);
+      }
+    });
+
+    it("lets two communities both connect to the featured community", async () => {
+      const previous = process.env.BUZZROUTER_HOME_COMMUNITY_HOST;
+      process.env.BUZZROUTER_HOME_COMMUNITY_HOST = homeHost;
+      try {
+        await makeFeatured(pool);
+        const first = await createConnectedCommunity(pool, "first");
+        const second = await createConnectedCommunity(pool, "second");
+
+        for (const caller of [first, second]) {
+          const armed = await connectFeaturedCommunity(pool, {
+            communityId: caller.communityId,
+            idempotencyKey: `featured-${randomUUID()}`,
+            localChannelId: randomUUID(),
+            localChannelName: "welcome",
+            ownerPubkey: caller.ownerPubkey,
+          });
+          expect(armed.sharedChannelId).toBeTruthy();
+        }
+      } finally {
+        restoreHomeHost(previous);
+      }
+    });
+
+    it("reports the featured community unavailable when it has no connector", async () => {
+      const previous = process.env.BUZZROUTER_HOME_COMMUNITY_HOST;
+      process.env.BUZZROUTER_HOME_COMMUNITY_HOST = homeHost;
+      try {
+        // A verified featured community but with no active connection.
+        const featured = await createVerifiedCommunity(pool, "featured-cold");
+        await pool.query(
+          `
+            UPDATE community_candidates SET host = $2
+            WHERE id = (SELECT candidate_id FROM communities WHERE id = $1)
+          `,
+          [featured.communityId, homeHost],
+        );
+        const caller = await createConnectedCommunity(pool, "caller-cold");
+
+        await expect(
+          connectFeaturedCommunity(pool, {
+            communityId: caller.communityId,
+            idempotencyKey: `featured-${randomUUID()}`,
+            localChannelId: randomUUID(),
+            localChannelName: "welcome",
+            ownerPubkey: caller.ownerPubkey,
+          }),
+        ).rejects.toMatchObject({
+          code: "featured_unavailable",
+          status: 503,
+        });
+      } finally {
+        restoreHomeHost(previous);
+      }
+    });
+  });
 });
+
+const homeHost = "featured.buzzrouter.test";
+
+function restoreHomeHost(previous: string | undefined): void {
+  if (previous === undefined) {
+    delete process.env.BUZZROUTER_HOME_COMMUNITY_HOST;
+  } else {
+    process.env.BUZZROUTER_HOME_COMMUNITY_HOST = previous;
+  }
+}
 
 interface CommunityFixture {
   communityId: string;

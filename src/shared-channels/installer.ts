@@ -19,9 +19,14 @@ import {
   type WrappingKeyProvider,
 } from "./connector";
 import {
+  mintOwnerSession,
+  type MintedOwnerSession,
+} from "./owner-session";
+import {
   activateCommunityConnection,
   beginCommunityConnectionInstall,
   decryptConnectorPrivateKey,
+  findVerifiedCommunityByRelayUrl,
   getCommunityConnectionInstallContext,
   type CommunityConnectionRecord,
 } from "./store";
@@ -154,6 +159,93 @@ export async function verifyAndActivateCommunityConnection(
   } finally {
     relay?.close();
     privateKey.fill(0);
+  }
+}
+
+export interface BeginConnectionFromInviteResult {
+  communityId: string;
+  displayName: string;
+  expiresAt: string;
+  relayUrl: string;
+  session: string;
+}
+
+/**
+ * The whole signer-free admission in one step: a mobile owner with no NIP-07
+ * signer pastes an invite LINK from their Buzz app. We identify their verified
+ * community from the link's relay host (no signature), let the bridge redeem the
+ * invite and prove admission, then mint a short-lived, community-scoped owner
+ * session the "Link" page uses in place of a browser signature. Binding a shared
+ * channel still needs the roster-signed code typed in-channel — the session only
+ * stands in for the owner signature, never for that proof.
+ */
+export async function beginConnectionFromInvite(
+  pool: Pool,
+  invite: string,
+  wrappingKeys: WrappingKeyProvider = createFileWrappingKeyProvider(),
+  relayFactory: RelayConnectionFactory = createRelayConnectionFactory(),
+): Promise<BeginConnectionFromInviteResult> {
+  const canonicalRelayUrl = inviteRelayUrl(invite);
+  const community = await findVerifiedCommunityByRelayUrl(
+    pool,
+    canonicalRelayUrl,
+  );
+  const token = await createCommunityInstallToken(
+    pool,
+    {
+      communityId: community.communityId,
+      ownerPubkey: community.ownerPubkey,
+    },
+    wrappingKeys,
+  );
+  await redeemInviteAndActivate(
+    pool,
+    token.token,
+    invite,
+    wrappingKeys,
+    relayFactory,
+  );
+  const session: MintedOwnerSession = await mintOwnerSession(pool, {
+    communityId: community.communityId,
+    ownerPubkey: community.ownerPubkey,
+  });
+  return {
+    communityId: community.communityId,
+    displayName: community.displayName,
+    expiresAt: session.expiresAt,
+    relayUrl: community.relayUrl,
+    session: session.session,
+  };
+}
+
+/**
+ * Derive the canonical relay URL a Buzz invite LINK points at (its HTTP host is
+ * the relay host). A bare code carries no host, so it cannot identify a
+ * community on its own — the signer-free entry needs the full link.
+ */
+function inviteRelayUrl(invite: string): string {
+  const trimmed = invite.trim();
+  if (!/^https?:\/\//i.test(trimmed)) {
+    throw new ApiError(
+      "invite_invalid",
+      "Paste the full invite link from your Buzz app.",
+      400,
+    );
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new ApiError("invite_invalid", "The invite link is invalid.", 400);
+  }
+  try {
+    return normalizeRelayUrl(`wss://${url.host}`).canonicalRelayUrl;
+  } catch {
+    throw new ApiError(
+      "invite_invalid",
+      "The invite link host is invalid.",
+      400,
+    );
   }
 }
 

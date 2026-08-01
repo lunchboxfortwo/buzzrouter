@@ -7,7 +7,7 @@ test("is reachable from the masthead and links to the hosted signup", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "Create a community" }).click();
+  await page.getByRole("link", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/\/create-community$/);
 
   const signupLink = page.getByRole("link", {
@@ -20,13 +20,12 @@ test("is reachable from the masthead and links to the hosted signup", async ({
 
   await expect(page.getByText(/Buzz desktop app/)).toBeVisible();
   await expect(page.getByText(/134MB/)).toBeVisible();
-  await expect(page.getByText(/Nostr key/)).toBeVisible();
 
   await expect(
-    page.getByRole("link", { name: "Submit your community" }),
+    page.getByRole("link", { name: "List your community" }),
   ).toHaveAttribute("href", "/submit");
   await expect(
-    page.getByRole("link", { name: "Set up shared channels" }),
+    page.getByRole("link", { name: "Link it" }),
   ).toHaveAttribute("href", "/shared-channels");
 });
 

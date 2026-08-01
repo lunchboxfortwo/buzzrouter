@@ -25,12 +25,10 @@ export default async function CreateCommunityPage() {
       <div className={styles.page}>
         <main>
           <section className={styles.intro}>
-            <p>Create a community</p>
             <h1>Start a Buzz community</h1>
             <span>
-              Buzz communities are free and hosted by Block. Sign up on the
-              hosted service to create one — buzz.xyz doesn&apos;t have a
-              signup path today, so this goes straight there.
+              Heads up: this needs the Buzz desktop app — about 134MB to
+              install, plus roughly 577MB of models the first time you run it.
             </span>
           </section>
 
@@ -46,26 +44,6 @@ export default async function CreateCommunityPage() {
                 <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
               </svg>
             </a>
-            <span className={styles.primaryLinkNote}>
-              That link redirects into Block&apos;s Auth0 sign-in flow.
-            </span>
-          </section>
-
-          <section className={styles.panel}>
-            <h2>Before you sign up</h2>
-            <p>
-              Creating a community currently requires the Buzz desktop app.
-              It&apos;s about 134MB to install, and downloads roughly another
-              577MB of models the first time you run it. During setup, Buzz
-              generates a Nostr key for you and stores it locally on your
-              device — that key is what identifies your community and lets
-              members find it.
-            </p>
-            <p>
-              We&apos;re looking into whether that install step can be
-              skipped, but for now it&apos;s the only path, so plan for the
-              download before you start.
-            </p>
           </section>
 
           <section className={styles.panel}>
@@ -82,28 +60,20 @@ export default async function CreateCommunityPage() {
             <h2>Once your community exists</h2>
             <dl>
               <div>
-                <dt>List it here</dt>
+                <dt>List it</dt>
                 <dd>
-                  <a href="/submit">Submit your community</a> to the
-                  BuzzRouter directory so people can find it.
+                  <a href="/submit">List your community</a> so people can find
+                  it.
                 </dd>
               </div>
               <div>
-                <dt>Connect it</dt>
+                <dt>Link it</dt>
                 <dd>
-                  <a href="/shared-channels">Set up shared channels</a> to
-                  bridge it with other communities.
+                  <a href="/shared-channels">Link it</a> with other
+                  communities.
                 </dd>
               </div>
             </dl>
-            <p>
-              Once listed, it's also reachable by other developers through
-              the directory's public{" "}
-              <a href="/api/communities?joinable=true">
-                GET /api/communities
-              </a>{" "}
-              API.
-            </p>
           </section>
         </main>
       </div>

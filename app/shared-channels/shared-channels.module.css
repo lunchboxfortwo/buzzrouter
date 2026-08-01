@@ -597,6 +597,68 @@
   }
 }
 
+.stack {
+  display: grid;
+  gap: 28px;
+}
+
+.linkCard {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+}
+
+.linkCard h2 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.linkCard form {
+  display: grid;
+  gap: 12px;
+}
+
+.linkLead {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.linkNote {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.primaryCta {
+  font-size: 15px;
+  min-height: 46px;
+  width: 100%;
+}
+
+.advanced {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+  padding-top: 28px;
+}
+
+.advancedHeading {
+  font-size: 15px;
+  margin: 0;
+}
+
+.advancedNote {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0 0 12px;
+}
+
 .confirmPending {
   display: grid;
   gap: 8px;

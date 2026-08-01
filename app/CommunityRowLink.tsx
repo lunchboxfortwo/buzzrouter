@@ -1,49 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
-
-import {
-  hasJoinTarget,
-  launchJoin,
-  type JoinTarget,
-} from "./joinCascade";
 
 const MOBILE = "(max-width: 920px)";
 
 /**
- * Desktop keeps the row as navigation into the inspector. On a phone the tap
- * goes straight into the join cascade — the Buzz app when the community has
- * an invite code, its public page otherwise. Rows with no join target keep
- * navigating to the inspector on every viewport.
+ * The row's tap target: a stretched overlay link (positioned to fill the row)
+ * that selects the community and opens its card. On a phone the card is pinned
+ * at the top of the results, so we scroll it into view after selecting —
+ * otherwise the card updates off-screen and the tap feels like nothing happened.
+ *
+ * Joining is NOT triggered here anymore: every row now opens the card first, and
+ * an explicit Join button (see RowJoinButton) handles the one-tap join. That
+ * button sits above this overlay with its own pointer events, so a tap on it
+ * joins while a tap anywhere else on the row opens the card.
  */
 export function CommunityRowLink({
-  ariaCurrent,
-  children,
+  ariaLabel,
   className,
   href,
-  joinTarget,
 }: {
-  ariaCurrent?: "true";
-  children: ReactNode;
+  ariaLabel: string;
   className: string;
   href: string;
-  joinTarget: JoinTarget;
 }) {
   return (
     <Link
-      aria-current={ariaCurrent}
+      aria-label={ariaLabel}
       className={className}
       href={href}
-      onClick={(event) => {
-        if (!window.matchMedia(MOBILE).matches) return;
-        if (!hasJoinTarget(joinTarget)) return;
-        event.preventDefault();
-        launchJoin(joinTarget);
+      onClick={() => {
+        if (window.matchMedia(MOBILE).matches) {
+          requestAnimationFrame(() => {
+            document
+              .getElementById("community-card")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
+        }
       }}
       scroll={false}
-    >
-      {children}
-    </Link>
+    />
   );
 }

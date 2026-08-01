@@ -197,10 +197,14 @@ Key routing rules:
 
 ## Create-community front door
 
-- `app/create-community/` sends visitors to the real hosted Buzz signup
-  (`https://app.builderlab.xyz`, Auth0-backed) since buzz.xyz itself has no
-  signup/login path — verified by fetching its production bundle directly,
-  not assumed.
+- `app/create-community/` LEADS with a one-page create form
+  (`CreateCommunityForm.tsx` → `POST /api/create-community`): the visitor types
+  a community name + handover email and gets back the community URL plus a
+  one-time nsec export. The old "sign up at app.builderlab.xyz yourself" +
+  desktop-download path is kept BELOW as a self-serve fallback (buzz.xyz has no
+  signup/login of its own — verified from its production bundle). The live
+  provisioning path is flag-gated OFF (`BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE=1`),
+  so with the flag off the form fails loudly to that fallback instead of hanging.
 - Per-OS desktop download resolution (`download-assets.ts`) replicates the
   asset-matching regexes and GitHub Releases API call
   (`api.github.com/repos/block/buzz/releases`) found in Buzz's own shipped
@@ -255,8 +259,26 @@ next number in the old sequence — see `migrations/README.md`. Existing
 - Live calls are opt-in: `resolveLiveBuilderlabConfig` (and the
   `BuilderlabClient` constructor when the base URL is the real host) refuse
   unless `BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE=1`. Tests inject a fake endpoint +
-  fake fetch and never touch the real service. The one interactive step (OAuth
-  login → `exchangeLoginCode`) is deliberately NOT automated.
+  fake fetch and never touch the real service.
+- The one-page front door ADDS account provisioning in front of that binding
+  module (it does not rewrite it). `provision.ts` orchestrates
+  signup → bind (`createHostedCommunity`) → directory listing → one-time nsec
+  export; `signup-driver.ts` is the ONE step needing a real browser
+  (`PlaywrightSignupDriver`, dynamic-imports `playwright`, same live flag) — it
+  drives Block's signup UI then runs the CLI-login exchange in the authenticated
+  browser to get the bearer session. Selectors are best-effort against a
+  third-party UI and every failure raises a stable `signup_*` code so the page
+  degrades to the self-serve fallback. `playwright` is only a transitive dep, so
+  an omit-dev prod build fails the live path gracefully (`signup_browser_unavailable`)
+  rather than crashing; enabling live provisioning needs `playwright install`.
+- Because the account is WRITE-ONCE (returning login is email-OTP gated), the
+  bind key is the real ownership; the user gets the nsec once (shown + download).
+  `store.ts`/`hosted_community_provisions` persists the encrypted key BEFORE the
+  bind and the encrypted session (via `session-custody.ts`, a general
+  AES-256-GCM helper because `encryptConnectorPrivateKey` asserts a 32-byte
+  payload) so a post-bind failure resumes within the session's lifetime instead
+  of orphaning the account. The nsec appears ONLY in the create response (the
+  deliberate export); no other secret is ever returned, logged, or stored plain.
 
 ## List-a-community intake (`app/submit/`)
 

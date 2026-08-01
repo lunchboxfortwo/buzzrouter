@@ -313,6 +313,36 @@ next number in the old sequence — see `migrations/README.md`. Existing
   rejection (reproduces reliably under Vitest, not just in production);
   drain to completion instead and throw only after the loop ends.
 
+## Managed identities (keyless click-to-join)
+
+- `src/managed-identity/` lets a visitor with no key JOIN a directory community
+  in one tap: BuzzRouter generates a Nostr keypair server-side, seals the secret
+  with the SAME custody path as the connector bridge key
+  (`encryptConnectorPrivateKey`/`decryptConnectorPrivateKey`, host wrapping key
+  from `BUZZROUTER_CONNECTOR_WRAPPING_KEYS_FILE`), and claims the invite with it.
+  The GCM AAD is the identity's **pubkey**. Custody is server-side by operator
+  decision — do not silently move key generation client-side.
+- Tables in `migrations/20260801T1100_managed_identities.sql`: `managed_identities`
+  (sealed secret; `exported_at` custody flag), `managed_identity_sessions` (a
+  durable HttpOnly `br_identity` cookie, stored only as its sha256), and
+  `managed_identity_memberships` (idempotency so we never re-claim upstream).
+- The secret NEVER leaves `withIdentitySecret`'s callback in the clear and is
+  zeroed in `finally`; the ONLY endpoint that returns key material is
+  `POST /api/identity/export` (nsec, once, marks `exported_at`). `store.ts` and
+  `join.ts` deliberately never log it — see the no-leak assertions in
+  `store.integration.test.ts` and `join.test.ts`.
+- Click-to-join (`join.ts`) resolves the community server-side by relay host
+  (never trusting a client-supplied invite code), pins the claim URL to the
+  on-record relay via the connector's `resolveInviteClaimTarget` (SSRF control),
+  and returns a STRUCTURED outcome — a refused claim (`403 join_policy_required`)
+  is `status: "refused"` with a plain reason, not a thrown error to retry.
+- Rate limits live in `src/managed-identity/rate-limit.ts` (generic keyed
+  sliding window, separate from the submission limiter): joins are capped per
+  managed pubkey well under the upstream 10/60s so we are not an abuse amplifier.
+- UI is `app/join/` (server list + `JoinClient`); custody is disclosed up front,
+  never buried. E2e: `e2e/managed-identity-join.spec.ts` runs the whole journey
+  against the fake relay's `/api/invites/claim` stub.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

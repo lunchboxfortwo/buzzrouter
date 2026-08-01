@@ -26,6 +26,16 @@ import {
   registerBridgeDeliveryWorker,
 } from "./shared-channels/connector";
 
+// A long-running worker must not die on a stray promise rejection — e.g. the
+// nostr-tools "relay connection closed by us" that fires as a presence read is
+// torn down. Log and keep running instead of taking Node's default (crash).
+process.on("unhandledRejection", (reason) => {
+  console.error(
+    "worker unhandledRejection (non-fatal):",
+    reason instanceof Error ? reason.message : String(reason),
+  );
+});
+
 const pool = getDatabasePool();
 const boss = new PgBoss(
   getDatabaseConnectionOptions("buzzrouter-worker"),

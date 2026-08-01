@@ -4,10 +4,9 @@ import chrome from "../site-chrome.module.css";
 import { SiteMasthead } from "../SiteMasthead";
 
 import styles from "./create-community.module.css";
+import { CreateCommunityForm } from "./CreateCommunityForm";
 import { DownloadCta } from "./DownloadCta";
 import { detectPlatform } from "./platform";
-
-const HOSTED_SIGNUP_URL = "https://app.builderlab.xyz";
 
 const PLATFORM_LABEL: Record<string, string> = {
   linux: "Linux",
@@ -25,33 +24,23 @@ export default async function CreateCommunityPage() {
       <div className={styles.page}>
         <main>
           <section className={styles.intro}>
-            <h1>Start a Buzz community</h1>
+            <h1>Create a community</h1>
             <span>
-              Heads up: this needs the Buzz desktop app — about 134MB to
-              install, plus roughly 577MB of models the first time you run it.
+              Pick a name and we&apos;ll set up a hosted Buzz community for you —
+              no desktop app, no wallet. You get the URL and the keys.
             </span>
           </section>
 
           <section className={styles.panel}>
-            <a
-              className={styles.primaryLink}
-              href={HOSTED_SIGNUP_URL}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              Sign up at app.builderlab.xyz
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
-              </svg>
-            </a>
+            <CreateCommunityForm />
           </section>
 
           <section className={styles.panel}>
-            <h2>Get Buzz for your computer</h2>
+            <h2>Prefer to do it yourself?</h2>
             <span className={styles.panelSub}>
               {platform === "unknown"
-                ? "We couldn't detect your platform automatically — pick yours below."
-                : `Detected ${PLATFORM_LABEL[platform]}. Wrong platform? Pick another below.`}
+                ? "You can also install the Buzz desktop app and sign up there."
+                : `You can also install the Buzz desktop app (detected ${PLATFORM_LABEL[platform]}) and sign up there.`}
             </span>
             <DownloadCta platform={platform} />
           </section>

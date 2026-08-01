@@ -74,6 +74,10 @@ test("owners control their side of a shared-channel route", async ({
     .getByLabel("Destination community")
     .selectOption(ownerB.communityId);
   await page.getByLabel("Shared name").fill("benchmark-review");
+  // Bind an existing channel by id rather than the default "create a new one".
+  await page
+    .getByRole("radio", { name: "Use a channel I already have" })
+    .click();
   await page.getByLabel("Local channel ID").first().fill("channel-owner-a");
   await page
     .getByLabel("Local channel name")

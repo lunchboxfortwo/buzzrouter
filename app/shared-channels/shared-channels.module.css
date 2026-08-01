@@ -447,6 +447,22 @@
   display: contents;
 }
 
+.channelMode {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.channelMode label {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.channelMode input {
+  margin: 0;
+}
+
 .channelActions select {
   min-width: 160px;
 }

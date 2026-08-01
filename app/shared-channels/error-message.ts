@@ -1,5 +1,11 @@
 const API_ERROR_MESSAGES: Record<string, string> = {
   authentication_invalid: "The signed request was not accepted.",
+  channel_already_routed:
+    "That channel is already connected to another shared channel. Pick a different channel or create a new one.",
+  channel_create_failed:
+    "The new channel couldn’t be created on your relay. Try again shortly.",
+  channel_handoff_incomplete:
+    "The channel was created but ownership couldn’t be transferred yet. Try again — it will finish the handoff.",
   connection_required: "The community connector must be active first.",
   connector_package_unavailable:
     "The connector package is temporarily unavailable. Try again shortly.",

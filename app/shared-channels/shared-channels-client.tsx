@@ -18,8 +18,63 @@ import { errorMessage } from "./error-message";
 import styles from "./shared-channels.module.css";
 
 interface LocalChannelSelection {
+  // "create": the bridge makes a dedicated channel for this link (the default);
+  // "existing": bind a channel the community already has (channelId is set).
+  mode: "create" | "existing";
   channelId: string;
   channelName: string;
+}
+
+const CREATE_SELECTION: LocalChannelSelection = {
+  channelId: "",
+  channelName: "",
+  mode: "create",
+};
+
+interface CreatedChannel {
+  channelId: string;
+  channelName: string;
+}
+
+// When the picker is in "create" mode, ask the bridge to create a dedicated
+// channel (named after the peer) and hand its ownership back to the signing
+// owner, then link that fresh channel. Returns the concrete channel id/name to
+// use in the propose/accept call that follows.
+async function resolveLinkChannel(
+  communityId: string,
+  peerName: string,
+  selection: LocalChannelSelection,
+): Promise<CreatedChannel> {
+  if (selection.mode === "existing") {
+    return {
+      channelId: selection.channelId,
+      channelName: selection.channelName,
+    };
+  }
+  return signedRequest<CreatedChannel>(
+    "/api/shared-channels/create-channel",
+    "POST",
+    {
+      communityId,
+      idempotencyKey: crypto.randomUUID(),
+      peerName: selection.channelName.trim() || peerName,
+    },
+  );
+}
+
+// A create-mode selection is ready as long as a name is available (the peer's
+// name is the default); an existing-mode selection needs a picked channel.
+function selectionReady(
+  selection: LocalChannelSelection,
+  peerName: string,
+): boolean {
+  if (selection.mode === "create") {
+    return (selection.channelName.trim() || peerName).length > 0;
+  }
+  return (
+    selection.channelId.trim().length > 0 &&
+    selection.channelName.trim().length > 0
+  );
 }
 
 interface LocalChannelsState extends LocalChannelListing {
@@ -904,25 +959,37 @@ function ProposalForm({
     (community) => community.id !== activeCommunityId,
   );
   const featured = eligible.find((community) => community.featured);
-  const [source, setSource] = useState<LocalChannelSelection>({
-    channelId: "",
-    channelName: "",
-  });
+  const [source, setSource] = useState<LocalChannelSelection>(CREATE_SELECTION);
+  const [destinationId, setDestinationId] = useState(
+    () => featured?.id ?? eligible[0]?.id ?? "",
+  );
+  const peerName =
+    eligible.find((community) => community.id === destinationId)?.displayName ??
+    "the other community";
 
   async function submit(formData: FormData) {
     setBusy(true);
     setMessage("");
     try {
+      const channel = await resolveLinkChannel(
+        activeCommunityId,
+        peerName,
+        source,
+      );
+      // The freshly created channel already exists and is owned by the caller;
+      // pin the selection to it so a retry after a failed propose reuses it
+      // rather than creating a second channel.
+      setSource({ ...channel, mode: "existing" });
       await signedRequest("/api/shared-channels", "POST", {
         destinationCommunityId: formData.get("destinationCommunityId"),
         idempotencyKey: crypto.randomUUID(),
         proposedName: formData.get("proposedName"),
         purpose: formData.get("purpose"),
-        sourceChannelId: source.channelId,
-        sourceChannelName: source.channelName,
+        sourceChannelId: channel.channelId,
+        sourceChannelName: channel.channelName,
         sourceCommunityId: activeCommunityId,
       });
-      setSource({ channelId: "", channelName: "" });
+      setSource(CREATE_SELECTION);
       await onCreated();
     } catch (error) {
       setMessage(errorMessage(error));
@@ -951,9 +1018,10 @@ function ProposalForm({
         <label>
           Destination community
           <select
-            defaultValue={featured?.id}
             name="destinationCommunityId"
+            onChange={(event) => setDestinationId(event.target.value)}
             required
+            value={destinationId}
           >
             {eligible.map((community) => (
               <option key={community.id} value={community.id}>
@@ -974,6 +1042,7 @@ function ProposalForm({
         </label>
         <LocalChannelPicker
           onChange={setSource}
+          peerName={peerName}
           state={localChannels}
           value={source}
           variant="form"
@@ -984,11 +1053,7 @@ function ProposalForm({
         </label>
       </div>
       <button
-        disabled={
-          eligible.length === 0 ||
-          !source.channelId.trim() ||
-          !source.channelName.trim()
-        }
+        disabled={eligible.length === 0 || !selectionReady(source, peerName)}
         type="submit"
       >
         Send invitation
@@ -1107,11 +1172,10 @@ function AcceptControls({
   setBusy: (busy: boolean) => void;
   setMessage: (message: string) => void;
 }) {
-  const [selection, setSelection] = useState<LocalChannelSelection>({
-    channelId: "",
-    channelName: "",
-  });
+  const [selection, setSelection] =
+    useState<LocalChannelSelection>(CREATE_SELECTION);
   const [armed, setArmed] = useState<ArmConfirmationResponse | null>(null);
+  const peerName = channel.peerDisplayName;
 
   // Once armed, poll for the bridge to hear the code and flip us to active.
   useEffect(() => {
@@ -1126,14 +1190,21 @@ function AcceptControls({
     setBusy(true);
     setMessage("");
     try {
+      const channelBinding = await resolveLinkChannel(
+        activeCommunityId,
+        peerName,
+        selection,
+      );
+      // Pin to the created channel so a retry after a failed arm reuses it.
+      setSelection({ ...channelBinding, mode: "existing" });
       const result = await signedRequest<ArmConfirmationResponse>(
         `/api/shared-channels/${channel.id}/accept`,
         "POST",
         {
           communityId: activeCommunityId,
           idempotencyKey: crypto.randomUUID(),
-          localChannelId: selection.channelId,
-          localChannelName: selection.channelName,
+          localChannelId: channelBinding.channelId,
+          localChannelName: channelBinding.channelName,
         },
       );
       setArmed(result);
@@ -1174,16 +1245,13 @@ function AcceptControls({
     <>
       <LocalChannelPicker
         onChange={setSelection}
+        peerName={peerName}
         state={localChannels}
         value={selection}
         variant="inline"
       />
       <button
-        disabled={
-          busy ||
-          !selection.channelId.trim() ||
-          !selection.channelName.trim()
-        }
+        disabled={busy || !selectionReady(selection, peerName)}
         onClick={arm}
         type="button"
       >
@@ -1250,11 +1318,13 @@ function useLocalChannels(
 
 function LocalChannelPicker({
   onChange,
+  peerName,
   state,
   value,
   variant,
 }: {
   onChange: (next: LocalChannelSelection) => void;
+  peerName: string;
   state: LocalChannelsState;
   value: LocalChannelSelection;
   variant: "form" | "inline";
@@ -1285,7 +1355,60 @@ function LocalChannelPicker({
       {variant === "form" ? (
         <span className={styles.channelFieldLabel}>Local channel</span>
       ) : null}
-      {loading ? (
+      <div
+        className={styles.channelMode}
+        role="radiogroup"
+        aria-label="How to pick a channel"
+      >
+        <label>
+          <input
+            checked={value.mode === "create"}
+            name={`channel-mode-${variant}`}
+            onChange={() => onChange(CREATE_SELECTION)}
+            type="radio"
+          />
+          Create a new channel for this link
+        </label>
+        <label>
+          <input
+            checked={value.mode === "existing"}
+            name={`channel-mode-${variant}`}
+            onChange={() =>
+              onChange({ channelId: "", channelName: "", mode: "existing" })
+            }
+            type="radio"
+          />
+          Use a channel I already have
+        </label>
+      </div>
+      {value.mode === "create" ? (
+        <>
+          <input
+            aria-label="New channel name"
+            maxLength={80}
+            onChange={(event) =>
+              onChange({
+                channelId: "",
+                channelName: event.target.value,
+                mode: "create",
+              })
+            }
+            placeholder={peerName}
+            value={value.channelName}
+          />
+          <p
+            className={
+              variant === "form"
+                ? styles.channelHint
+                : styles.channelHintInline
+            }
+          >
+            The bridge creates this channel in your community and hands you
+            ownership — no need to make one first. Leave the name to use
+            &ldquo;{peerName}&rdquo;.
+          </p>
+        </>
+      ) : loading ? (
         <select aria-label="Local channel" disabled value="">
           <option value="">Loading your channels&hellip;</option>
         </select>
@@ -1296,7 +1419,7 @@ function LocalChannelPicker({
             const next = event.target.value;
             if (next === MANUAL_CHANNEL_VALUE) {
               setManual(true);
-              onChange({ channelId: "", channelName: "" });
+              onChange({ channelId: "", channelName: "", mode: "existing" });
               return;
             }
             setManual(false);
@@ -1304,6 +1427,7 @@ function LocalChannelPicker({
             onChange({
               channelId: next,
               channelName: group?.name ?? "",
+              mode: "existing",
             });
           }}
           value={manual ? MANUAL_CHANNEL_VALUE : value.channelId}
@@ -1319,13 +1443,17 @@ function LocalChannelPicker({
           <option value={MANUAL_CHANNEL_VALUE}>Enter manually&hellip;</option>
         </select>
       ) : null}
-      {showManualFields ? (
+      {value.mode === "existing" && showManualFields ? (
         <>
           <input
             aria-label="Local channel ID"
             maxLength={200}
             onChange={(event) =>
-              onChange({ ...value, channelId: event.target.value })
+              onChange({
+                ...value,
+                channelId: event.target.value,
+                mode: "existing",
+              })
             }
             placeholder="Channel ID"
             value={value.channelId}
@@ -1334,14 +1462,18 @@ function LocalChannelPicker({
             aria-label="Local channel name"
             maxLength={80}
             onChange={(event) =>
-              onChange({ ...value, channelName: event.target.value })
+              onChange({
+                ...value,
+                channelName: event.target.value,
+                mode: "existing",
+              })
             }
             placeholder="Channel name"
             value={value.channelName}
           />
         </>
       ) : null}
-      {hint ? (
+      {value.mode === "existing" && hint ? (
         <p
           className={
             variant === "form"

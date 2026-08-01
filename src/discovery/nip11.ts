@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 
 import { DiscoveryError } from "./errors";
-
-const MAX_PUBLIC_ICON_BYTES = 256 * 1024;
+import {
+  isImageContentType,
+  MAX_PUBLIC_ICON_BYTES,
+  type ImageContentType,
+} from "./image-types";
 
 export interface Nip11Document {
   name?: string;
@@ -21,7 +24,7 @@ export interface Nip11Document {
 export interface PublicRelayIcon {
   bytes: Buffer;
   contentHash: string;
-  contentType: "image/gif" | "image/jpeg" | "image/png" | "image/webp";
+  contentType: ImageContentType;
 }
 
 export function parseNip11Document(value: unknown): Nip11Document {
@@ -102,6 +105,35 @@ export function parsePublicIconDataUri(
   }
 
   const bytes = Buffer.from(payload, "base64");
+  if (
+    bytes.length === 0 ||
+    bytes.length > MAX_PUBLIC_ICON_BYTES ||
+    !hasExpectedImageSignature(contentType, bytes)
+  ) {
+    return null;
+  }
+
+  return {
+    bytes,
+    contentHash: createHash("sha256").update(bytes).digest("hex"),
+    contentType,
+  };
+}
+
+/**
+ * Validates a directly-uploaded logo. Never trusts the browser-declared
+ * content type: it only accepts it once the bytes' own magic number confirms
+ * it (the same `hasExpectedImageSignature` check the NIP-11 icon path uses).
+ */
+export function parseUploadedIcon(
+  bytes: Buffer,
+  declaredContentType: string,
+): PublicRelayIcon | null {
+  const contentType = declaredContentType.toLowerCase().trim();
+  if (!isImageContentType(contentType)) {
+    return null;
+  }
+
   if (
     bytes.length === 0 ||
     bytes.length > MAX_PUBLIC_ICON_BYTES ||

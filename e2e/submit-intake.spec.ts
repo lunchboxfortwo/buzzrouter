@@ -112,3 +112,80 @@ test("does not overwrite text the submitter already typed", async ({
   );
   await expect(page.getByLabel("Community name")).toHaveValue("My Own Name");
 });
+
+const ONE_PIXEL_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
+
+test.describe("logo upload", () => {
+  test("previews an accepted image and keeps the rest of the form", async ({
+    page,
+  }) => {
+    await page.goto("/submit");
+
+    await page.getByLabel("Community name").fill("Logo Test Community");
+    await page.getByLabel("Logo (optional)").setInputFiles({
+      buffer: ONE_PIXEL_PNG,
+      mimeType: "image/png",
+      name: "logo.png",
+    });
+
+    const preview = page.getByRole("region", { name: "Listing preview" });
+    await expect(preview.locator("img")).toBeVisible();
+    await expect(preview).toContainText("Logo Test Community");
+  });
+
+  test("rejects a disallowed file type client-side without losing typed fields", async ({
+    page,
+  }) => {
+    await page.goto("/submit");
+
+    await page.getByLabel("Community name").fill("Keep Me Typed");
+    await page.getByLabel("Logo (optional)").setInputFiles({
+      buffer: Buffer.from("<svg onload=alert(1)></svg>"),
+      mimeType: "image/svg+xml",
+      name: "logo.svg",
+    });
+
+    await expect(
+      page.getByText("Logo must be a PNG, JPEG, GIF, or WEBP image."),
+    ).toBeVisible();
+    await expect(page.getByLabel("Community name")).toHaveValue(
+      "Keep Me Typed",
+    );
+    await expect(
+      page.getByRole("region", { name: "Listing preview" }).locator("img"),
+    ).toHaveCount(0);
+  });
+
+  test("rejects an oversize file client-side", async ({ page }) => {
+    await page.goto("/submit");
+
+    await page.getByLabel("Logo (optional)").setInputFiles({
+      buffer: Buffer.alloc(300 * 1024, 1),
+      mimeType: "image/png",
+      name: "big-logo.png",
+    });
+
+    await expect(page.getByText("Logo must be under 256KB.")).toBeVisible();
+  });
+
+  test("leaves the form free of errors when no logo is chosen", async ({
+    page,
+  }) => {
+    // The logo is optional: a submission must still work without one. The
+    // full round trip to "queued" (no logo required) is covered by
+    // app/api/submissions/route.integration.test.ts, which also asserts no
+    // community_icons row is created for a logo-less submission.
+    await page.goto("/submit");
+
+    await expect(page.getByText(/Logo must be/)).toHaveCount(0);
+    await expect(
+      page.getByRole("region", { name: "Listing preview" }).locator("img"),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Queue verification" }),
+    ).toBeEnabled();
+  });
+});

@@ -19,6 +19,37 @@ function post(
   });
 }
 
+const PNG_SIGNATURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
+
+function validPng(extraBytes = 16): Buffer {
+  return Buffer.concat([PNG_SIGNATURE, Buffer.alloc(extraBytes, 1)]);
+}
+
+function multipartRequest(
+  fields: Record<string, string>,
+  logo?: { bytes: Buffer; name?: string; type: string },
+): Request {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    form.set(key, value);
+  }
+  if (logo) {
+    form.set(
+      "logo",
+      new File([Uint8Array.from(logo.bytes)], logo.name ?? "logo.png", {
+        type: logo.type,
+      }),
+    );
+  }
+  return new Request("https://buzzrouter.com/api/submissions", {
+    body: form,
+    headers: { origin: "https://buzzrouter.com" },
+    method: "POST",
+  });
+}
+
 describe("community submissions", () => {
   beforeEach(() => {
     resetRateLimitState();
@@ -147,5 +178,59 @@ describe("community submissions", () => {
     expect(response.headers.get("location")).toBe(
       "https://buzzrouter.com/submit?status=invalid",
     );
+  });
+
+  describe("logo upload", () => {
+    const fields = {
+      contactEmail: "owner@logo-test.example",
+      relayUrl: "wss://logo-test.example",
+    };
+
+    it("rejects a logo with a disallowed content type", async () => {
+      vi.stubEnv("PUBLIC_APP_ORIGIN", "https://buzzrouter.com");
+      const response = await POST(
+        multipartRequest(fields, {
+          bytes: Buffer.from("<svg onload=alert(1)></svg>"),
+          name: "logo.svg",
+          type: "image/svg+xml",
+        }),
+      );
+
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe(
+        "https://buzzrouter.com/submit?status=invalid",
+      );
+    });
+
+    it("rejects an oversize logo", async () => {
+      vi.stubEnv("PUBLIC_APP_ORIGIN", "https://buzzrouter.com");
+      const response = await POST(
+        multipartRequest(fields, {
+          bytes: validPng(300 * 1024),
+          type: "image/png",
+        }),
+      );
+
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe(
+        "https://buzzrouter.com/submit?status=invalid",
+      );
+    });
+
+    it("rejects a logo whose bytes don't match the declared content type", async () => {
+      vi.stubEnv("PUBLIC_APP_ORIGIN", "https://buzzrouter.com");
+      const response = await POST(
+        multipartRequest(fields, {
+          // Declares PNG but the bytes are plain text, not a real PNG.
+          bytes: Buffer.from("this is not an image"),
+          type: "image/png",
+        }),
+      );
+
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe(
+        "https://buzzrouter.com/submit?status=invalid",
+      );
+    });
   });
 });

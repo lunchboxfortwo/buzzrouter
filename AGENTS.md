@@ -258,6 +258,27 @@ next number in the old sequence — see `migrations/README.md`. Existing
   fields, not a regression to chase. `e2e/submit-intake.spec.ts` covers
   client-side validation/prefill instead of a full submit-to-DB round trip
   for this reason.
+- A submitter can also upload a logo, written straight into the existing
+  `community_icons` table (candidate_id PK, served by
+  `app/api/community-icons/[candidateId]/route.ts`) — the same place the
+  NIP-11 probe-icon path (`recordProbeResult` in `src/db/candidates.ts`)
+  writes to. Both now go through the shared `upsertCommunityIcon`, and both
+  validate through `src/discovery/nip11.ts`'s magic-byte signature check
+  (`hasExpectedImageSignature`) rather than trusting a declared content
+  type — `parsePublicIconDataUri` for the NIP-11 data-URI icon,
+  `parseUploadedIcon` for a direct upload. The size cap and allowed-type
+  list (`png`/`jpeg`/`gif`/`webp`, deliberately no `svg` — it's executable)
+  live in the import-free `src/discovery/image-types.ts` so the client form
+  can enforce the same rule before ever hitting the server.
+- `POST /api/submissions` accepts `multipart/form-data` for the logo case
+  and legacy `application/x-www-form-urlencoded` for logo-less posts (still
+  what the existing unit/integration tests send). In
+  `readBoundedBody` (`app/api/submissions/route.ts`), do not
+  `reader.cancel()` a stream once the size cap is exceeded — cancelling a
+  `FormData`-sourced `Request` body mid-read races undici's internal pull
+  loop and throws `"ReadableStream is already closed"` as an unhandled
+  rejection (reproduces reliably under Vitest, not just in production);
+  drain to completion instead and throw only after the loop ends.
 
 ## Maintaining this file
 

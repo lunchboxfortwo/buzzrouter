@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 
+import {
+  IMAGE_CONTENT_TYPES,
+  isImageContentType,
+  MAX_PUBLIC_ICON_BYTES,
+} from "../../src/discovery/image-types";
 import { focusLabel, FOCUS_SLUGS, isFocusSlug } from "../../src/ranking/focus";
 import { SUBMISSION_CATEGORY_SLUGS } from "../../src/submissions/categories";
 import styles from "./submit.module.css";
@@ -13,8 +18,20 @@ interface Prefill {
   focus: string | null;
 }
 
+const LOGO_MAX_KB = Math.round(MAX_PUBLIC_ICON_BYTES / 1024);
+const LOGO_ACCEPT = IMAGE_CONTENT_TYPES.join(",");
+
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 export function SubmitForm() {
@@ -24,12 +41,44 @@ export function SubmitForm() {
   const [audience, setAudience] = useState("");
   const [focus, setFocus] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const touchedRef = useRef({
     categories: false,
     communityName: false,
     description: false,
     focus: false,
   });
+
+  function handleLogoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setLogoPreview(null);
+      setLogoError(null);
+      return;
+    }
+
+    if (!isImageContentType(file.type)) {
+      setLogoError("Logo must be a PNG, JPEG, GIF, or WEBP image.");
+      setLogoPreview(null);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+      return;
+    }
+    if (file.size > MAX_PUBLIC_ICON_BYTES) {
+      setLogoError(`Logo must be under ${LOGO_MAX_KB}KB.`);
+      setLogoPreview(null);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+      return;
+    }
+
+    setLogoError(null);
+    readAsDataUrl(file)
+      .then(setLogoPreview)
+      .catch(() => {
+        setLogoPreview(null);
+      });
+  }
 
   useEffect(() => {
     const trimmed = relayUrl.trim();
@@ -76,7 +125,7 @@ export function SubmitForm() {
   return (
     <>
       <section className={styles.formPanel}>
-        <form action="/api/submissions" method="post">
+        <form action="/api/submissions" encType="multipart/form-data" method="post">
           <label htmlFor="relay-url">Relay or invite URL</label>
           <input
             autoComplete="url"
@@ -178,6 +227,24 @@ export function SubmitForm() {
             ))}
           </fieldset>
 
+          <label htmlFor="logo">Logo (optional)</label>
+          <input
+            accept={LOGO_ACCEPT}
+            id="logo"
+            name="logo"
+            onChange={handleLogoChange}
+            ref={logoInputRef}
+            type="file"
+          />
+          <span className={styles.fieldHint}>
+            PNG, JPEG, GIF, or WEBP, up to {LOGO_MAX_KB}KB.
+          </span>
+          {logoError ? (
+            <span className={styles.fieldError} role="alert">
+              {logoError}
+            </span>
+          ) : null}
+
           <div className={styles.honeypot} aria-hidden="true">
             <label htmlFor="website">Website</label>
             <input
@@ -201,7 +268,15 @@ export function SubmitForm() {
       <section className={styles.preview} aria-label="Listing preview">
         <span className={styles.previewLabel}>What your listing will look like</span>
         <div className={styles.previewCard}>
-          <strong>{previewName}</strong>
+          <div className={styles.previewHeading}>
+            {logoPreview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img alt="" className={styles.previewLogo} src={logoPreview} />
+            ) : (
+              <span className={styles.previewLogoPlaceholder} aria-hidden="true" />
+            )}
+            <strong>{previewName}</strong>
+          </div>
           {focus && isFocusSlug(focus) ? (
             <span className={styles.previewFocus}>{focusLabel(focus)}</span>
           ) : null}

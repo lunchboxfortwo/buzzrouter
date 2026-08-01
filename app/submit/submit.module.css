@@ -140,6 +140,20 @@
   min-height: auto;
 }
 
+.fieldHint {
+  color: var(--muted);
+  font-size: 11px;
+  grid-column: 1 / -1;
+  margin-top: -4px;
+}
+
+.fieldError {
+  color: #9d2b22;
+  font-size: 12px;
+  font-weight: 600;
+  grid-column: 1 / -1;
+}
+
 .formPanel button {
   background: var(--ink);
   border: 0;
@@ -192,6 +206,29 @@
 
 .previewCard strong {
   font-size: 16px;
+}
+
+.previewHeading {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.previewLogo,
+.previewLogoPlaceholder {
+  border-radius: 6px;
+  flex-shrink: 0;
+  height: 32px;
+  width: 32px;
+}
+
+.previewLogo {
+  object-fit: cover;
+}
+
+.previewLogoPlaceholder {
+  background: var(--surface-muted, #f1f1f4);
+  border: 1px dashed var(--line);
 }
 
 .previewCard p {

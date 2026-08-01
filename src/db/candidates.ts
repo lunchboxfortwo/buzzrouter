@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 import { sanitizeSourceLocator } from "../discovery/source-locator";
 import type { RelayProbeResult } from "../discovery/probe";
 import type { NormalizedRelay } from "../discovery/normalize";
-import { parsePublicIconDataUri } from "../discovery/nip11";
+import { parsePublicIconDataUri, type PublicRelayIcon } from "../discovery/nip11";
 import { isFocusSlug, type FocusSlug } from "../ranking/focus";
 import { SUBMISSION_CATEGORY_SLUGS } from "../submissions/categories";
 
@@ -358,28 +358,7 @@ export async function recordProbeResult(
         ],
       );
       if (publicIcon) {
-        await client.query(
-          `
-            INSERT INTO community_icons (
-              candidate_id,
-              content_type,
-              image_bytes,
-              content_hash
-            )
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (candidate_id) DO UPDATE
-              SET content_type = EXCLUDED.content_type,
-                  image_bytes = EXCLUDED.image_bytes,
-                  content_hash = EXCLUDED.content_hash,
-                  updated_at = now()
-          `,
-          [
-            candidateId,
-            publicIcon.contentType,
-            publicIcon.bytes,
-            publicIcon.contentHash,
-          ],
-        );
+        await upsertCommunityIcon(client, candidateId, publicIcon);
       } else {
         await client.query(
           "DELETE FROM community_icons WHERE candidate_id = $1",
@@ -412,6 +391,38 @@ export async function recordProbeResult(
   } finally {
     client.release();
   }
+}
+
+/**
+ * One icon row per candidate (community_icons.candidate_id is the PK), so a
+ * later write always replaces the previous one — used by both the NIP-11
+ * probe path above and a submitter's direct upload
+ * (app/api/submissions/route.ts). The `content_hash IS DISTINCT FROM` guard
+ * makes re-submitting the identical image a true no-op.
+ */
+export async function upsertCommunityIcon(
+  queryable: Pool | PoolClient,
+  candidateId: string,
+  icon: PublicRelayIcon,
+): Promise<void> {
+  await queryable.query(
+    `
+      INSERT INTO community_icons (
+        candidate_id,
+        content_type,
+        image_bytes,
+        content_hash
+      )
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (candidate_id) DO UPDATE
+        SET content_type = EXCLUDED.content_type,
+            image_bytes = EXCLUDED.image_bytes,
+            content_hash = EXCLUDED.content_hash,
+            updated_at = now()
+        WHERE community_icons.content_hash IS DISTINCT FROM EXCLUDED.content_hash
+    `,
+    [candidateId, icon.contentType, icon.bytes, icon.contentHash],
+  );
 }
 
 export function normalizePublicRelayText(

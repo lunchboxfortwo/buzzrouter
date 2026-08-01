@@ -7,6 +7,7 @@ import {
 } from "../db/presence";
 import {
   readCommunity as defaultReadCommunity,
+  readMemberCount as defaultReadMemberCount,
   type PresenceMessage,
 } from "../presence/reader";
 import {
@@ -36,12 +37,18 @@ export type BuildSummaryFn = (
   messages: PresenceMessage[],
 ) => Promise<CommunitySummary>;
 
+export type ReadMemberCountFn = (options: {
+  relayUrl: string;
+}) => Promise<number>;
+
 export interface RefreshDeps {
   pool: Pool;
   /** Injectable relay reader; defaults to the real NIP-42 reader. */
   readCommunity?: ReadCommunityFn;
   /** Injectable summarizer; defaults to the deterministic + LLM pipeline. */
   buildSummary?: BuildSummaryFn;
+  /** Injectable NIP-29 roster reader; defaults to the real reader. */
+  readMemberCount?: ReadMemberCountFn;
 }
 
 export interface RefreshResult {
@@ -54,6 +61,7 @@ export async function refreshCommunitySummaries(
 ): Promise<RefreshResult> {
   const readCommunity = deps.readCommunity ?? defaultReadCommunity;
   const buildSummary = deps.buildSummary ?? defaultBuildSummary;
+  const readMemberCount = deps.readMemberCount ?? defaultReadMemberCount;
 
   const communities = await listJoinedCommunities(deps.pool);
   let ok = 0;
@@ -63,6 +71,25 @@ export async function refreshCommunitySummaries(
     try {
       const messages = await readCommunity({ relayUrl: community.relayUrl });
       const summary = await buildSummary(messages);
+      try {
+        const roster = await readMemberCount({ relayUrl: community.relayUrl });
+        // Only surface "N active of M" when the roster we can see is at least
+        // the active count. The agent only sees open (and explicitly-added)
+        // channels, so a partial roster could otherwise read as "13 active
+        // of 9"; in that case we omit the total rather than show nonsense.
+        if (roster >= summary.activeMemberCount) {
+          summary.totalMemberCount = roster;
+        }
+      } catch (rosterError) {
+        const reason =
+          rosterError instanceof Error
+            ? rosterError.message
+            : String(rosterError);
+        console.warn(
+          `presence.refresh-summaries: roster read failed ` +
+            `${community.relayHost}: ${reason}`,
+        );
+      }
       await upsertSummary(deps.pool, community.relayHost, summary);
       ok += 1;
       console.log(

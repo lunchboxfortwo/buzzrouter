@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildInviteUrl, hasJoinTarget } from "./joinCascade";
+import { buildInviteUrl, buildJoinDeepLink, hasJoinTarget } from "./joinCascade";
 
 describe("buildInviteUrl", () => {
   it("builds the relay's hosted web invite link from a wss relay URL", () => {
@@ -33,6 +33,25 @@ describe("buildInviteUrl", () => {
     expect(buildInviteUrl("wss://r.example", "a/b c")).toBe(
       "https://r.example/invite/a%2Fb%20c",
     );
+  });
+});
+
+describe("buildJoinDeepLink", () => {
+  it("carries the relay, code, and short-lived policy receipt the app reads", () => {
+    const url = new URL(
+      buildJoinDeepLink("wss://r.example", "code-1", "RECEIPT-9"),
+    );
+    expect(url.protocol).toBe("buzz:");
+    expect(url.host).toBe("join");
+    expect(url.searchParams.get("relay")).toBe("wss://r.example");
+    expect(url.searchParams.get("code")).toBe("code-1");
+    expect(url.searchParams.get("policy_receipt")).toBe("RECEIPT-9");
+  });
+
+  it("url-encodes a receipt with URL-unsafe characters", () => {
+    const receipt = "a.b+c/d=";
+    const url = new URL(buildJoinDeepLink("wss://r.example", "c", receipt));
+    expect(url.searchParams.get("policy_receipt")).toBe(receipt);
   });
 });
 

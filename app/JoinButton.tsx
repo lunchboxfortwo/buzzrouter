@@ -2,34 +2,50 @@
 
 import { useCallback, useState } from "react";
 
+import type { JoinStatus } from "../src/directory/joinability";
 import { launchJoin } from "./joinCascade";
 
 /**
  * One join action per community.
  *
- * - Invite code or public URL present: the shared join cascade in
- *   `joinCascade.ts` (app deep link with install-page fallback, or the web
- *   experience).
- * - Neither: copy the relay URL, which is what a Buzz client needs to connect.
+ * - Admission restricted (owner-only / allowlist): say "Request an invite" — a
+ *   code alone will not get in, so we set expectations instead of handing over a
+ *   join button that dead-ends.
+ * - Invite code (open / policy-gated / not-yet-probed) or public URL: the shared
+ *   join cascade in `joinCascade.ts` (the relay's hosted invite page, which runs
+ *   the full policy handshake, or the web experience).
+ * - Nothing joinable (or a stale code): copy the relay URL, which is what a Buzz
+ *   client needs to connect.
  */
 export function JoinButton({
+  candidateId = null,
   className,
   communityName,
   inviteCode,
+  joinStatus = null,
   publicUrl,
   relayUrl,
 }: {
+  candidateId?: string | null;
   className?: string;
   communityName: string;
   inviteCode: string | null;
+  joinStatus?: JoinStatus | null;
   publicUrl: string | null;
   relayUrl: string;
 }) {
   const [copied, setCopied] = useState(false);
 
   const openInApp = useCallback(() => {
-    launchJoin({ inviteCode, publicUrl: null, relayUrl });
-  }, [inviteCode, relayUrl]);
+    launchJoin({ candidateId, inviteCode, publicUrl: null, relayUrl });
+  }, [candidateId, inviteCode, relayUrl]);
+
+  // A restricted (owner-only / allowlist) community can't be joined with a code:
+  // surface that instead of a launch button that would be refused.
+  const restricted = !publicUrl && joinStatus === "restricted";
+  // Any other code (open / policy-gated / stale / unconfirmed) routes through the
+  // consent flow, which handles the ToS handshake and surfaces a dead code.
+  const codeJoinable = !!inviteCode && !restricted;
 
   const copyRelay = useCallback(async () => {
     try {
@@ -41,7 +57,19 @@ export function JoinButton({
     }
   }, [relayUrl]);
 
-  if (inviteCode) {
+  if (restricted) {
+    return (
+      <span
+        aria-label={`${communityName} is invite-only — request an invite from an admin`}
+        className={className}
+        role="note"
+      >
+        Request an invite
+      </span>
+    );
+  }
+
+  if (codeJoinable) {
     return (
       <button
         aria-label={`Open ${communityName} in Buzz`}

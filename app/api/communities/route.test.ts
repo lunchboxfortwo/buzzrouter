@@ -21,6 +21,7 @@ function buildCommunity(overrides: Record<string, unknown> = {}) {
     categories: ["dev"],
     joinMode: "invite",
     inviteCode: "abc123",
+    joinStatus: "open",
     publicUrl: null,
     lastVerifiedAt: "2026-07-01T00:00:00.000Z",
     slug: "builders",
@@ -76,23 +77,62 @@ describe("GET /api/communities", () => {
     );
   });
 
-  it("filters to joinable rows when ?joinable=true is set", async () => {
+  it("filters ?joinable=true to everything joinable, excluding only known-restricted codes", async () => {
     listDirectoryCommunities.mockResolvedValue([
+      // A genuinely open invite (a bare claim lands) — joinable.
       buildCommunity({
         candidateId: "candidate-1",
         inviteCode: "abc123",
+        joinStatus: "open",
         publicUrl: null,
-        relayHost: "has-invite.example",
+        relayHost: "open-invite.example",
       }),
+      // A public web-join URL — always joinable.
       buildCommunity({
         candidateId: "candidate-2",
         inviteCode: null,
+        joinStatus: null,
         publicUrl: "https://has-url.example",
         relayHost: "has-url.example",
       }),
+      // Behind a ToS/age gate — joinable via one consent click, NOT a dead end.
       buildCommunity({
         candidateId: "candidate-3",
+        inviteCode: "gated-code",
+        joinStatus: "policy_gated",
+        publicUrl: null,
+        relayHost: "policy-gated.example",
+      }),
+      // Code present but never probed / verdict decayed — degrade gracefully into
+      // the consent flow rather than hide it.
+      buildCommunity({
+        candidateId: "candidate-4",
+        inviteCode: "unprobed-code",
+        joinStatus: null,
+        publicUrl: null,
+        relayHost: "unprobed.example",
+      }),
+      // A stale (expired) probe is not proof of a closed door — still shown.
+      buildCommunity({
+        candidateId: "candidate-5",
+        inviteCode: "dead-code",
+        joinStatus: "stale",
+        publicUrl: null,
+        relayHost: "stale.example",
+      }),
+      // Owner-only / allowlist admission — the one case that is withheld.
+      buildCommunity({
+        candidateId: "candidate-6",
+        inviteCode: "owner-code",
+        joinStatus: "restricted",
+        publicUrl: null,
+        relayHost: "restricted.example",
+      }),
+      // No code and no public URL — nothing to join with.
+      buildCommunity({
+        candidateId: "candidate-7",
         inviteCode: null,
+        joinStatus: null,
         publicUrl: null,
         relayHost: "no-target.example",
       }),
@@ -104,10 +144,12 @@ describe("GET /api/communities", () => {
     );
     const body = await response.json();
 
-    expect(body.count).toBe(2);
     expect(body.communities.map((c: { host: string }) => c.host)).toEqual([
-      "has-invite.example",
+      "open-invite.example",
       "has-url.example",
+      "policy-gated.example",
+      "unprobed.example",
+      "stale.example",
     ]);
   });
 

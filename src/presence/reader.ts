@@ -368,6 +368,47 @@ export async function connectToCommunity(
   return new RelayPresenceConnection(relay, identity, options.relayUrl);
 }
 
+/** A community's readable surface from a single connection: the channel index
+ * (39000 metadata + 39002 rosters) and recent kind:9 messages. */
+export interface CommunityContent {
+  channels: ChannelMetadata[];
+  messages: PresenceMessage[];
+}
+
+/**
+ * Connect + NIP-42 auth, enumerate accessible channels, read recent kind:9
+ * messages from them until EOSE, then close — returning BOTH the channel index
+ * and the messages over one connection. The invite harvester scans channel
+ * metadata (`about`/`name`, where pinned invites live) as well as chat, so it
+ * needs the channels; the summary path only wants messages (see `readCommunity`).
+ */
+export async function readCommunityContent(
+  options: ReadCommunityOptions,
+): Promise<CommunityContent> {
+  const connection = await connectToCommunity({
+    connectTimeoutMs: options.connectTimeoutMs,
+    identity: options.identity,
+    relayUrl: options.relayUrl,
+  });
+  try {
+    const channels = await connection.enumerateChannels({
+      timeoutMs: options.timeoutMs,
+    });
+    let channelIds = options.channelIds;
+    if (!channelIds || channelIds.length === 0) {
+      channelIds = channels.map((channel) => channel.id);
+    }
+    const messages = await connection.readMessages({
+      channelIds: channelIds.length > 0 ? channelIds : undefined,
+      limit: options.limit,
+      timeoutMs: options.timeoutMs,
+    });
+    return { channels, messages };
+  } finally {
+    connection.close();
+  }
+}
+
 /**
  * Convenience wrapper: connect + NIP-42 auth, enumerate accessible channels
  * when none are supplied, read recent kind:9 messages until EOSE, then close.
@@ -375,27 +416,8 @@ export async function connectToCommunity(
 export async function readCommunity(
   options: ReadCommunityOptions,
 ): Promise<PresenceMessage[]> {
-  const connection = await connectToCommunity({
-    connectTimeoutMs: options.connectTimeoutMs,
-    identity: options.identity,
-    relayUrl: options.relayUrl,
-  });
-  try {
-    let channelIds = options.channelIds;
-    if (!channelIds || channelIds.length === 0) {
-      const channels = await connection.enumerateChannels({
-        timeoutMs: options.timeoutMs,
-      });
-      channelIds = channels.map((channel) => channel.id);
-    }
-    return await connection.readMessages({
-      channelIds: channelIds.length > 0 ? channelIds : undefined,
-      limit: options.limit,
-      timeoutMs: options.timeoutMs,
-    });
-  } finally {
-    connection.close();
-  }
+  const { messages } = await readCommunityContent(options);
+  return messages;
 }
 
 /**

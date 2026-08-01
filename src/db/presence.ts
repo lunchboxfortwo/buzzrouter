@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 
+import type { FocusSlug } from "../ranking/focus";
 import type { CommunitySummary } from "../presence/summarize";
 
 /**
@@ -101,6 +102,43 @@ export async function upsertSummary(
       summary.channelCount,
       summary.windowDays,
     ],
+  );
+}
+
+/**
+ * Writes the focus the in-community agent classified from real activity onto the
+ * community keyed by `relayHost`, as `focus_source = 'presence'`.
+ *
+ * Precedence: this overwrites only rows the machine set (NULL, the hostname
+ * heuristic's `'classified'`, or a prior `'presence'`) — a human's `'operator'`
+ * / `'confirmed'` focus is never touched. The heuristic classifier, in turn,
+ * only writes over NULL/`'classified'` (see classify-focus-job), so it never
+ * clobbers this activity-based value. Ladder: operator/confirmed > presence >
+ * classified > null.
+ *
+ * The `communities` row may not exist yet (unclaimed candidates have none), so
+ * this INSERTs from the candidate matched by host and upserts on the unique
+ * `candidate_id`. An unknown host simply matches no candidate and writes nothing.
+ */
+export async function recordPresenceFocus(
+  pool: Pool,
+  relayHost: string,
+  focus: FocusSlug,
+): Promise<void> {
+  await pool.query(
+    `
+      INSERT INTO communities (candidate_id, focus, focus_source)
+      SELECT id, $2, 'presence'
+      FROM community_candidates
+      WHERE host = $1
+      ON CONFLICT (candidate_id) DO UPDATE
+        SET focus = EXCLUDED.focus,
+            focus_source = 'presence',
+            updated_at = now()
+        WHERE communities.focus_source IS NULL
+          OR communities.focus_source IN ('classified', 'presence')
+    `,
+    [relayHost, focus],
   );
 }
 

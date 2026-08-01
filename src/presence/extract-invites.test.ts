@@ -100,6 +100,18 @@ describe("extractInvites", () => {
     ]);
   });
 
+  it("parses a scheme-less <host>/invite/<code> web link", () => {
+    const text = "just go to buzz.example/invite/no-scheme to get in";
+    expect(extractInvites(text)).toEqual([
+      { code: "no-scheme", relayHost: "buzz.example", relayUrl: "wss://buzz.example" },
+    ]);
+  });
+
+  it("does not treat a bare relative path as an invite host", () => {
+    // `docs` has no dot, so `docs/invite/setup` is a relative path, not a host.
+    expect(extractInvites("see docs/invite/setup for details")).toEqual([]);
+  });
+
   it("extracts an invite embedded mid-sentence in a realistic message", () => {
     const text =
       "hey all, if you missed the announcement the new room is at " +

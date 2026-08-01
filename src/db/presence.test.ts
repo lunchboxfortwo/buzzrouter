@@ -7,6 +7,7 @@ import {
   getDirectoryInvite,
   listInviteCandidates,
   listJoinedCommunities,
+  recordPresenceFocus,
   replaceDirectoryInvite,
   upsertMembership,
   upsertSummary,
@@ -155,6 +156,27 @@ describe("deleteInviteCandidate", () => {
   });
 });
 
+describe("recordPresenceFocus", () => {
+  it("upserts communities.focus from the candidate matched by host, source 'presence'", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const pool = { query } as unknown as Pool;
+
+    await recordPresenceFocus(pool, "builders.example", "building");
+
+    const [sql, params] = query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("INSERT INTO communities");
+    // Resolves candidate_id by host rather than trusting a caller-supplied id.
+    expect(sql).toContain("FROM community_candidates");
+    expect(sql).toContain("WHERE host = $1");
+    expect(sql).toContain("'presence'");
+    // Precedence guard: only overwrite machine-set focus, never operator/confirmed.
+    expect(sql).toContain("communities.focus_source IS NULL");
+    expect(sql).toContain("communities.focus_source IN ('classified', 'presence')");
+    expect(sql).not.toContain("operator");
+    expect(params).toEqual(["builders.example", "building"]);
+  });
+});
+
 describe("upsertSummary", () => {
   it("writes the summary columns with recentProjects serialized as jsonb", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [] });
@@ -164,6 +186,7 @@ describe("upsertSummary", () => {
       activeMemberCount: 5,
       activityLevel: "active",
       channelCount: 3,
+      focus: "building",
       goals: "Build things",
       messageCount: 40,
       recentProjects: ["Relay work", "Docs"],
@@ -197,6 +220,7 @@ describe("upsertSummary", () => {
       activeMemberCount: 0,
       activityLevel: "quiet",
       channelCount: 0,
+      focus: null,
       goals: "Too quiet to tell.",
       messageCount: 0,
       recentProjects: [],

@@ -55,6 +55,23 @@ describe("llmExtractInvites", () => {
     expect(userContent).not.toContain("caught.example");
   });
 
+  it("forwards a worded invite the old invite/join filter would have dropped", async () => {
+    // No 'invite'/'join'/scheme — only the word 'relay' + 'code'. The broadened
+    // pre-filter now sends it to the model for recall.
+    const fetchImpl = vi.fn(async () => completion('{"invites":[]}'));
+    await llmExtractInvites(
+      messages("our relay is at team.example, the code is WELCOME"),
+      { apiKey: "k", fetchImpl: fetchImpl as unknown as typeof fetch },
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as {
+      messages: { content: string; role: string }[];
+    };
+    const userContent = body.messages.find((m) => m.role === "user")?.content;
+    expect(userContent).toContain("team.example");
+  });
+
   it("re-validates model output through extractInvites (drops hallucinations)", async () => {
     // The model returns one canonical, extractable invite and one garbage
     // string that extractInvites rejects — only the valid one survives.

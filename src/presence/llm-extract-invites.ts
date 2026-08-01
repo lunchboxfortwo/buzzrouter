@@ -26,15 +26,28 @@ const DEFAULT_MODEL = "deepseek/deepseek-v4-flash";
 /** Cap the messages sent to the model so a busy batch can't blow the context. */
 const DEFAULT_MAX_MESSAGES = 40;
 
-/** Cheap pre-filter: only messages that look like they might carry an invite. */
-const INVITE_ISH_RE = /invite|join|wss:\/\/|buzz:\/\//i;
+/**
+ * Cheap pre-filter: only messages that look like they might carry an invite.
+ * Deliberately broad — an invite can be worded ("hop on our relay, code ..."),
+ * so we let anything invite-ish through to the model and lean on the downstream
+ * re-validation + probe-verification to reject noise. Widening recall here can
+ * only cost an extra (cheap) model call; it cannot cause a bad invite to be
+ * trusted.
+ */
+const INVITE_ISH_RE =
+  /invite|\bjoin\b|wss:\/\/|buzz:\/\/|\/invite\/|communities\.|\bcode\b|\brelay\b/i;
 
 const SYSTEM_PROMPT = [
-  "You extract Buzz community invite links from chat messages.",
-  "For every invite you are confident about, output it in canonical form",
-  "`buzz://join?relay=wss://HOST&code=CODE`.",
+  "You extract Buzz community invite links from chat messages and channel",
+  "descriptions. Invites are often posted messily: a bare code next to a relay",
+  "host, a worded 'join us at <host>, code <code>', a typo'd or missing scheme,",
+  "or a code split across a sentence. Reconstruct each one you are confident",
+  "about into canonical form `buzz://join?relay=wss://HOST&code=CODE` (or the",
+  "web form `https://HOST/invite/CODE`).",
+  "You must be able to identify BOTH a relay host and a code from the text —",
+  "never guess or invent a host or code that is not actually present. When only",
+  "a bare code appears with no host anywhere near it, skip it.",
   'Return ONLY JSON: {"invites": string[]}. If none, empty array.',
-  "Do not invent hosts or codes.",
 ].join("\n");
 
 export interface LlmExtractOptions {

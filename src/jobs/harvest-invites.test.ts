@@ -4,21 +4,25 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CandidateRecord } from "../db/candidates";
 import type { NormalizedRelay } from "../discovery/normalize";
-import type { PresenceMessage } from "../presence/reader";
+import type {
+  ChannelMetadata,
+  CommunityContent,
+  PresenceMessage,
+} from "../presence/reader";
 import {
   harvestInvites,
   registerHarvestInvitesWorker,
   type InjectCandidateFn,
-  type ReadCommunityFn,
+  type ReadContentFn,
 } from "./harvest-invites";
 import { HARVEST_INVITES_QUEUE } from "./queues";
 
 // Mock the default dependency modules so the real worker handler (which calls
 // `harvestInvites({ pool })` with no injected deps) never touches the network
 // or a real Postgres connection.
-const mockReadCommunity = vi.fn();
+const mockReadContent = vi.fn();
 vi.mock("../presence/reader", () => ({
-  readCommunity: (...args: unknown[]) => mockReadCommunity(...args),
+  readCommunityContent: (...args: unknown[]) => mockReadContent(...args),
 }));
 const mockUpsertCandidate = vi.fn();
 vi.mock("../db/candidates", () => ({
@@ -55,11 +59,39 @@ function message(content: string): PresenceMessage {
   };
 }
 
-/** A reader stub returning a fixed message list for any relay it is asked. */
+/** Builds a ChannelMetadata carrying the given about/name text. */
+function channel(overrides: Partial<ChannelMetadata> = {}): ChannelMetadata {
+  return {
+    id: "chan-1",
+    isMember: true,
+    isOpen: true,
+    isPublic: true,
+    members: [],
+    ...overrides,
+  };
+}
+
+/** Wraps loose messages/channels into the reader's CommunityContent shape. */
+function content(
+  messages: PresenceMessage[] = [],
+  channels: ChannelMetadata[] = [],
+): CommunityContent {
+  return { channels, messages };
+}
+
+/**
+ * A reader stub returning fixed content per relay. Callers pass a message list
+ * (the common case) or a full CommunityContent when they exercise channel
+ * metadata; both are normalized to CommunityContent here.
+ */
 function readerReturning(
-  byRelay: Record<string, PresenceMessage[]>,
-): ReadCommunityFn {
-  return vi.fn(async ({ relayUrl }) => byRelay[relayUrl] ?? []);
+  byRelay: Record<string, PresenceMessage[] | CommunityContent>,
+): ReadContentFn {
+  return vi.fn(async ({ relayUrl }) => {
+    const entry = byRelay[relayUrl];
+    if (!entry) return content();
+    return Array.isArray(entry) ? content(entry) : entry;
+  });
 }
 
 function insertsInto(
@@ -73,7 +105,7 @@ function insertsInto(
 
 afterEach(() => {
   vi.restoreAllMocks();
-  mockReadCommunity.mockReset();
+  mockReadContent.mockReset();
   mockUpsertCandidate.mockReset();
 });
 
@@ -84,7 +116,7 @@ describe("harvestInvites", () => {
     const { pool, query } = poolWith([
       { community_id: "id-home", relay_host: "home.example", relay_url: "wss://home.example" },
     ]);
-    const readCommunity = readerReturning({
+    const readContent = readerReturning({
       "wss://home.example": [
         message("welcome! buzz://join?relay=wss://new.example&code=INV-NEW"),
       ],
@@ -94,7 +126,7 @@ describe("harvestInvites", () => {
         candidateRecord(relay.host),
     );
 
-    const result = await harvestInvites({ injectImpl, pool, readCommunity });
+    const result = await harvestInvites({ injectImpl, pool, readContent });
 
     expect(result).toEqual({
       candidatesForExisting: 0,
@@ -121,6 +153,43 @@ describe("harvestInvites", () => {
     );
   });
 
+  it("harvests an invite pinned in a channel's about text, not just chat", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { pool } = poolWith([
+      { community_id: "id-home", relay_host: "home.example", relay_url: "wss://home.example" },
+    ]);
+    // No chat invites — the only invite is pinned in a channel description.
+    const readContent = readerReturning({
+      "wss://home.example": content(
+        [message("gm everyone")],
+        [
+          channel({
+            about: "Sister community: https://sister.example/invite/PINNED",
+            id: "general",
+          }),
+        ],
+      ),
+    });
+    const injectImpl: InjectCandidateFn = vi.fn(
+      async (_pool, relay: NormalizedRelay): Promise<CandidateRecord> =>
+        candidateRecord(relay.host),
+    );
+
+    const result = await harvestInvites({ injectImpl, pool, readContent });
+
+    expect(result.invitesFound).toBe(1);
+    expect(result.newCommunitiesIngested).toBe(1);
+    expect(injectImpl).toHaveBeenCalledWith(
+      pool,
+      { canonicalRelayUrl: "wss://sister.example", host: "sister.example", port: null },
+      {
+        evidenceId: "sister.example",
+        listing: { inviteCode: "PINNED" },
+        type: "harvest",
+      },
+    );
+  });
+
   it("records a candidate (no ingest) when the invite is for a community we're in", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     // Member of both home.example and existing.example; home advertises existing.
@@ -128,7 +197,7 @@ describe("harvestInvites", () => {
       { community_id: null, relay_host: "home.example", relay_url: "wss://home.example" },
       { community_id: null, relay_host: "existing.example", relay_url: "wss://existing.example" },
     ]);
-    const readCommunity = readerReturning({
+    const readContent = readerReturning({
       "wss://home.example": [
         message("re-up: https://existing.example/invite/FRESH-CODE"),
       ],
@@ -136,7 +205,7 @@ describe("harvestInvites", () => {
     });
     const injectImpl = vi.fn();
 
-    const result = await harvestInvites({ injectImpl, pool, readCommunity });
+    const result = await harvestInvites({ injectImpl, pool, readContent });
 
     expect(result).toEqual({
       candidatesForExisting: 1,
@@ -166,7 +235,7 @@ describe("harvestInvites", () => {
     const { pool } = poolWith([
       { community_id: null, relay_host: "home.example", relay_url: "wss://home.example" },
     ]);
-    const readCommunity = readerReturning({
+    const readContent = readerReturning({
       "wss://home.example": [
         message("buzz://join?relay=wss://good.example&code=code-good"),
         message("buzz://join?relay=wss://bad.example&code=code-bad"),
@@ -181,7 +250,7 @@ describe("harvestInvites", () => {
       },
     );
 
-    const result = await harvestInvites({ injectImpl, pool, readCommunity });
+    const result = await harvestInvites({ injectImpl, pool, readContent });
 
     expect(result).toEqual({
       candidatesForExisting: 0,
@@ -203,18 +272,18 @@ describe("harvestInvites", () => {
       { community_id: null, relay_host: "ok.example", relay_url: "wss://ok.example" },
       { community_id: null, relay_host: "down.example", relay_url: "wss://down.example" },
     ]);
-    const readCommunity = vi.fn(async ({ relayUrl }) => {
+    const readContent = vi.fn(async ({ relayUrl }) => {
       if (relayUrl === "wss://down.example") {
         throw new Error("relay unreachable");
       }
-      return [message("buzz://join?relay=wss://new.example&code=NEW")];
-    }) as unknown as ReadCommunityFn;
+      return content([message("buzz://join?relay=wss://new.example&code=NEW")]);
+    }) as unknown as ReadContentFn;
     const injectImpl: InjectCandidateFn = vi.fn(
       async (_pool, relay: NormalizedRelay): Promise<CandidateRecord> =>
         candidateRecord(relay.host),
     );
 
-    const result = await harvestInvites({ injectImpl, pool, readCommunity });
+    const result = await harvestInvites({ injectImpl, pool, readContent });
 
     expect(result).toEqual({
       candidatesForExisting: 0,
@@ -234,7 +303,7 @@ describe("harvestInvites", () => {
       { community_id: null, relay_host: "b.example", relay_url: "wss://b.example" },
     ]);
     // Both communities advertise the SAME new invite.
-    const readCommunity = readerReturning({
+    const readContent = readerReturning({
       "wss://a.example": [message("buzz://join?relay=wss://new.example&code=DUP")],
       "wss://b.example": [message("https://new.example/invite/DUP")],
     });
@@ -243,7 +312,7 @@ describe("harvestInvites", () => {
         candidateRecord(relay.host),
     );
 
-    const result = await harvestInvites({ injectImpl, pool, readCommunity });
+    const result = await harvestInvites({ injectImpl, pool, readContent });
 
     expect(result.invitesFound).toBe(1);
     expect(result.newCommunitiesIngested).toBe(1);
@@ -257,7 +326,7 @@ describe("harvestInvites", () => {
     ]);
     // The message carries a messy invite the regex cannot parse; the LLM pass
     // surfaces it in canonical form (already re-validated by extractInvites).
-    const readCommunity = readerReturning({
+    const readContent = readerReturning({
       "wss://home.example": [message("psst, join us over at fresh.example")],
     });
     const llmExtractImpl = vi.fn(async () => [
@@ -272,7 +341,7 @@ describe("harvestInvites", () => {
       injectImpl,
       llmExtractImpl,
       pool,
-      readCommunity,
+      readContent,
     });
 
     expect(llmExtractImpl).toHaveBeenCalledTimes(1);
@@ -295,7 +364,7 @@ describe("harvestInvites", () => {
     const { pool } = poolWith([
       { community_id: null, relay_host: "home.example", relay_url: "wss://home.example" },
     ]);
-    const readCommunity = readerReturning({
+    const readContent = readerReturning({
       "wss://home.example": [
         message("buzz://join?relay=wss://new.example&code=DUP"),
       ],
@@ -313,7 +382,7 @@ describe("harvestInvites", () => {
       injectImpl,
       llmExtractImpl,
       pool,
-      readCommunity,
+      readContent,
     });
 
     expect(result.invitesFound).toBe(1);
@@ -365,9 +434,9 @@ describe("registerHarvestInvitesWorker", () => {
       { community_id: null, relay_host: "home.example", relay_url: "wss://home.example" },
     ]);
     const { boss, run, send } = fakeBoss();
-    mockReadCommunity.mockResolvedValue([
-      message("buzz://join?relay=wss://new.example&code=NEW"),
-    ]);
+    mockReadContent.mockResolvedValue(
+      content([message("buzz://join?relay=wss://new.example&code=NEW")]),
+    );
     mockUpsertCandidate.mockResolvedValue(candidateRecord("new.example"));
 
     await registerHarvestInvitesWorker(boss, pool);
@@ -388,7 +457,7 @@ describe("registerHarvestInvitesWorker", () => {
       { community_id: null, relay_host: "home.example", relay_url: "wss://home.example" },
     ]);
     const { boss, run, send } = fakeBoss();
-    mockReadCommunity.mockResolvedValue([]);
+    mockReadContent.mockResolvedValue(content([]));
 
     await registerHarvestInvitesWorker(boss, pool);
     await run();

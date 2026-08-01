@@ -10,6 +10,7 @@ function summary(overrides: Partial<CommunitySummary> = {}): CommunitySummary {
     activeMemberCount: 2,
     activityLevel: "light",
     channelCount: 1,
+    focus: null,
     goals: "Build things",
     messageCount: 4,
     recentProjects: ["Relay work"],
@@ -66,6 +67,63 @@ describe("refreshCommunitySummaries", () => {
     expect(updates[1]?.[1]?.[0]).toBe("b.example");
     // Roster (5) >= active (2) → surfaced as total_member_count (param $6).
     expect(updates[0]?.[1]?.[5]).toBe(5);
+  });
+
+  it("skips the focus write when the classification is null", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { pool } = poolWith([
+      { community_id: null, relay_host: "none.example", relay_url: "wss://none.example" },
+    ]);
+    const recordFocus = vi.fn(async () => undefined);
+
+    await refreshCommunitySummaries({
+      buildSummary: vi.fn(async () => summary({ focus: null })),
+      pool,
+      readCommunity: vi.fn(async () => [] as PresenceMessage[]),
+      readMemberCount: vi.fn(async () => 0),
+      recordFocus,
+    });
+
+    expect(recordFocus).not.toHaveBeenCalled();
+  });
+
+  it("writes the presence focus for a community the agent classified", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { pool } = poolWith([
+      { community_id: null, relay_host: "ai.example", relay_url: "wss://ai.example" },
+    ]);
+    const recordFocus = vi.fn(async () => undefined);
+
+    await refreshCommunitySummaries({
+      buildSummary: vi.fn(async () => summary({ focus: "ai-agents" })),
+      pool,
+      readCommunity: vi.fn(async () => [] as PresenceMessage[]),
+      readMemberCount: vi.fn(async () => 0),
+      recordFocus,
+    });
+
+    expect(recordFocus).toHaveBeenCalledTimes(1);
+    expect(recordFocus).toHaveBeenCalledWith("ai.example", "ai-agents");
+  });
+
+  it("still succeeds when the focus write fails (best-effort)", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { pool } = poolWith([
+      { community_id: null, relay_host: "ai.example", relay_url: "wss://ai.example" },
+    ]);
+
+    const result = await refreshCommunitySummaries({
+      buildSummary: vi.fn(async () => summary({ focus: "building" })),
+      pool,
+      readCommunity: vi.fn(async () => [] as PresenceMessage[]),
+      readMemberCount: vi.fn(async () => 0),
+      recordFocus: vi.fn(async () => {
+        throw new Error("focus write boom");
+      }),
+    });
+
+    expect(result).toEqual({ failed: 0, ok: 1 });
   });
 
   it("isolates a failing community so the others still succeed", async () => {

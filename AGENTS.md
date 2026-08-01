@@ -231,7 +231,7 @@ next number in the old sequence — see `migrations/README.md`. Existing
   email (required), community name, one-line description, an audience
   blurb, and optional focus/categories — stored pre-verification on
   `community_sources` (`source_contact_email`, `source_audience`,
-  `source_focus` added in `migrations/0019_submission_intake.sql`; name/
+  `source_focus` added in `migrations/20260801T1000_submission_intake.sql`; name/
   description/categories reuse the existing `source_display_name` /
   `source_description` / `source_categories` columns from
   `migrations/0005_catalog_discovery.sql`). `communities.description`/

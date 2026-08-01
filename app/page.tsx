@@ -14,6 +14,7 @@ import { focusLabel } from "../src/ranking/focus";
 
 import { AutoSubmitSelect } from "./AutoSubmitSelect";
 import { CommunityRowLink } from "./CommunityRowLink";
+import { RowJoinButton } from "./RowJoinButton";
 import { JoinButton } from "./JoinButton";
 import { MobileCollapsible } from "./MobileCollapsible";
 import { ShareOnX } from "./ShareOnX";
@@ -271,18 +272,18 @@ function CommunityRow({
   selected: boolean;
 }) {
   const tone = insigniaTone(community.relayHost);
+  const joinable = Boolean(community.inviteCode || community.publicUrl);
 
   return (
-    <CommunityRowLink
-      ariaCurrent={selected ? "true" : undefined}
+    <div
+      aria-current={selected ? "true" : undefined}
       className={styles.indexRow}
-      href={buildHref(filters, { selected: community.candidateId })}
-      joinTarget={{
-        inviteCode: community.inviteCode,
-        publicUrl: community.publicUrl,
-        relayUrl: community.canonicalRelayUrl,
-      }}
     >
+      <CommunityRowLink
+        ariaLabel={`View ${community.displayName}`}
+        className={styles.indexRowLink}
+        href={buildHref(filters, { selected: community.candidateId })}
+      />
       <span className={styles.indexCommunityCell}>
         {community.iconUrl ? (
           <Image
@@ -319,10 +320,28 @@ function CommunityRow({
       <span className={styles.indexFocusCell}>
         {community.focus ? focusLabel(community.focus) : "—"}
       </span>
-      <svg aria-hidden="true" className={styles.indexRowArrow} viewBox="0 0 24 24">
-        <path d="m9 6 6 6-6 6" />
-      </svg>
-    </CommunityRowLink>
+      <span className={styles.indexRowTrailing}>
+        {joinable ? (
+          <RowJoinButton
+            className={styles.indexRowJoin}
+            communityName={community.displayName}
+            joinTarget={{
+              inviteCode: community.inviteCode,
+              publicUrl: community.publicUrl,
+              relayUrl: community.canonicalRelayUrl,
+            }}
+          />
+        ) : (
+          <svg
+            aria-hidden="true"
+            className={styles.indexRowArrow}
+            viewBox="0 0 24 24"
+          >
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+        )}
+      </span>
+    </div>
   );
 }
 
@@ -345,7 +364,11 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
   const shareText = `${community.displayName} — a real, live Buzz community, verified by @buzzrouter`;
 
   return (
-    <article aria-labelledby="inspector-title" className={styles.communityInspector}>
+    <article
+      aria-labelledby="inspector-title"
+      className={styles.communityInspector}
+      id="community-card"
+    >
       <header className={styles.inspectorHeader}>
         <div className={styles.inspectorHeading}>
           <span aria-hidden="true" className={styles.inspectorInsignia} style={tone}>

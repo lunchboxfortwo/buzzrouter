@@ -553,7 +553,7 @@
   align-items: center;
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: minmax(220px, 2.4fr) minmax(140px, 1fr) 24px;
+  grid-template-columns: minmax(220px, 2.4fr) minmax(140px, 1fr) minmax(4rem, auto);
 }
 
 
@@ -728,6 +728,49 @@
 .indexRow[aria-current="true"] .indexRowArrow {
   stroke: var(--accent);
   transform: translateX(2px);
+}
+
+/* Stretched overlay link: fills the row so a tap anywhere opens the card. */
+.indexRowLink {
+  border-radius: inherit;
+  inset: 0;
+  position: absolute;
+  z-index: 0;
+}
+
+/* The visible cells sit above the overlay but pass taps through to it, so the
+   whole row opens the card — except the Join button, which re-enables its own
+   pointer events (below) and so joins instead. */
+.indexCommunityCell,
+.indexFocusCell,
+.indexRowTrailing {
+  pointer-events: none;
+  position: relative;
+  z-index: 1;
+}
+
+.indexRowTrailing {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.indexRowJoin {
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 660;
+  padding: 8px 14px;
+  pointer-events: auto;
+  transition: background var(--duration) var(--ease);
+  white-space: nowrap;
+}
+
+.indexRowJoin:hover {
+  background: var(--accent-strong);
 }
 
 .indexFooter {
@@ -1195,7 +1238,7 @@
 
   .indexHeader,
   .indexRow {
-    grid-template-columns: minmax(200px, 2fr) minmax(120px, 1fr) 24px;
+    grid-template-columns: minmax(200px, 2fr) minmax(120px, 1fr) minmax(4rem, auto);
   }
 
   .indexHeader span:nth-child(4),
@@ -1269,7 +1312,7 @@
 
   .indexHeader,
   .indexRow {
-    grid-template-columns: minmax(0, 1fr) minmax(88px, auto) 24px;
+    grid-template-columns: minmax(0, 1fr) minmax(88px, auto) minmax(4rem, auto);
   }
 
   .indexHeader span:nth-child(3),
@@ -1373,7 +1416,7 @@
 
   .indexRow {
     gap: 9px;
-    grid-template-columns: minmax(0, 1fr) minmax(80px, auto) 20px;
+    grid-template-columns: minmax(0, 1fr) minmax(80px, auto) minmax(3.5rem, auto);
     min-height: 82px;
     padding: 10px 12px;
   }
@@ -1468,7 +1511,7 @@
   .indexHeader,
   .indexRow {
     column-gap: 8px;
-    grid-template-columns: minmax(0, 1fr) auto 16px;
+    grid-template-columns: minmax(0, 1fr) auto minmax(3.5rem, auto);
     padding-inline: 10px;
   }
 

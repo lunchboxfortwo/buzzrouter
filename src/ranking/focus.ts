@@ -17,16 +17,19 @@ export const FOCUS_SLUGS = [
 
 export type FocusSlug = (typeof FOCUS_SLUGS)[number];
 
+// One-word labels: the directory list (mobile especially) is dense, and every
+// focus renders beside a community name, so a single word reads faster and frees
+// real estate. Slugs are unchanged — only the human labels shorten.
 export const FOCUS_LABELS: Record<FocusSlug, string> = {
   building: "Building",
-  "ai-agents": "AI & agents",
-  "bitcoin-money": "Bitcoin & money",
-  "design-creative": "Design & creative",
-  "research-knowledge": "Research & knowledge",
-  "local-regional": "Local & regional",
-  "team-private": "Team & private",
-  "privacy-security": "Privacy & security",
-  "growth-gtm": "Growth & GTM",
+  "ai-agents": "AI",
+  "bitcoin-money": "Bitcoin",
+  "design-creative": "Design",
+  "research-knowledge": "Research",
+  "local-regional": "Local",
+  "team-private": "Team",
+  "privacy-security": "Privacy",
+  "growth-gtm": "Growth",
 };
 
 export function isFocusSlug(value: unknown): value is FocusSlug {

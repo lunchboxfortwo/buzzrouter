@@ -35,6 +35,25 @@ and the environment described in the operations guides:
 npm run dev
 ```
 
+### Pair Buzz on an Android emulator
+
+With an existing emulator running and the Buzz Android app installed, pair it
+to a fresh throwaway identity without building Buzz desktop:
+
+```bash
+node --import tsx scripts/pair-android-buzz.ts \
+  --identity-relay https://buzzdir.communities.buzz.xyz \
+  --serial emulator-5554 \
+  --evidence-dir /tmp/buzz-pair-evidence
+```
+
+The script implements the desktop side of Buzz's NIP-AB pairing protocol. It
+creates the identity and pairing keys in memory, authenticates to the pairing
+relay, drives the installed app through `adb`, confirms the matching safety
+code, and optionally writes a post-pairing screenshot. It never prints the
+identity secret, pairing URI, session secret, ciphertext, or receipt. Use only
+a disposable identity relay and emulator; do not pass a production bridge key.
+
 ## Public API
 
 `GET /api/communities` returns the verified, listed directory communities as

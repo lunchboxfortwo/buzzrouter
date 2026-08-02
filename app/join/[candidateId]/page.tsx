@@ -10,7 +10,11 @@ import { getJoinPolicy, type JoinPolicy } from "../../../src/presence/policy";
 import { buildInviteUrl } from "../../join-urls";
 import chrome from "../../site-chrome.module.css";
 import { SiteMasthead } from "../../SiteMasthead";
+import { headers } from "next/headers";
+
 import { JoinConsent } from "./JoinConsent";
+import { MobileNotice } from "./MobileNotice";
+import { communityTitle, isMobileBrowser } from "./mobile-notice";
 import styles from "./join.module.css";
 
 export const dynamic = "force-dynamic";
@@ -34,8 +38,13 @@ export default async function JoinPage({
   if (!target) notFound();
 
   const community = await getCommunityByHost(pool, target.host);
-  const displayName = community?.displayName ?? target.host;
-  const hostedFallbackUrl = buildInviteUrl(target.canonicalRelayUrl, target.code);
+  // 20 of 61 listed communities publish no name; never put a raw FQDN in an <h1>.
+  const displayName = communityTitle(community?.displayName, target.host);
+  const hostedFallbackUrl = buildInviteUrl(
+    target.canonicalRelayUrl,
+    target.code,
+  );
+  const onMobile = isMobileBrowser((await headers()).get("user-agent"));
 
   // Owner-only / allowlist: a code will not admit a new member. Say so rather
   // than run a consent flow whose claim would be refused.
@@ -43,8 +52,9 @@ export default async function JoinPage({
     return (
       <Shell displayName={displayName} host={target.host}>
         <p className={styles.lead}>
-          <strong>{displayName}</strong> is invite-only. Its owner admits members
-          from an allowlist, so an invite code alone will not get you in.
+          <strong>{displayName}</strong> is invite-only. Its owner admits
+          members from an allowlist, so an invite code alone will not get you
+          in.
         </p>
         <p className={styles.muted}>
           Ask an admin of the community for a personal invite.
@@ -58,27 +68,38 @@ export default async function JoinPage({
 
   // The live policy is fetched at render for DISPLAY only — never a receipt,
   // which is short-lived and minted on the consent click (see JoinConsent).
+  //
+  // Three outcomes, and they are NOT the same. `null` from getJoinPolicy means
+  // the community configured no policy at all: nothing to accept, and a bare
+  // claim admits you. Only a throw means we genuinely could not reach the relay.
+  // Collapsing the two told visitors to BuzzRouter's own community "we couldn't
+  // reach it" and sent them on a pointless detour to Buzz.
   let policy: JoinPolicy | null = null;
+  let policyUnreachable = false;
   try {
     policy = await getJoinPolicy(target.host);
   } catch {
-    policy = null;
+    policyUnreachable = true;
   }
 
   return (
     <Shell displayName={displayName} host={target.host}>
-      <JoinConsent
-        ageAttestationRequired={policy?.ageAttestationRequired ?? false}
-        candidateId={candidateId}
-        code={target.code}
-        displayName={displayName}
-        hostedFallbackUrl={hostedFallbackUrl}
-        policyUnavailable={policy === null}
-        policyVersion={policy?.version ?? ""}
-        privacyMarkdown={policy?.privacyMarkdown ?? null}
-        relayUrl={target.canonicalRelayUrl}
-        termsMarkdown={policy?.termsMarkdown ?? null}
-      />
+      {onMobile ? (
+        <MobileNotice />
+      ) : (
+        <JoinConsent
+          ageAttestationRequired={policy?.ageAttestationRequired ?? false}
+          candidateId={candidateId}
+          code={target.code}
+          displayName={displayName}
+          hostedFallbackUrl={hostedFallbackUrl}
+          policyUnavailable={policyUnreachable}
+          policyVersion={policy?.version ?? ""}
+          privacyMarkdown={policy?.privacyMarkdown ?? null}
+          relayUrl={target.canonicalRelayUrl}
+          termsMarkdown={policy?.termsMarkdown ?? null}
+        />
+      )}
     </Shell>
   );
 }

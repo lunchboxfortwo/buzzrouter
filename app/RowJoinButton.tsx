@@ -1,6 +1,7 @@
 "use client";
 
 import { launchJoin, type JoinTarget } from "./joinCascade";
+import { hostFromRelayUrl, trackJoinClick } from "./track";
 
 /**
  * The one-tap Join affordance on a joinable directory row. It sits above the
@@ -24,6 +25,11 @@ export function RowJoinButton({
       className={className}
       onClick={(event) => {
         event.stopPropagation();
+        trackJoinClick({
+          affordance: "row_join",
+          candidateId: joinTarget.candidateId ?? null,
+          host: hostFromRelayUrl(joinTarget.relayUrl),
+        });
         launchJoin(joinTarget);
       }}
       type="button"

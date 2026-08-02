@@ -30,12 +30,15 @@ export function buildInviteUrl(relayUrl: string, inviteCode: string): string {
 export function buildJoinDeepLink(
   relayUrl: string,
   inviteCode: string,
-  policyReceipt: string,
+  // Null when the community configured no join policy: there is no receipt to
+  // carry, and a bare claim admits the joiner. Sending an empty policy_receipt
+  // would be worse than omitting it.
+  policyReceipt: string | null,
 ): string {
   const params = new URLSearchParams({
     code: inviteCode,
-    policy_receipt: policyReceipt,
     relay: relayUrl,
   });
+  if (policyReceipt) params.set("policy_receipt", policyReceipt);
   return `buzz://join?${params.toString()}`;
 }

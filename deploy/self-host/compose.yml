@@ -31,10 +31,6 @@ services:
       BUZZROUTER_CONNECTOR_WRAPPING_KEYS_FILE: /run/secrets/connector-wrapping-keys.json
       BUZZROUTER_CONNECTOR_WRAPPING_KEY_VERSION: ${BUZZROUTER_CONNECTOR_WRAPPING_KEY_VERSION:-1}
       BUZZROUTER_CONNECT_PACKAGE_SPEC: ${BUZZROUTER_CONNECT_PACKAGE_SPEC:-}
-      # Opt-in for LIVE hosted-signup calls (creates real Builderlab
-      # communities). Unset means /create-community renders but refuses, which
-      # is the correct default everywhere except production.
-      BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE: ${BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE:-}
       DATABASE_SSL: "false"
       DATABASE_URL: postgresql://buzzrouter:${POSTGRES_PASSWORD}@buzzrouter-db:5432/buzzrouter
       DISCOVERY_GITHUB_ENABLED: "false"

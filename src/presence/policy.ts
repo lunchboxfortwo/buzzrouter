@@ -99,7 +99,7 @@ export function acceptPolicyEndpoint(host: string): string {
 export async function getJoinPolicy(
   host: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<JoinPolicy> {
+): Promise<JoinPolicy | null> {
   const url = joinPolicyEndpoint(host);
   const response = await fetchImpl(url, {
     headers: { accept: "application/json" },
@@ -119,7 +119,14 @@ export async function getJoinPolicy(
     };
   };
   const policy = parsed.policy;
-  if (!policy || typeof policy.version !== "string") {
+  // A 200 with no `policy` means the community has NO join policy configured —
+  // the EASIEST case, not a failure. A bare claim admits you and no receipt is
+  // needed. Conflating this with "the relay is unreachable" told visitors to
+  // BuzzRouter's own community "we couldn't reach it" and offered a pointless
+  // detour to Buzz. Callers get null and must treat it as "nothing to accept";
+  // a genuine transport/HTTP failure still throws.
+  if (!policy) return null;
+  if (typeof policy.version !== "string") {
     throw new Error(`Malformed join policy response from ${url}.`);
   }
   const result: JoinPolicy = {
@@ -230,6 +237,15 @@ export async function joinCommunity(
   }
 
   const policy = await getJoinPolicy(host, fetchImpl ?? fetch);
+  // The relay refused for policy reasons but advertises no policy. Report the
+  // contradiction rather than fabricating an acceptance.
+  if (!policy) {
+    return {
+      ok: false as const,
+      reason: "policy_accept_failed" as const,
+      status: 0,
+    };
+  }
   const accepted = await acceptJoinPolicy({
     ageConfirmed: acceptTerms,
     code,

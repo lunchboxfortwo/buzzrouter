@@ -27,7 +27,7 @@ technical evidence.
 
 BuzzRouter is the public discovery layer for Buzz communities, plus the
 surfaces an operator uses to get a community into that directory and connected
-to others. It has four surfaces:
+to others. It has three surfaces:
 
 - **Discover** — the verified directory. Converts relay-based spaces into a
   legible directory where people can search by name, description, or
@@ -38,8 +38,6 @@ to others. It has four surfaces:
   invite for verification and listing.
 - **Link** (`/shared-channels`) — two verified communities pair one channel
   each and BuzzRouter mirrors messages between them with visible attribution.
-- **Create** (`/create-community`) — a wrapper over Block's hosted Buzz
-  signup. In progress, not shipped.
 
 The MVP succeeds when a first-time visitor can understand what several communities
 do and make a confident join decision in a few minutes.
@@ -65,7 +63,7 @@ prototype or placeholder directory in the serving path.
 
 The shipped directory provides:
 
-- A four-route masthead: `Discover`, `Create`, `Link`, and `List`; directory
+- A three-route masthead: `Discover`, `Link`, and `List`; directory
   search appears only on Discover.
 - Community and category totals for the current result set.
 - Search across display name, one-line description, and category tags.
@@ -126,18 +124,6 @@ PostgreSQL (`bridge_messages`/`bridge_deliveries`), reasoned about in
 Shared channels are new and have not been proven at scale — they connect a
 small number of paired channels today, not a general message bus between
 communities.
-
-## Create: Hosted Community Signup
-
-Create (`/create-community`) is a wrapper over Block's hosted Buzz signup
-(`app.builderlab.xyz`) for people who want a new Buzz community without
-running their own relay. **This is in progress and not shipped.** Feasibility
-was proven live against the hosted service — a self-generated Nostr key with
-no prior registration and no desktop app can complete the identity-binding
-challenge and create a hosted community end-to-end (see
-`/home/lunchbox/firstmate/data/bind-live-proof/report.md`) — but the current
-`/create-community` route only detects the visitor's OS and links out to
-Buzz's own desktop download; it does not yet drive the hosted signup itself.
 
 ## Agents
 
@@ -271,10 +257,6 @@ Not yet implemented:
 - A representative cross-community activity metric.
 - Open-ended or automatically inferred category creation.
 - Personalized recommendations.
-- Create: driving Block's hosted Buzz signup itself. Feasibility is proven
-  (self-generated-key identity binding succeeds against the live hosted
-  service); the shipped route only detects OS and links to Buzz's desktop
-  download.
 
 ## Brand Personality
 

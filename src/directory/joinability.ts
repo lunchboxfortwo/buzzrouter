@@ -75,7 +75,9 @@ export async function probeJoinability(
   //    land, so we can classify without spending a claim at all.
   try {
     const policy = await getJoinPolicy(host, fetchImpl);
-    if (policy.ageAttestationRequired) {
+    // null = no policy configured, so nothing gates a bare claim. Fall through
+    // to the claim, which settles it authoritatively.
+    if (policy?.ageAttestationRequired) {
       return { detail: "join_policy_required", status: "policy_gated" };
     }
   } catch {

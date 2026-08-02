@@ -23,6 +23,7 @@
     "discovery:rollup": "node --import tsx scripts/run-reliability-rollup.ts",
     "discovery:seed": "node --import tsx scripts/seed-reviewed-candidates.ts",
     "discovery:status": "node --import tsx scripts/discovery-status.ts",
+    "funnel:status": "node --import tsx scripts/funnel-status.ts",
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

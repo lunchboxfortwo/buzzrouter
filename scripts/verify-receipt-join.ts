@@ -65,6 +65,12 @@ async function main(): Promise<void> {
   console.log(`# receipt-join verification against ${host}`);
 
   const policy = await getJoinPolicy(host);
+
+  if (!policy) {
+
+    throw new Error("This community has no join policy — no receipt is needed; a bare claim admits you.");
+
+  }
   console.log(
     `1. GET /api/join-policy → version=${policy.version.slice(0, 12)}… ` +
       `ageAttestationRequired=${policy.ageAttestationRequired}`,

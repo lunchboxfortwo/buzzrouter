@@ -263,9 +263,9 @@ large headings or widen uppercase labels.
 ## Layout
 
 The sticky masthead is 60px high on wide screens and contains the circular logo,
-wordmark, four single-word routes (`Discover`, `Create`, `Link`, `List`), and an
-optional live-index status. Search appears only on Discover. Its inner shell is
-capped at 1320px.
+wordmark, three single-word routes (`Discover`, `Link`, `List`), and an optional
+live-index status. Search appears only on Discover. Its inner shell is capped at
+1320px.
 
 The directory intro shares the 1320px shell. It pairs a compact title and
 standfirst with two factual totals. The control bar and workspace cap at 1272px.
@@ -330,7 +330,7 @@ plane with divider-separated rows.
 - BuzzRouter logo at 32px with its original circular crop.
 - Wordmark at 18px and 700 weight.
 - Navigation at 14px and 600 weight; current route gets a 2px indigo underline.
-- Exactly four public routes: `Discover`, `Create`, `Link`, and `List`.
+- Exactly three public routes: `Discover`, `Link`, and `List`.
 
 ### Buttons
 

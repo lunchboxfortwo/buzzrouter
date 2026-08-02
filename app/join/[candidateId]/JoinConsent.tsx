@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 
 import { buildJoinDeepLink } from "../../join-urls";
-import { ManagedIdentityJoin } from "./ManagedIdentityJoin";
 import styles from "./join.module.css";
 
 type Phase = "idle" | "minting" | "launched" | "error";
@@ -48,7 +47,7 @@ export function JoinConsent({
 
   const consentSatisfied = ageAttestationRequired ? agreed : true;
 
-  const prepareReceipt = useCallback(async (): Promise<string> => {
+  const prepareReceipt = useCallback(async (): Promise<string | null> => {
     if (!consentSatisfied) {
       throw new Error("Please confirm the terms above before joining.");
     }
@@ -67,8 +66,10 @@ export function JoinConsent({
       };
       throw new Error(errorMessage(body.error, response.status));
     }
-    const { receipt } = (await response.json()) as { receipt: string };
-    return receipt;
+    // null receipt = this community configured no join policy, so there is
+    // nothing to accept and the bare code admits the joiner.
+    const { receipt } = (await response.json()) as { receipt: string | null };
+    return receipt ?? null;
   }, [
     ageAttestationRequired,
     agreed,
@@ -127,33 +128,9 @@ export function JoinConsent({
 
   return (
     <>
-      <section className={styles.webChoice}>
-        <div>
-          <p className={styles.choiceLabel}>Join in your browser</p>
-          <p>
-            Continue on the community&apos;s own Buzz page. Buzz will show its
-            terms and collect consent there, once.
-          </p>
-        </div>
-        <a
-          className={styles.webButton}
-          href={hostedFallbackUrl}
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          Continue on the web
-        </a>
-      </section>
-
-      <div className={styles.divider} aria-hidden="true">
-        <span>or</span>
-      </div>
-
       <section className={styles.appChoice}>
-        <p className={styles.choiceLabel}>Open in the Buzz app</p>
         <p className={styles.lead}>
-          The app needs BuzzRouter to carry your approval with the invite.
-          Review this community&apos;s policy, then confirm below.
+          Review {displayName}&apos;s policy, then open the invite in Buzz.
         </p>
 
         {termsMarkdown || privacyMarkdown ? (
@@ -201,15 +178,19 @@ export function JoinConsent({
             {message}
           </p>
         ) : null}
+
+        {/* A quiet fallback, deliberately not a second primary button: it ends
+            at the same app, and Buzz's page carries the download link for
+            people who do not have it yet. */}
+        <p className={styles.muted}>
+          No Buzz yet?{" "}
+          <a href={hostedFallbackUrl} rel="noopener noreferrer" target="_blank">
+            Open {displayName}&apos;s page on Buzz
+          </a>{" "}
+          to install it.
+        </p>
       </section>
 
-      <ManagedIdentityJoin
-        ageConfirmed={ageAttestationRequired ? agreed : false}
-        candidateId={candidateId}
-        disabled={!consentSatisfied}
-        policyVersion={policyVersion}
-        relayHost={new URL(relayUrl).host}
-      />
     </>
   );
 }

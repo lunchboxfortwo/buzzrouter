@@ -75,12 +75,12 @@
   width: min(100% - 32px, 1440px);
 }
 
+/* Pages without a search box keep the nav in the same place as Discover — right
+   after the brand — rather than pushing it to the far right, so the nav does not
+   jump when you move between pages. The empty 1fr column stands in for the
+   search that Discover has in that slot. */
 .headerInnerWithoutSearch {
-  grid-template-columns: auto 1fr;
-}
-
-.headerInnerWithoutSearch .nav {
-  justify-self: end;
+  grid-template-columns: auto auto 1fr;
 }
 
 .brand {

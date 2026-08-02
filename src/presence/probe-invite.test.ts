@@ -64,6 +64,20 @@ describe("probeInvite", () => {
     ).resolves.toBe("invalid");
   });
 
+  it("classifies 403 invite_exhausted as exhausted", async () => {
+    const fetchImpl = vi.fn(async () =>
+      json({ error: "invite_exhausted" }, 403),
+    );
+    await expect(
+      probeInvite({
+        code: "abc",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        host: "relay.example",
+        privateKey: secret,
+      }),
+    ).resolves.toBe("exhausted");
+  });
+
   it("accepts the join policy then retries the claim for a policy-gated host", async () => {
     let claimCalls = 0;
     const { fetchImpl, hits } = router({

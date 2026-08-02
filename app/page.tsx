@@ -9,6 +9,7 @@ import {
 } from "../src/ranking/explain";
 import { focusLabel } from "../src/ranking/focus";
 
+import { AutoSubmitCheckbox } from "./AutoSubmitCheckbox";
 import { AutoSubmitSelect } from "./AutoSubmitSelect";
 import { AddInviteCta } from "./AddInviteCta";
 import { CommunityRowLink } from "./CommunityRowLink";
@@ -26,11 +27,13 @@ export const runtime = "nodejs";
 
 
 interface Filters {
+  agent: string;
   focus: string;
   q: string;
 }
 
 interface PageSearchParams {
+  agent?: string | string[];
   focus?: string | string[];
   q?: string | string[];
   selected?: string | string[];
@@ -44,7 +47,12 @@ export default async function DirectoryPage({
   const params = await searchParams;
   const search = firstValue(params.q).trim().slice(0, 100);
   const focusFilter = firstValue(params.focus).trim();
-  const filters: Filters = { focus: focusFilter, q: search };
+  const agentOnly = firstValue(params.agent) === "1";
+  const filters: Filters = {
+    agent: agentOnly ? "1" : "",
+    focus: focusFilter,
+    q: search,
+  };
 
   const allCommunities = await listDirectoryCommunities(getDatabasePool(), {
     search,
@@ -60,6 +68,7 @@ export default async function DirectoryPage({
 
   const communities = allCommunities.filter((community) => {
     if (focusFilter && community.focus !== focusFilter) return false;
+    if (agentOnly && !hasActivitySummary(community)) return false;
     return true;
   });
 
@@ -67,7 +76,7 @@ export default async function DirectoryPage({
   const selected =
     communities.find((community) => community.candidateId === selectedId) ??
     communities[0];
-  const filtersApplied = Boolean(search || focusFilter);
+  const filtersApplied = Boolean(search || focusFilter || agentOnly);
 
   return (
     <div className={`${chrome.siteCanvas} ${styles.page}`}>
@@ -152,15 +161,10 @@ export default async function DirectoryPage({
               </svg>
             </header>
 
-            <MobileCollapsible label="Search options">
             <section aria-label="Filter communities" className={styles.commandBar}>
               <label className={styles.commandFilter}>
                 <span>Focus</span>
-                <AutoSubmitSelect
-                  defaultValue={focusFilter}
-                  form="directory-filters"
-                  name="focus"
-                >
+                <AutoSubmitSelect form="directory-filters" name="focus">
                   <option value="">Any focus</option>
                   {focusOptions.map((focus) => (
                     <option key={focus} value={focus}>
@@ -168,6 +172,17 @@ export default async function DirectoryPage({
                     </option>
                   ))}
                 </AutoSubmitSelect>
+              </label>
+              <label
+                className={styles.commandToggle}
+                title="Communities BuzzRouter's agent has joined — first-hand info, not just relay checks"
+              >
+                <AutoSubmitCheckbox
+                  form="directory-filters"
+                  name="agent"
+                  value="1"
+                />
+                <span>Agent inside</span>
               </label>
               <noscript>
                 <button
@@ -183,7 +198,6 @@ export default async function DirectoryPage({
                 {communities.length === 1 ? "result" : "results"}
               </span>
             </section>
-            </MobileCollapsible>
 
             <div className={styles.workspaceGrid}>
               <section
@@ -662,6 +676,7 @@ function buildHref(
   const params = new URLSearchParams();
   if (merged.q) params.set("q", merged.q);
   if (merged.focus) params.set("focus", merged.focus);
+  if (merged.agent) params.set("agent", merged.agent);
   if (overrides.selected) params.set("selected", overrides.selected);
   const qs = params.toString();
   return `/${qs ? `?${qs}` : ""}`;

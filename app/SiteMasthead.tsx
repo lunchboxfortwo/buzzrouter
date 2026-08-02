@@ -41,7 +41,13 @@ export function SiteMasthead({
 
   return (
     <header className={styles.header}>
-      <div className={styles.headerInner}>
+      <div
+        className={
+          current === "discover"
+            ? styles.headerInner
+            : `${styles.headerInner} ${styles.headerInnerWithoutSearch}`
+        }
+      >
         <Link aria-label="BuzzRouter directory" className={styles.brand} href="/">
           <Image
             alt=""
@@ -85,13 +91,15 @@ export function SiteMasthead({
           </Link>
         </nav>
 
-        {searchFormId ? (
-          search
-        ) : (
-          <form action="/" className={styles.searchForm} method="GET">
-            {search}
-          </form>
-        )}
+        {current === "discover" ? (
+          searchFormId ? (
+            search
+          ) : (
+            <form action="/" className={styles.searchForm} method="GET">
+              {search}
+            </form>
+          )
+        ) : null}
       </div>
     </header>
   );

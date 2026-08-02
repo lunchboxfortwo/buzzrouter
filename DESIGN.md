@@ -263,8 +263,9 @@ large headings or widen uppercase labels.
 ## Layout
 
 The sticky masthead is 60px high on wide screens and contains the circular logo,
-wordmark, exactly two routes (`Discover`, `Submit`), and an optional live-index
-status. Its inner shell is capped at 1320px.
+wordmark, four single-word routes (`Discover`, `Create`, `Link`, `List`), and an
+optional live-index status. Search appears only on Discover. Its inner shell is
+capped at 1320px.
 
 The directory intro shares the 1320px shell. It pairs a compact title and
 standfirst with two factual totals. The control bar and workspace cap at 1272px.
@@ -277,9 +278,10 @@ The primary workspace is a two-column grid with an 18px gap:
 - Detail inspector: minimum 460px, sticky 78px below the viewport top.
 
 At 920px the workspace becomes one column and the inspector follows the list. At
-680px the masthead wraps into a brand/status row plus navigation; controls stack
-vertically; result evidence metadata hides; and fact cells become a single column.
-Mobile layouts keep 16px page margins and never introduce horizontal scrolling.
+680px the masthead wraps into a brand/status row plus one-line navigation;
+controls stack vertically; result evidence metadata hides; and fact cells become
+a single column. Mobile layouts keep 16px page margins and never introduce
+horizontal scrolling.
 
 Use the 4, 8, 12, 16, 24, 32, 48, and 56px rhythm. Tight row internals may use
 6-14px values when needed for alignment, but page-level spacing should remain on
@@ -328,7 +330,7 @@ plane with divider-separated rows.
 - BuzzRouter logo at 32px with its original circular crop.
 - Wordmark at 18px and 700 weight.
 - Navigation at 14px and 600 weight; current route gets a 2px indigo underline.
-- Exactly two public routes: `Discover` and `Submit`.
+- Exactly four public routes: `Discover`, `Create`, `Link`, and `List`.
 
 ### Buttons
 

@@ -54,11 +54,13 @@ test("a keyless visitor joins a community and can export the managed key", async
 }) => {
   await page.goto("/");
 
+  // Single-word nav, one level: adding a tab or a qualifier here is a
+  // regression, not a copy tweak.
   await expect(page.getByRole("navigation").getByRole("link")).toHaveText([
     "Discover",
-    "Create a community",
-    "Shared channels",
-    "List a community",
+    "Create",
+    "Link",
+    "List",
   ]);
   const [joinPage] = await Promise.all([
     page.context().waitForEvent("page"),

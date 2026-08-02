@@ -114,7 +114,7 @@ test("search for something absent does not strand the visitor", async ({
 test("mobile navigation stays on one line and search stays on Discover", async ({
   page,
 }) => {
-  await page.setViewportSize({ height: 667, width: 375 });
+  await page.setViewportSize({ height: 568, width: 320 });
   await page.goto("/");
 
   const navLinks = page.getByRole("navigation").getByRole("link");
@@ -123,6 +123,18 @@ test("mobile navigation stays on one line and search stays on Discover", async (
     links.map((link) => Math.round(link.getBoundingClientRect().top)),
   );
   expect(new Set(linkTops).size).toBe(1);
+  const linkEdges = await navLinks.evaluateAll((links) =>
+    links.map((link) => {
+      const box = link.getBoundingClientRect();
+      return { left: Math.round(box.left), right: Math.round(box.right) };
+    }),
+  );
+  expect(
+    Math.min(...linkEdges.map(({ left }) => left)),
+  ).toBeGreaterThanOrEqual(0);
+  expect(
+    Math.max(...linkEdges.map(({ right }) => right)),
+  ).toBeLessThanOrEqual(320);
   await expect(
     page.getByPlaceholder("Search communities or topics"),
   ).toBeVisible();

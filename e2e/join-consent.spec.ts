@@ -104,6 +104,15 @@ test("shows the real policy and mints a receipt only after a genuine consent tic
     "href",
     `https://${new URL(relayUrl).host}/invite/e2e-invite-code`,
   );
+  await expect(
+    page.getByRole("button", { name: /Join without Buzz/i }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: /BuzzRouter holds your key/i }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /Export my key/i }),
+  ).toHaveCount(0);
 
   if (process.env.JOIN_SCREENSHOT_PATH) {
     await page.screenshot({
@@ -135,6 +144,18 @@ test("shows the real policy and mints a receipt only after a genuine consent tic
   expect(body.receipt).toBe("e2e-receipt-token");
   expect(body.relayUrl).toBe(relayUrl);
   expect(body.code).toBe("e2e-invite-code");
+});
+
+test("does not expose the removed managed-identity API", async ({ request }) => {
+  const responses = await Promise.all([
+    request.get("/api/identity"),
+    request.post("/api/identity/join"),
+    request.post("/api/identity/export"),
+  ]);
+
+  expect(responses.map((response) => response.status())).toEqual([
+    404, 404, 404,
+  ]);
 });
 
 // A phone visitor is told what they are in for BEFORE they try: joining works

@@ -1,76 +1,14 @@
 .page {
-  --canvas: #f4f5f7;
-  --surface: #fff;
-  --muted: #f8f9fb;
-  --ink: #111318;
-  --reading: #414958;
-  --soft: #667085;
-  --line: #dfe2e8;
-  --line2: #c9ced8;
-  --accent: #5657f2;
-  --accent2: #4445d8;
-  --accent-soft: #ececff;
-  --pos: #087c5b;
-  --pos-soft: #e8f7f1;
-  --pos-border: #b6dfcf;
-  background-color: var(--canvas);
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E"),
-    radial-gradient(rgb(17 19 24 / 6.5%) 1px, transparent 1.1px);
-  background-size:
-    160px 160px,
-    22px 22px;
-  color: var(--ink);
-  min-height: 100svh;
+  --muted: var(--surface-muted);
+  --reading: var(--reading-ink);
+  --soft: var(--ink-soft);
+  --line2: var(--line-strong);
+  --accent2: var(--accent-strong);
+  --pos: var(--positive);
+  --pos-soft: var(--positive-soft);
+  --pos-border: var(--verified-border);
+  flex: 1;
   overflow-x: clip;
-  font-family: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-
-.page * {
-  box-sizing: border-box;
-}
-
-.head {
-  background: rgb(255 255 255 / 86%);
-  backdrop-filter: blur(10px) saturate(1.3);
-  -webkit-backdrop-filter: blur(10px) saturate(1.3);
-  border-bottom: 1px solid var(--line);
-  padding: 0 24px;
-}
-
-.headIn {
-  max-width: 1040px;
-  margin: 0 auto;
-  min-height: 62px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  color: var(--ink);
-  font-size: 1.2rem;
-  font-weight: 760;
-  letter-spacing: -0.025em;
-  text-decoration: none;
-}
-
-.brand img {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-}
-
-.back {
-  margin-left: auto;
-  color: var(--soft);
-  font-size: 0.86rem;
-  font-weight: 600;
-  text-decoration: none;
 }
 
 .wrap {
@@ -89,22 +27,10 @@
   padding: 8px 4px 26px;
 }
 
-.hero::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset: -30px -80px -10px;
-  pointer-events: none;
-  background:
-    radial-gradient(460px 220px at 14% 40%, rgb(86 87 242 / 13%), transparent 70%),
-    radial-gradient(360px 200px at 70% 55%, rgb(8 124 91 / 8%), transparent 72%);
-  mask-image: radial-gradient(85% 100% at 35% 45%, var(--ink) 55%, transparent 100%);
-}
-
 .insignia {
   width: 88px;
   height: 88px;
-  border-radius: 18px;
+  border-radius: var(--radius-sm);
   border: 1px solid rgba(17, 19, 24, 0.08);
   object-fit: cover;
   display: grid;
@@ -112,11 +38,10 @@
   font-size: 34px;
   font-weight: 700;
   color: var(--accent);
-  box-shadow: 4px 4px 0 rgb(86 87 242 / 12%);
 }
 
 .name {
-  font-size: clamp(2rem, 4vw, 2.9rem);
+  font-size: 34px;
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1.02;
@@ -202,7 +127,7 @@
   gap: 9px;
   min-height: 52px;
   padding: 0 22px;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: #fff;
   font-weight: 660;
@@ -222,7 +147,7 @@
   gap: 8px;
   min-height: 48px;
   padding: 0 18px;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line2);
   background: var(--surface);
   color: var(--ink);
@@ -250,7 +175,7 @@
   gap: 8px;
   min-height: 44px;
   padding: 0 18px;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line2);
   background: var(--surface);
   color: var(--ink);
@@ -293,8 +218,7 @@
   padding: 24px 26px 22px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 1px 0 rgb(17 19 24 / 3%);
+  border-radius: var(--radius-sm);
 }
 
 .pulseHead {
@@ -425,7 +349,7 @@
 .relCard {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   padding: 14px 16px;
   display: flex;
   gap: 11px;
@@ -438,7 +362,7 @@
   width: 40px;
   height: 40px;
   flex: 0 0 40px;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   object-fit: cover;
   display: grid;
   place-items: center;
@@ -458,9 +382,9 @@
 
 .connect {
   margin-top: 16px;
-  background: linear-gradient(135deg, #f1f0ff, #eaf4ff);
-  border: 1px solid #dcdcfb;
-  border-radius: 14px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   padding: 20px 22px;
   display: flex;
   align-items: center;
@@ -471,9 +395,9 @@
   width: 44px;
   height: 44px;
   flex: 0 0 44px;
-  border-radius: 11px;
+  border-radius: var(--radius-sm);
   background: #fff;
-  border: 1px solid #dcdcfb;
+  border: 1px solid var(--line);
   display: grid;
   place-items: center;
   color: var(--accent);

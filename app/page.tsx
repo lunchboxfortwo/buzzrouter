@@ -18,8 +18,6 @@ import { JoinButton } from "./JoinButton";
 import { accessFlag, joinAffordance } from "./joinability-view";
 import { MobileCollapsible } from "./MobileCollapsible";
 import { ShareOnX } from "./ShareOnX";
-import { SiteMasthead } from "./SiteMasthead";
-import chrome from "./site-chrome.module.css";
 import styles from "./directory.module.css";
 
 export const dynamic = "force-dynamic";
@@ -79,7 +77,7 @@ export default async function DirectoryPage({
   const filtersApplied = Boolean(search || focusFilter || joinableOnly);
 
   return (
-    <div className={`${chrome.siteCanvas} ${styles.page}`}>
+    <div className={styles.page}>
       <a className={styles.skipLink} href="#directory">
         Skip to directory
       </a>
@@ -95,70 +93,17 @@ export default async function DirectoryPage({
         ) : null}
       </form>
 
-      <SiteMasthead
-        current="discover"
-        searchDefaultValue={search}
-        searchFormId="directory-filters"
-      />
-
       <main id="directory">
           <div className={styles.workspaceShell}>
             <header className={styles.premiseBand}>
               <div>
                 <h1 className={styles.premiseHeading}>
-                  Find a Buzz community{" "}
-                  <em className={styles.premiseMark}>
-                    worth joining.
-                    <svg
-                      aria-hidden="true"
-                      className={styles.premiseUnderline}
-                      preserveAspectRatio="none"
-                      viewBox="0 0 220 12"
-                    >
-                      <path d="M4 9 C 60 3.5, 150 2.5, 216 6.5" pathLength="1" />
-                    </svg>
-                  </em>
+                  Find a Buzz community worth joining.
                 </h1>
                 <p className={styles.premiseSub}>
                   Every listing is checked at the relay itself.
                 </p>
               </div>
-              <svg
-                aria-hidden="true"
-                className={styles.premiseSignal}
-                viewBox="0 0 340 140"
-              >
-                <path className={styles.routeLine} d="M60 74 C 130 28, 214 28, 282 64" />
-                <path
-                  className={styles.routePulse}
-                  d="M60 74 C 130 28, 214 28, 282 64"
-                  pathLength="100"
-                />
-                <circle
-                  className={`${styles.signalRing} ${styles.signalRingLate}`}
-                  cx="60"
-                  cy="74"
-                  r="15"
-                />
-                <circle className={styles.signalRing} cx="60" cy="74" r="15" />
-                <circle className={styles.signalOrigin} cx="60" cy="74" r="7" />
-                <circle className={styles.signalRelay} cx="282" cy="64" r="15" />
-                <path className={styles.signalCheck} d="m276 64 4.5 4.5 8.5-9.5" />
-                <text className={styles.signalLabel} textAnchor="middle" x="60" y="112">
-                  BuzzRouter
-                </text>
-                <text className={styles.signalLabel} textAnchor="middle" x="282" y="104">
-                  verified
-                </text>
-                <text
-                  className={`${styles.signalLabel} ${styles.signalLabelRoute}`}
-                  textAnchor="middle"
-                  x="172"
-                  y="18"
-                >
-                  checked directly
-                </text>
-              </svg>
             </header>
 
             <section aria-label="Filter communities" className={styles.commandBar}>

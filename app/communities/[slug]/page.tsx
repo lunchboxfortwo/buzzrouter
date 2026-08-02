@@ -153,16 +153,6 @@ export default async function CommunityPage({
 
   return (
     <div className={styles.page}>
-      <div className={styles.head}>
-        <div className={styles.headIn}>
-          <Link className={styles.brand} href="/">
-            <Image alt="" height={34} priority src="/assets/brand/buzzrouter-logo.png" width={34} />
-            <span>BuzzRouter</span>
-          </Link>
-          <Link className={styles.back} href="/">← All communities</Link>
-        </div>
-      </div>
-
       <div className={styles.wrap}>
         <div className={styles.hero}>
           {community.iconUrl ? (

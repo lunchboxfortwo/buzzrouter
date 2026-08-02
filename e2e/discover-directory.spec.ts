@@ -88,7 +88,11 @@ test("lists communities and shows the right way in for each", async ({
 test("search narrows the directory to the matching community", async ({
   page,
 }) => {
-  await page.goto("/?q=Locked");
+  await page.goto("/?q=%20Locked%20");
+
+  await expect(
+    page.getByPlaceholder("Search communities or topics"),
+  ).toHaveValue("Locked");
 
   await expect(
     results(page).getByText("Discover Locked Community", { exact: true }),
@@ -96,6 +100,24 @@ test("search narrows the directory to the matching community", async ({
   await expect(
     results(page).getByText("Discover Open Community", { exact: true }),
   ).toHaveCount(0);
+});
+
+test("shared community profiles inherit the public shell", async ({ page }) => {
+  await page.goto("/communities/discover-open.e2e.invalid");
+
+  await expect(page.getByRole("navigation", { name: "Primary navigation" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Discover Open Community" }),
+  ).toBeVisible();
+  await expect(
+    page.getByPlaceholder("Search communities or topics"),
+  ).toHaveCount(0);
+
+  const shell = page
+    .getByRole("navigation", { name: "Primary navigation" })
+    .locator("xpath=ancestor::div[contains(@class, 'siteCanvas')]");
+  await expect(shell).toHaveCSS("background-color", "rgb(245, 246, 248)");
+  await expect(shell).toHaveCSS("font-family", /Instrument Sans/);
 });
 
 test("search for something absent does not strand the visitor", async ({

@@ -13,7 +13,8 @@ import { SiteMasthead } from "../../SiteMasthead";
 import { headers } from "next/headers";
 
 import { JoinConsent } from "./JoinConsent";
-import { isMobileBrowser, MOBILE_JOIN_NOTICE } from "./mobile-notice";
+import { MobileNotice } from "./MobileNotice";
+import { communityTitle, isMobileBrowser } from "./mobile-notice";
 import styles from "./join.module.css";
 
 export const dynamic = "force-dynamic";
@@ -37,8 +38,12 @@ export default async function JoinPage({
   if (!target) notFound();
 
   const community = await getCommunityByHost(pool, target.host);
-  const displayName = community?.displayName ?? target.host;
-  const hostedFallbackUrl = buildInviteUrl(target.canonicalRelayUrl, target.code);
+  // 20 of 61 listed communities publish no name; never put a raw FQDN in an <h1>.
+  const displayName = communityTitle(community?.displayName, target.host);
+  const hostedFallbackUrl = buildInviteUrl(
+    target.canonicalRelayUrl,
+    target.code,
+  );
   const onMobile = isMobileBrowser((await headers()).get("user-agent"));
 
   // Owner-only / allowlist: a code will not admit a new member. Say so rather
@@ -47,8 +52,9 @@ export default async function JoinPage({
     return (
       <Shell displayName={displayName} host={target.host}>
         <p className={styles.lead}>
-          <strong>{displayName}</strong> is invite-only. Its owner admits members
-          from an allowlist, so an invite code alone will not get you in.
+          <strong>{displayName}</strong> is invite-only. Its owner admits
+          members from an allowlist, so an invite code alone will not get you
+          in.
         </p>
         <p className={styles.muted}>
           Ask an admin of the community for a personal invite.
@@ -72,23 +78,21 @@ export default async function JoinPage({
   return (
     <Shell displayName={displayName} host={target.host}>
       {onMobile ? (
-        <aside className={styles.mobileNotice} role="note">
-          <p className={styles.mobileNoticeTitle}>{MOBILE_JOIN_NOTICE.title}</p>
-          <p className={styles.muted}>{MOBILE_JOIN_NOTICE.body}</p>
-        </aside>
-      ) : null}
-      <JoinConsent
-        ageAttestationRequired={policy?.ageAttestationRequired ?? false}
-        candidateId={candidateId}
-        code={target.code}
-        displayName={displayName}
-        hostedFallbackUrl={hostedFallbackUrl}
-        policyUnavailable={policy === null}
-        policyVersion={policy?.version ?? ""}
-        privacyMarkdown={policy?.privacyMarkdown ?? null}
-        relayUrl={target.canonicalRelayUrl}
-        termsMarkdown={policy?.termsMarkdown ?? null}
-      />
+        <MobileNotice />
+      ) : (
+        <JoinConsent
+          ageAttestationRequired={policy?.ageAttestationRequired ?? false}
+          candidateId={candidateId}
+          code={target.code}
+          displayName={displayName}
+          hostedFallbackUrl={hostedFallbackUrl}
+          policyUnavailable={policy === null}
+          policyVersion={policy?.version ?? ""}
+          privacyMarkdown={policy?.privacyMarkdown ?? null}
+          relayUrl={target.canonicalRelayUrl}
+          termsMarkdown={policy?.termsMarkdown ?? null}
+        />
+      )}
     </Shell>
   );
 }

@@ -412,3 +412,15 @@
   margin: 0 0 0.35rem;
   font-weight: 600;
 }
+
+.mobileNoticeCopy {
+  margin-top: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border, #d8d6d2);
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

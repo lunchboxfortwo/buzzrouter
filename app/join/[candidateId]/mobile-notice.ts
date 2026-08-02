@@ -18,26 +18,47 @@ export function isMobileBrowser(userAgent: string | null): boolean {
 }
 
 /**
- * What a phone visitor is told before they try to join.
+ * A readable name for a community that never published one.
  *
- * Measured, not assumed — all three verified 2026-08-02:
+ * 20 of 61 listed communities have no display name, and falling back to the
+ * raw FQDN puts "Join creatormagic.communities.buzz.xyz" in an <h1>. Buzz's own
+ * invite page does the same thing; that does not make it good. The first label
+ * of the host is the name a human actually uses for the place.
+ */
+export function communityTitle(
+  displayName: string | null | undefined,
+  host: string,
+): string {
+  const named = displayName?.trim();
+  if (named) return named;
+  const [first] = host.split(".");
+  return first && first.length > 1 ? first : host;
+}
+
+/**
+ * What a phone visitor is told BEFORE they try to join.
  *
- *  - The claim itself works on any device: `POST /api/invites/claim` returns
- *    200 `{status:"joined"}` from a phone exactly as from a desktop.
- *  - Buzz's mobile app CANNOT create an identity. Its only onboarding is
- *    "Scan a QR code from your desktop app" or "Use pairing code", so a phone
- *    with no paired desktop has nothing to hand the invite to — the deep link
- *    is silently swallowed.
- *  - Even after a successful join, the new member belongs to no channel
- *    (block/buzz#4307), so the app opens on an empty community.
+ * Every mobile route ends at the same wall, all measured 2026-08-02:
  *
- * So the honest message is NOT "joining does not work on mobile" — it does.
- * It is that reading and posting need Buzz on desktop first.
+ *  - "Open in Buzz": Buzz mobile cannot create an identity. Its only onboarding
+ *    is "Scan a QR code from your desktop app" or "Use pairing code", so an
+ *    unpaired phone silently swallows the buzz:// deep link.
+ *  - "Continue on the web": Buzz's own hosted invite page offers exactly the
+ *    same "Accept invite in Buzz" deep link, plus a "Download it now" link to
+ *    an app that still cannot onboard standalone. Routing there relocates the
+ *    dead end; it does not remove it.
+ *  - Even a successful claim leaves the member in no channel at all
+ *    (block/buzz#4307), so the app opens empty.
+ *
+ * So on a phone we do not pretend there is a path. We say to finish on a
+ * computer and hand over the link to get there.
  */
 export const MOBILE_JOIN_NOTICE = {
-  title: "You'll need Buzz on desktop to read along",
+  title: "Finish this on a computer",
   body:
-    "Joining works from your phone, but the Buzz mobile app can't create an " +
-    "account on its own — it pairs with Buzz on desktop. Set up desktop first, " +
-    "then pair your phone, or carry on here and finish from a computer later.",
+    "Buzz on a phone is a companion to Buzz on a desktop — it can't set up an " +
+    "account by itself yet. Copy this link, open it on your computer, and join " +
+    "from there. Pair your phone afterwards and this community comes with it.",
+  copyLabel: "Copy link for later",
+  copiedLabel: "Copied",
 } as const;

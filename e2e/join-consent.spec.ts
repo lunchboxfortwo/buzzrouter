@@ -93,13 +93,14 @@ test("shows the real policy and mints a receipt only after a genuine consent tic
     /Instrument Sans/,
   );
 
-  // Browser joins bypass BuzzRouter's consent gate. The hosted Buzz page owns
-  // that handshake, so this direct link is available before the checkbox tick.
-  const continueOnWeb = page.getByRole("link", {
-    name: "Continue on the web",
+  // Desktop has ONE primary path (consent -> Open in Buzz, which carries the
+  // receipt so nobody is asked to consent twice). Buzz's own page survives only
+  // as a quiet fallback for people who have not installed the app.
+  const buzzFallback = page.getByRole("link", {
+    name: /page on Buzz/i,
   });
-  await expect(continueOnWeb).toBeVisible();
-  await expect(continueOnWeb).toHaveAttribute(
+  await expect(buzzFallback).toBeVisible();
+  await expect(buzzFallback).toHaveAttribute(
     "href",
     `https://${new URL(relayUrl).host}/invite/e2e-invite-code`,
   );
@@ -152,8 +153,14 @@ test("warns phone visitors that reading needs Buzz on desktop", async ({
   const phonePage = await phone.newPage();
   await phonePage.goto(`/join/${candidateId}`);
   await expect(
-    phonePage.getByRole("note").filter({ hasText: /Buzz on desktop/i }),
+    phonePage.getByRole("note").filter({ hasText: /Finish this on a computer/i }),
   ).toBeVisible();
+  await expect(
+    phonePage.getByRole("button", { name: /Open in Buzz/i }),
+  ).toHaveCount(0);
+  await expect(
+    phonePage.getByRole("button", { name: /Join without Buzz/i }),
+  ).toHaveCount(0);
   await phone.close();
 
   const desktop = await browser.newContext({
@@ -162,7 +169,44 @@ test("warns phone visitors that reading needs Buzz on desktop", async ({
   const desktopPage = await desktop.newPage();
   await desktopPage.goto(`/join/${candidateId}`);
   await expect(
-    desktopPage.getByRole("note").filter({ hasText: /Buzz on desktop/i }),
+    desktopPage.getByRole("note").filter({ hasText: /Finish this on a computer/i }),
   ).toHaveCount(0);
+  // One path per device: the phone gets the notice and no join button at all;
+  // desktop gets exactly one primary action.
+  await expect(
+    desktopPage.getByRole("button", { name: /Open in Buzz/i }),
+  ).toBeVisible();
+  await desktop.close();
+});
+
+// The web path is not a way through on a phone: Buzz's own invite page hands
+// off to the same app an unpaired phone cannot use. Desktop keeps it primary.
+test("does not push phone visitors at Buzz's page, but keeps it on desktop", async ({
+  browser,
+}) => {
+  const phone = await browser.newContext({
+    userAgent:
+      "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 " +
+      "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+    viewport: { height: 800, width: 390 },
+  });
+  const phonePage = await phone.newPage();
+  await phonePage.goto(`/join/${candidateId}`);
+  await expect(
+    phonePage.getByRole("link", { name: /page on Buzz/i }),
+  ).toHaveCount(0);
+  await phone.close();
+
+  const desktop = await browser.newContext({
+    viewport: { height: 900, width: 1280 },
+  });
+  const desktopPage = await desktop.newPage();
+  await desktopPage.goto(`/join/${candidateId}`);
+  await expect(
+    desktopPage.getByRole("button", { name: /Open in Buzz/i }),
+  ).toBeVisible();
+  await expect(
+    desktopPage.getByRole("link", { name: /page on Buzz/i }),
+  ).toBeVisible();
   await desktop.close();
 });

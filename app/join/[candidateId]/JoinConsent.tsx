@@ -127,33 +127,9 @@ export function JoinConsent({
 
   return (
     <>
-      <section className={styles.webChoice}>
-        <div>
-          <p className={styles.choiceLabel}>Join in your browser</p>
-          <p>
-            Continue on the community&apos;s own Buzz page. Buzz will show its
-            terms and collect consent there, once.
-          </p>
-        </div>
-        <a
-          className={styles.webButton}
-          href={hostedFallbackUrl}
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          Continue on the web
-        </a>
-      </section>
-
-      <div className={styles.divider} aria-hidden="true">
-        <span>or</span>
-      </div>
-
       <section className={styles.appChoice}>
-        <p className={styles.choiceLabel}>Open in the Buzz app</p>
         <p className={styles.lead}>
-          The app needs BuzzRouter to carry your approval with the invite.
-          Review this community&apos;s policy, then confirm below.
+          Review {displayName}&apos;s policy, then open the invite in Buzz.
         </p>
 
         {termsMarkdown || privacyMarkdown ? (
@@ -201,6 +177,17 @@ export function JoinConsent({
             {message}
           </p>
         ) : null}
+
+        {/* A quiet fallback, deliberately not a second primary button: it ends
+            at the same app, and Buzz's page carries the download link for
+            people who do not have it yet. */}
+        <p className={styles.muted}>
+          No Buzz yet?{" "}
+          <a href={hostedFallbackUrl} rel="noopener noreferrer" target="_blank">
+            Open {displayName}&apos;s page on Buzz
+          </a>{" "}
+          to install it.
+        </p>
       </section>
 
       <ManagedIdentityJoin

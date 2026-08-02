@@ -45,6 +45,14 @@ Key routing rules:
   `.next` — it does NOT build. A stale `.next` fails nearly every spec with
   "element(s) not found" on pages that are actually fine; that reads as ~18
   product bugs and is really one missing build.
+- **Android emulator harness** — `scripts/android-harness.sh` (boot / open /
+  shot / handlers / stop). The join flow's last hop is a `buzz://` deep link to
+  a phone, which Playwright cannot see. Use it to LOOK at mobile pages: the
+  consent page shipped completely unstyled because it was "verified" by grepping
+  its HTML for the word "age" instead of rendering it. Note `buzz://` has 0
+  handlers unless the Buzz app is installed, and Buzz ships no Android artifact
+  on GitHub Releases, so the app itself can only be tested via a Play Store
+  install or by building `/tmp/block-buzz/mobile` with Flutter (not installed).
 - If TCP auth to the system Postgres isn't set up, connect over the local
   unix socket instead (peer auth matches your OS user to a same-named role):
   `postgresql://<os-user>@/<dbname>?host=/var/run/postgresql`.

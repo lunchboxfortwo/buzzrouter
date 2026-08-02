@@ -79,6 +79,18 @@ test("a phone with no extension links to BuzzRouter from an invite link", async 
 }) => {
   // The page leads with the signer-free flow — no extension wall gating it.
   await page.goto("/shared-channels");
+  await expect(
+    page.getByText(
+      "Shared channels on Buzz work like shared channels in Slack.",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Connect signer" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "command line" })).toHaveAttribute(
+    "href",
+    /admin-without-a-browser-signer\.md$/,
+  );
   const inviteField = page.getByLabel("Invite link from your Buzz app");
   await expect(inviteField).toBeVisible();
 
@@ -90,6 +102,7 @@ test("a phone with no extension links to BuzzRouter from an invite link", async 
   await expect(
     page.getByRole("heading", { name: "Connected: Caller Community" }),
   ).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("heading", { name: "Routes" })).toBeVisible();
 
   // Pick the channel to share and take the one-press canonical CTA.
   await page.getByLabel("Channel to share name").fill("general");

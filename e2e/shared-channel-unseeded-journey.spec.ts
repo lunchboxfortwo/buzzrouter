@@ -24,6 +24,7 @@ import {
 } from "../src/shared-channels/connector";
 
 import { startFakeRelay, type FakeRelay } from "./support/fake-relay";
+import { openOwnerSessionWorkspace } from "./support/owner-session";
 
 /**
  * The full new-owner shared-channel journey, driven through the real UI and
@@ -133,12 +134,10 @@ test("a new owner completes the whole shared-channel journey through real UI and
 }) => {
   await installSigner(page);
 
-  // ── Step 1: land on /shared-channels owning nothing → claim-lookup empty
-  // state (PR #23) → /claim/<candidateId>.
+  // ── Step 1: use the claim lookup → /claim/<candidateId>.
   activeSigner = ownerA;
   await page.goto("/shared-channels");
-  await page.getByRole("button", { name: "Connect signer" }).click();
-  await expect(page.getByText("No owned communities")).toBeVisible();
+  await page.getByText("Need to claim a community?").click();
 
   await page
     .getByLabel("Search communities to claim")
@@ -191,8 +190,13 @@ test("a new owner completes the whole shared-channel journey through real UI and
   ).toBeVisible();
 
   // ── Step 3: admit the bridge / activate the connector.
-  await page.goto("/shared-channels");
-  await page.getByRole("button", { name: "Connect signer" }).click();
+  const communityA = await communityIdForCandidate(pool, candidateA);
+  await openOwnerSessionWorkspace(page, pool, {
+    communityId: communityA,
+    displayName: "Alpha Community",
+    ownerPubkey: ownerA.pubkey,
+    relayUrl: relayA.url,
+  });
   await expect(page.getByText("Bot not added yet")).toBeVisible();
   await page.getByRole("button", { name: "Add the bot", exact: true }).click();
 
@@ -245,8 +249,12 @@ test("a new owner completes the whole shared-channel journey through real UI and
   // ── Step 6: as the second community's owner, arm the acceptance by picking a
   // channel — this only mints a one-time code, it does NOT bind the route.
   activeSigner = ownerB;
-  await page.goto("/shared-channels");
-  await page.getByRole("button", { name: "Connect signer" }).click();
+  await openOwnerSessionWorkspace(page, pool, {
+    communityId: communityB,
+    displayName: "Beta Community",
+    ownerPubkey: ownerB.pubkey,
+    relayUrl: relayB.url,
+  });
   const route = page
     .locator("article")
     .filter({ hasText: "benchmark-review" });

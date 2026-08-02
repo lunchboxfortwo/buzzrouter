@@ -3,12 +3,18 @@ import {
   authenticateJsonRequest,
   authenticateRequest,
 } from "../../../src/http/nostr-auth";
+import { ApiError } from "../../../src/http/api-error";
 import {
+  readInstallerRequest,
   requireObject,
   requireText,
   requireUuid,
   sharedChannelErrorResponse,
 } from "../../../src/shared-channels/http";
+import {
+  OWNER_SESSION_HEADER,
+  resolveOwnerSession,
+} from "../../../src/shared-channels/owner-session";
 import {
   createSharedChannel,
   getSharedChannelAdminWorkspace,
@@ -19,11 +25,26 @@ export const runtime = "nodejs";
 export async function GET(request: Request): Promise<Response> {
   try {
     const pool = getDatabasePool();
-    const identity = await authenticateRequest(request, pool);
-    const workspace = await getSharedChannelAdminWorkspace(
+    const token = request.headers.get(OWNER_SESSION_HEADER);
+    const session = token ? await resolveOwnerSession(pool, token) : null;
+    const ownerPubkey = session
+      ? session.ownerPubkey
+      : (await authenticateRequest(request, pool)).pubkey;
+    const fullWorkspace = await getSharedChannelAdminWorkspace(
       pool,
-      identity.pubkey,
+      ownerPubkey,
     );
+    const workspace = session
+      ? {
+          channels: fullWorkspace.channels.filter(
+            (channel) => channel.ownCommunityId === session.communityId,
+          ),
+          communities: fullWorkspace.communities.filter(
+            (community) => community.id === session.communityId,
+          ),
+          destinations: fullWorkspace.destinations,
+        }
+      : fullWorkspace;
     return Response.json(workspace, {
       headers: { "cache-control": "no-store" },
     });
@@ -35,8 +56,22 @@ export async function GET(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   try {
     const pool = getDatabasePool();
-    const authenticated = await authenticateJsonRequest(request, pool);
-    const body = requireObject(authenticated.value);
+    const token = request.headers.get(OWNER_SESSION_HEADER);
+    const session = token ? await resolveOwnerSession(pool, token) : null;
+    const authenticated = session
+      ? null
+      : await authenticateJsonRequest(request, pool);
+    const body = session
+      ? await readInstallerRequest(request)
+      : requireObject(authenticated!.value);
+    const sourceCommunityId = requireUuid(body.sourceCommunityId);
+    if (session && sourceCommunityId !== session.communityId) {
+      throw new ApiError(
+        "owner_session_forbidden",
+        "The owner session does not match this community.",
+        403,
+      );
+    }
     const channel = await createSharedChannel(pool, {
       destinationCommunityId: requireUuid(body.destinationCommunityId),
       idempotencyKey: requireText(
@@ -44,7 +79,7 @@ export async function POST(request: Request): Promise<Response> {
         200,
         "Idempotency key",
       ),
-      ownerPubkey: authenticated.pubkey,
+      ownerPubkey: session?.ownerPubkey ?? authenticated!.pubkey,
       proposedName: requireText(body.proposedName, 80, "Channel name"),
       purpose: requireText(body.purpose, 500, "Purpose"),
       sourceChannelId: requireText(
@@ -57,7 +92,7 @@ export async function POST(request: Request): Promise<Response> {
         80,
         "Source channel name",
       ),
-      sourceCommunityId: requireUuid(body.sourceCommunityId),
+      sourceCommunityId,
     });
     return Response.json(channel, {
       headers: { "cache-control": "no-store" },

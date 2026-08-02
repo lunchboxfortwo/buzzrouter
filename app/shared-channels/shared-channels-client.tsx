@@ -2,10 +2,7 @@
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
-import {
-  getBrowserNostrProvider,
-  signedRequest,
-} from "../../src/http/nostr-client";
+import { signedRequest } from "../../src/http/nostr-client";
 import type { ClaimableCandidateMatch } from "../../src/claims/store";
 import type { LocalChannelListing } from "../../src/shared-channels/local-channels";
 import type {
@@ -36,6 +33,12 @@ interface CreatedChannel {
   channelName: string;
 }
 
+type OwnerRequest = <T>(
+  path: string,
+  method: "GET" | "POST",
+  body?: Record<string, unknown>,
+) => Promise<T>;
+
 // When the picker is in "create" mode, ask the bridge to create a dedicated
 // channel (named after the peer) and hand its ownership back to the signing
 // owner, then link that fresh channel. Returns the concrete channel id/name to
@@ -44,6 +47,7 @@ async function resolveLinkChannel(
   communityId: string,
   peerName: string,
   selection: LocalChannelSelection,
+  request: OwnerRequest = signedRequest,
 ): Promise<CreatedChannel> {
   if (selection.mode === "existing") {
     return {
@@ -51,7 +55,7 @@ async function resolveLinkChannel(
       channelName: selection.channelName,
     };
   }
-  return signedRequest<CreatedChannel>(
+  return request<CreatedChannel>(
     "/api/shared-channels/create-channel",
     "POST",
     {
@@ -144,18 +148,19 @@ interface BeginFromInviteResponse {
 // session (minted from the invite admission) rides in a header in place of a
 // NIP-98 signature; the server still requires the roster-signed in-channel code
 // before anything binds.
-async function postSessionAction<T>(
+async function sessionRequest<T>(
   path: string,
+  method: "GET" | "POST",
   session: string,
-  body: Record<string, unknown>,
+  body?: Record<string, unknown>,
 ): Promise<T> {
   const response = await fetch(path, {
-    body: JSON.stringify(body),
+    body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
     headers: {
-      "content-type": "application/json",
+      ...(method === "GET" ? {} : { "content-type": "application/json" }),
       "x-owner-session": session,
     },
-    method: "POST",
+    method,
   });
   const result = (await response.json()) as T & {
     error?: string;
@@ -168,24 +173,30 @@ async function postSessionAction<T>(
 }
 
 /**
- * The whole page. The signer-free "Link" flow leads — a phone with no browser
- * extension can paste an invite link and connect. The browser-signer workspace
- * is kept below as an optional power path (propose to any community, manage
- * every route); it is no longer a wall in front of the page.
+ * The whole page. A phone can paste an invite link, connect, and manage routes
+ * through the short-lived owner session minted by that admission.
  */
 export function SharedChannelsClient() {
   return (
     <div className={styles.stack}>
       <SignerFreeLink />
       <section className={styles.advanced}>
-        <h2 className={styles.advancedHeading}>
-          Prefer a browser signer?
-        </h2>
+        <h2 className={styles.advancedHeading}>Command-line administration</h2>
         <p className={styles.advancedNote}>
-          Sign in with the Nostr key that owns your community to propose links
-          to any community and manage every route.
+          Power users can manage shared channels from the{" "}
+          <a
+            href="https://github.com/lunchboxfortwo/buzzrouter/blob/main/docs/admin-without-a-browser-signer.md"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            command line
+          </a>
+          .
         </p>
-        <OwnerTools />
+        <details>
+          <summary>Need to claim a community?</summary>
+          <ClaimLookup />
+        </details>
       </section>
     </div>
   );
@@ -229,8 +240,9 @@ function SignerFreeLink() {
     setConnecting(true);
     setError("");
     try {
-      const result = await postSessionAction<ArmConfirmationResponse>(
+      const result = await sessionRequest<ArmConfirmationResponse>(
         "/api/shared-channels/connect-featured",
+        "POST",
         community.session,
         {
           idempotencyKey: crypto.randomUUID(),
@@ -248,61 +260,73 @@ function SignerFreeLink() {
 
   if (confirmation) {
     return (
-      <section className={styles.linkCard}>
-        <h2>One step left</h2>
-        <p className={styles.linkLead}>
-          Post this code as a message in{" "}
-          <strong>{confirmation.localChannelName}</strong> from your Buzz app.
-          You&apos;re linked the moment an owner or admin sends it &mdash; no
-          one else can.
-        </p>
-        <code className={styles.confirmCode}>{confirmation.code}</code>
-        <p className={styles.linkNote}>
-          Connected to the BuzzRouter community. You can close this page once
-          you&apos;ve sent the code.
-        </p>
-      </section>
+      <>
+        <section className={styles.linkCard}>
+          <h2>One step left</h2>
+          <p className={styles.linkLead}>
+            Post this code as a message in{" "}
+            <strong>{confirmation.localChannelName}</strong> from your Buzz app.
+            You&apos;re linked the moment an owner or admin sends it &mdash; no
+            one else can.
+          </p>
+          <code className={styles.confirmCode}>{confirmation.code}</code>
+          <p className={styles.linkNote}>
+            Connected to the BuzzRouter community. You can close this page once
+            you&apos;ve sent the code.
+          </p>
+        </section>
+        <OwnerTools
+          communityId={community!.communityId}
+          session={community!.session}
+        />
+      </>
     );
   }
 
   if (community) {
     return (
-      <section className={styles.linkCard}>
-        <h2>Connected: {community.displayName}</h2>
-        <p className={styles.linkLead}>
-          Pick the channel to share, then link it with the BuzzRouter
-          community in one tap.
-        </p>
-        <label>
-          Channel to share
-          <input
-            aria-label="Channel to share name"
-            maxLength={80}
-            onChange={(event) => setChannelName(event.target.value)}
-            placeholder="e.g. general"
-            value={channelName}
-          />
-        </label>
-        <label>
-          Channel ID
-          <input
-            aria-label="Channel to share ID"
-            maxLength={200}
-            onChange={(event) => setChannelId(event.target.value)}
-            placeholder="The channel's ID in your Buzz app"
-            value={channelId}
-          />
-        </label>
-        <button
-          className={styles.primaryCta}
-          disabled={connecting || !channelId.trim() || !channelName.trim()}
-          onClick={connectFeatured}
-          type="button"
-        >
-          {connecting ? "Connecting…" : "Connect with the BuzzRouter community"}
-        </button>
-        {error ? <p className={styles.notice}>{error}</p> : null}
-      </section>
+      <>
+        <section className={styles.linkCard}>
+          <h2>Connected: {community.displayName}</h2>
+          <p className={styles.linkLead}>
+            Pick the channel to share, then link it with the BuzzRouter
+            community in one tap.
+          </p>
+          <label>
+            Channel to share
+            <input
+              aria-label="Channel to share name"
+              maxLength={80}
+              onChange={(event) => setChannelName(event.target.value)}
+              placeholder="e.g. general"
+              value={channelName}
+            />
+          </label>
+          <label>
+            Channel ID
+            <input
+              aria-label="Channel to share ID"
+              maxLength={200}
+              onChange={(event) => setChannelId(event.target.value)}
+              placeholder="The channel's ID in your Buzz app"
+              value={channelId}
+            />
+          </label>
+          <button
+            className={styles.primaryCta}
+            disabled={connecting || !channelId.trim() || !channelName.trim()}
+            onClick={connectFeatured}
+            type="button"
+          >
+            {connecting ? "Connecting…" : "Connect with the BuzzRouter community"}
+          </button>
+          {error ? <p className={styles.notice}>{error}</p> : null}
+        </section>
+        <OwnerTools
+          communityId={community.communityId}
+          session={community.session}
+        />
+      </>
     );
   }
 
@@ -336,27 +360,40 @@ function SignerFreeLink() {
   );
 }
 
-function OwnerTools() {
+function OwnerTools({
+  communityId,
+  session,
+}: {
+  communityId: string;
+  session: string;
+}) {
   const [workspace, setWorkspace] =
     useState<SharedChannelAdminWorkspace | null>(null);
   const [activeCommunityId, setActiveCommunityId] = useState("");
-  const [pubkey, setPubkey] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [install, setInstall] = useState<InstallTokenResponse | null>(
     null,
   );
-  const [signerPresent, setSignerPresent] = useState(true);
 
-  useEffect(() => {
-    setSignerPresent(getBrowserNostrProvider() !== null);
-  }, []);
+  const request = useMemo<OwnerRequest>(
+    () => (path, method, body) => sessionRequest(path, method, session, body),
+    [session],
+  );
 
   const activeCommunity = workspace?.communities.find(
     (community) => community.id === activeCommunityId,
   );
   const connectorActive = activeCommunity?.connectionState === "active";
-  const localChannels = useLocalChannels(activeCommunityId, connectorActive);
+  const localChannels = useLocalChannels(
+    activeCommunityId,
+    connectorActive,
+    request,
+  );
+
+  useEffect(() => {
+    void refresh().catch((error) => setMessage(errorMessage(error)));
+  }, [request]);
 
   useEffect(() => {
     if (!install) return;
@@ -382,7 +419,7 @@ function OwnerTools() {
         } catch {
           // The bridge is not admitted yet; retry on the next tick.
         }
-        const next = await signedRequest<SharedChannelAdminWorkspace>(
+        const next = await request<SharedChannelAdminWorkspace>(
           "/api/shared-channels",
           "GET",
         );
@@ -398,7 +435,7 @@ function OwnerTools() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [connectorActive, install]);
+  }, [connectorActive, install, request]);
 
   const channels = useMemo(
     () =>
@@ -408,41 +445,13 @@ function OwnerTools() {
     [activeCommunityId, workspace],
   );
 
-  async function connect() {
-    const nostr = getBrowserNostrProvider();
-    if (!nostr) {
-      setMessage("A Nostr signer is required.");
-      return;
-    }
-    setBusy(true);
-    setMessage("");
-    try {
-      const signerPubkey = await nostr.getPublicKey();
-      const next = await signedRequest<SharedChannelAdminWorkspace>(
-        "/api/shared-channels",
-        "GET",
-      );
-      setPubkey(signerPubkey);
-      setWorkspace(next);
-      setInstall(null);
-      setActiveCommunityId((current) =>
-        next.communities.some((community) => community.id === current)
-          ? current
-          : (next.communities[0]?.id ?? ""),
-      );
-    } catch (error) {
-      setMessage(errorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function refresh() {
-    const next = await signedRequest<SharedChannelAdminWorkspace>(
+    const next = await request<SharedChannelAdminWorkspace>(
       "/api/shared-channels",
       "GET",
     );
     setWorkspace(next);
+    setActiveCommunityId(communityId);
   }
 
   async function runAction(
@@ -453,7 +462,7 @@ function OwnerTools() {
     setBusy(true);
     setMessage("");
     try {
-      await signedRequest(
+      await request(
         `/api/shared-channels/${channel.id}/${action}`,
         "POST",
         {
@@ -475,7 +484,7 @@ function OwnerTools() {
     setBusy(true);
     setMessage("");
     try {
-      const result = await signedRequest<InstallTokenResponse>(
+      const result = await request<InstallTokenResponse>(
         "/api/community-connections/install-token",
         "POST",
         { communityId: activeCommunityId },
@@ -524,45 +533,7 @@ function OwnerTools() {
   if (!workspace) {
     return (
       <section className={styles.connectPanel}>
-        <div>
-          <h2>Connect your owner key</h2>
-          <p>Manage invitations and active routes for verified communities.</p>
-        </div>
-        <button
-          disabled={busy || !signerPresent}
-          onClick={connect}
-          type="button"
-        >
-          {busy ? "Connecting..." : "Connect signer"}
-        </button>
-        {!signerPresent ? (
-          <p className={styles.signerHelp}>
-            No browser signer here &mdash; that&apos;s fine, most people should
-            use the invite-link flow above. This power path needs a NIP-07
-            extension (
-            <a href="https://getalby.com" rel="noopener noreferrer" target="_blank">
-              Alby
-            </a>
-            ,{" "}
-            <a
-              href="https://github.com/fiatjaf/nos2x"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              nos2x
-            </a>
-            ) or the{" "}
-            <a
-              href="https://github.com/lunchboxfortwo/buzzrouter/blob/main/docs/admin-without-a-browser-signer.md"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              CLI
-            </a>
-            .
-          </p>
-        ) : null}
-        {message ? <p className={styles.notice}>{message}</p> : null}
+        <p>Loading route management…</p>
       </section>
     );
   }
@@ -571,7 +542,7 @@ function OwnerTools() {
     return (
       <section className={styles.empty}>
         <h2>No owned communities</h2>
-        <p>This signer is not the verified owner of a Buzz community.</p>
+        <p>This invite session no longer has an owned Buzz community.</p>
         <ClaimLookup />
       </section>
     );
@@ -596,9 +567,9 @@ function OwnerTools() {
         </label>
         <div className={styles.identity}>
           <span>Owner</span>
-          <code>{shortKey(pubkey)}</code>
+          <code>Invite session</code>
         </div>
-        <button className={styles.secondary} onClick={connect} type="button">
+        <button className={styles.secondary} onClick={refresh} type="button">
           Refresh
         </button>
       </section>
@@ -630,6 +601,7 @@ function OwnerTools() {
           }}
           setBusy={setBusy}
           setMessage={setMessage}
+          request={request}
         />
       ) : null}
 
@@ -658,6 +630,7 @@ function OwnerTools() {
                 onRefresh={refresh}
                 setBusy={setBusy}
                 setMessage={setMessage}
+                request={request}
               />
             ))}
           </div>
@@ -947,6 +920,7 @@ function ProposalForm({
   onCreated,
   setBusy,
   setMessage,
+  request = signedRequest,
 }: {
   activeCommunityId: string;
   destinations: SharedChannelCommunitySummary[];
@@ -954,6 +928,7 @@ function ProposalForm({
   onCreated: () => Promise<void>;
   setBusy: (busy: boolean) => void;
   setMessage: (message: string) => void;
+  request?: OwnerRequest;
 }) {
   const eligible = destinations.filter(
     (community) => community.id !== activeCommunityId,
@@ -975,12 +950,13 @@ function ProposalForm({
         activeCommunityId,
         peerName,
         source,
+        request,
       );
       // The freshly created channel already exists and is owned by the caller;
       // pin the selection to it so a retry after a failed propose reuses it
       // rather than creating a second channel.
       setSource({ ...channel, mode: "existing" });
-      await signedRequest("/api/shared-channels", "POST", {
+      await request("/api/shared-channels", "POST", {
         destinationCommunityId: formData.get("destinationCommunityId"),
         idempotencyKey: crypto.randomUUID(),
         proposedName: formData.get("proposedName"),
@@ -1071,6 +1047,7 @@ function ChannelRow({
   onRefresh,
   setBusy,
   setMessage,
+  request = signedRequest,
 }: {
   activeCommunityId: string;
   busy: boolean;
@@ -1084,6 +1061,7 @@ function ChannelRow({
   onRefresh: () => Promise<void>;
   setBusy: (busy: boolean) => void;
   setMessage: (message: string) => void;
+  request?: OwnerRequest;
 }) {
   const incoming =
     channel.state === "proposed" &&
@@ -1112,6 +1090,7 @@ function ChannelRow({
             onRefresh={onRefresh}
             setBusy={setBusy}
             setMessage={setMessage}
+            request={request}
           />
         ) : null}
         {channel.state === "proposed" && !incoming ? (
@@ -1162,6 +1141,7 @@ function AcceptControls({
   onRefresh,
   setBusy,
   setMessage,
+  request,
 }: {
   activeCommunityId: string;
   busy: boolean;
@@ -1171,6 +1151,7 @@ function AcceptControls({
   onRefresh: () => Promise<void>;
   setBusy: (busy: boolean) => void;
   setMessage: (message: string) => void;
+  request: OwnerRequest;
 }) {
   const [selection, setSelection] =
     useState<LocalChannelSelection>(CREATE_SELECTION);
@@ -1194,10 +1175,11 @@ function AcceptControls({
         activeCommunityId,
         peerName,
         selection,
+        request,
       );
       // Pin to the created channel so a retry after a failed arm reuses it.
       setSelection({ ...channelBinding, mode: "existing" });
-      const result = await signedRequest<ArmConfirmationResponse>(
+      const result = await request<ArmConfirmationResponse>(
         `/api/shared-channels/${channel.id}/accept`,
         "POST",
         {
@@ -1272,6 +1254,7 @@ function AcceptControls({
 function useLocalChannels(
   communityId: string,
   enabled: boolean,
+  request: OwnerRequest = signedRequest,
 ): LocalChannelsState {
   const [state, setState] = useState<LocalChannelsState>(
     IDLE_LOCAL_CHANNELS,
@@ -1289,7 +1272,7 @@ function useLocalChannels(
       error: null,
       loading: true,
     });
-    signedRequest<LocalChannelListing>(
+    request<LocalChannelListing>(
       `/api/shared-channels/local-channels?communityId=${encodeURIComponent(
         communityId,
       )}`,
@@ -1311,7 +1294,7 @@ function useLocalChannels(
     return () => {
       active = false;
     };
-  }, [communityId, enabled]);
+  }, [communityId, enabled, request]);
 
   return state;
 }

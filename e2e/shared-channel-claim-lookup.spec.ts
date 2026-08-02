@@ -1,16 +1,10 @@
 import { expect, test } from "@playwright/test";
-import type { EventTemplate } from "nostr-tools/core";
-import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { Pool } from "pg";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (!databaseUrl) {
   throw new Error("TEST_DATABASE_URL is required.");
 }
-
-const privateKey = new Uint8Array(32);
-privateKey[31] = 3;
-const pubkey = getPublicKey(privateKey);
 
 let pool: Pool;
 let candidateId: string;
@@ -54,33 +48,8 @@ test.afterAll(async () => {
 test("an owner with nothing claimed can reach a claim page without the internal password", async ({
   page,
 }) => {
-  await page.exposeFunction("__testGetPublicKey", () => pubkey);
-  await page.exposeFunction(
-    "__testSignEvent",
-    (template: EventTemplate) => finalizeEvent(template, privateKey),
-  );
-  await page.addInitScript(() => {
-    const testWindow = window as unknown as Window & {
-      __testGetPublicKey(): Promise<string>;
-      __testSignEvent(
-        template: EventTemplate,
-      ): Promise<Record<string, unknown>>;
-      nostr?: {
-        getPublicKey(): Promise<string>;
-        signEvent(
-          template: EventTemplate,
-        ): Promise<Record<string, unknown>>;
-      };
-    };
-    testWindow.nostr = {
-      getPublicKey: () => testWindow.__testGetPublicKey(),
-      signEvent: (template) => testWindow.__testSignEvent(template),
-    };
-  });
-
   await page.goto("/shared-channels");
-  await page.getByRole("button", { name: "Connect signer" }).click();
-  await expect(page.getByText("No owned communities")).toBeVisible();
+  await page.getByText("Need to claim a community?").click();
 
   await page
     .getByLabel("Search communities to claim")
@@ -99,32 +68,8 @@ test("an owner with nothing claimed can reach a claim page without the internal 
 test("searching for nothing points the owner at /submit", async ({
   page,
 }) => {
-  await page.exposeFunction("__testGetPublicKey", () => pubkey);
-  await page.exposeFunction(
-    "__testSignEvent",
-    (template: EventTemplate) => finalizeEvent(template, privateKey),
-  );
-  await page.addInitScript(() => {
-    const testWindow = window as unknown as Window & {
-      __testGetPublicKey(): Promise<string>;
-      __testSignEvent(
-        template: EventTemplate,
-      ): Promise<Record<string, unknown>>;
-      nostr?: {
-        getPublicKey(): Promise<string>;
-        signEvent(
-          template: EventTemplate,
-        ): Promise<Record<string, unknown>>;
-      };
-    };
-    testWindow.nostr = {
-      getPublicKey: () => testWindow.__testGetPublicKey(),
-      signEvent: (template) => testWindow.__testSignEvent(template),
-    };
-  });
-
   await page.goto("/shared-channels");
-  await page.getByRole("button", { name: "Connect signer" }).click();
+  await page.getByText("Need to claim a community?").click();
   await page
     .getByLabel("Search communities to claim")
     .fill("no-such-community-anywhere");

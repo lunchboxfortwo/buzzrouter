@@ -17,7 +17,13 @@ export default function SharedChannelsPage() {
         <header className={styles.header}>
           <h1>Link</h1>
           <p className={styles.explainerLead}>
-            Share channels with different communities.
+            <strong>
+              Shared channels on Buzz work like shared channels in Slack.
+            </strong>{" "}
+            Two communities each keep a channel of their own, and messages sent
+            in one show up in the other. Add the BuzzRouter bot to the channel
+            you want to share, then send messages there to reach the linked
+            community.
           </p>
         </header>
         <SharedChannelsClient />

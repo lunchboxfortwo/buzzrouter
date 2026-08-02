@@ -12,6 +12,10 @@
 # days (MAX_INVITE_TTL_SECS in buzz-core/src/invite.rs), and a lapsed code means
 # our own community silently loses its join button.
 #
+# Calls docker directly, NOT via sudo: the service runs as lunchbox (already in
+# the docker group) under NoNewPrivileges=yes, which blocks sudo outright. The
+# neighbouring discovery units do the same.
+#
 # Every node snippet runs INSIDE the web container. The host checkout has no
 # node_modules (deps live in the image), so running node on the host works from
 # a dev shell and fails under systemd with MODULE_NOT_FOUND.
@@ -25,7 +29,7 @@ RELAY_CONTAINER="${BUZZROUTER_RELAY_CONTAINER:-buzz-router-prod-relay-1}"
 DB_CONTAINER="${BUZZROUTER_DB_CONTAINER:-buzzrouter-postgres-1}"
 APP_CONTAINER="${BUZZROUTER_APP_CONTAINER:-buzzrouter-web-1}"
 
-psql_q() { sudo -n docker exec "$DB_CONTAINER" psql -U buzzrouter -d buzzrouter -tAc "$1"; }
+psql_q() { docker exec "$DB_CONTAINER" psql -U buzzrouter -d buzzrouter -tAc "$1"; }
 
 stored_code() {
   psql_q "SELECT cs.source_invite_code FROM community_sources cs
@@ -34,7 +38,7 @@ stored_code() {
 }
 
 check_expiry() {
-  sudo -n docker exec -i -e CODE="$1" "$APP_CONTAINER" node - <<'JS'
+  docker exec -i -e CODE="$1" "$APP_CONTAINER" node - <<'JS'
 const raw = (process.env.CODE || "").split(".")[0];
 const json = Buffer.from(raw + "=".repeat((4 - (raw.length % 4)) % 4), "base64url");
 const days = (JSON.parse(json).e - Math.floor(Date.now() / 1000)) / 86400;
@@ -54,7 +58,7 @@ fi
 
 # 1. Disposable admin. Its only power is minting invites on our own relay, and
 #    it is removed below, so nothing holds it long-term.
-keypair="$(sudo -n docker exec -i "$APP_CONTAINER" node - <<'JS'
+keypair="$(docker exec -i "$APP_CONTAINER" node - <<'JS'
 const { generateSecretKey, getPublicKey } = require("nostr-tools/pure");
 const sk = generateSecretKey();
 process.stdout.write(Buffer.from(sk).toString("hex") + " " + getPublicKey(sk));
@@ -63,13 +67,13 @@ JS
 sk="${keypair%% *}"
 pub="${keypair##* }"
 unset keypair
-sudo -n docker exec "$RELAY_CONTAINER" buzz-admin add-member --pubkey "$pub" --role admin >/dev/null
+docker exec "$RELAY_CONTAINER" buzz-admin add-member --pubkey "$pub" --role admin >/dev/null
 echo "minted disposable admin ${pub:0:12}…"
 
 # 2. Mint. MintInviteRequest takes ttl_secs (NOT expires_in_days, which serde
 #    drops silently, falling back to the 72h default). Ceiling is 30 days;
 #    max_uses ceiling is 10_000 (buzz-core/src/invite.rs).
-code="$(sudo -n docker exec -i -e SK="$sk" -e RELAY_HOST="$HOST" "$APP_CONTAINER" node - <<'JS'
+code="$(docker exec -i -e SK="$sk" -e RELAY_HOST="$HOST" "$APP_CONTAINER" node - <<'JS'
 const { createHash, randomUUID } = require("crypto");
 const { finalizeEvent } = require("nostr-tools/pure");
 const sk = Buffer.from(process.env.SK, "hex");
@@ -94,7 +98,7 @@ JS
 unset sk
 
 # 3. Remove the disposable admin so it cannot mint again.
-sudo -n docker exec "$RELAY_CONTAINER" buzz-admin remove-member --pubkey "$pub" >/dev/null 2>&1 || true
+docker exec "$RELAY_CONTAINER" buzz-admin remove-member --pubkey "$pub" >/dev/null 2>&1 || true
 
 # 4. Store. The code is base64url + '.' only; refuse anything else rather than
 #    interpolating a surprise into SQL.

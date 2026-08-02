@@ -65,11 +65,12 @@ prototype or placeholder directory in the serving path.
 
 The shipped directory provides:
 
-- A four-route masthead: `Discover`, `Create a community`, `Shared channels`,
-  and `List a community`.
+- A four-route masthead: `Discover`, `Create`, `Link`, and `List`; directory
+  search appears only on Discover.
 - Community and category totals for the current result set.
 - Search across display name, one-line description, and category tags.
-- Category filtering across Bitcoin, Builders, Culture, GTM, Labs, and Privacy.
+- Direct Focus filtering across Bitcoin, Builders, Culture, GTM, Labs, and
+  Privacy.
 - Evidence-strength and recently-verified sorting.
 - Compact result rows with a community logo or monogram, name, primary category,
   one-line description, verification state, and evidence count.

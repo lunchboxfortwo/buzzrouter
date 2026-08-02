@@ -21,6 +21,9 @@ colors:
   error: "#9d2b22"
   error-soft: "#fff3f2"
   error-border: "#f0c9c4"
+  caution: "#8a5b00"
+  caution-soft: "#fff5d6"
+  caution-border: "#ead59f"
 typography:
   display:
     fontFamily: "Instrument Sans, ui-sans-serif, sans-serif"
@@ -57,6 +60,12 @@ typography:
     fontSize: "11px"
     fontWeight: 650
     lineHeight: 1.35
+    letterSpacing: "0"
+  mono:
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
+    fontSize: "12px"
+    fontWeight: 600
+    lineHeight: 1.5
     letterSpacing: "0"
   scale:
     "0-66": "0.66rem"
@@ -95,6 +104,7 @@ typography:
     "3-4": "3.4rem"
     "11px": "11px"
     "16px": "16px"
+    "28px": "28px"
 rounded:
   hairline: "2px"
   tag: "4px"
@@ -209,6 +219,8 @@ or action.
 - **Verified Wash** (`#e8f7f1`): Success and verified-status backgrounds.
 - **Error Red** (`#9d2b22`): Submission failures and validation errors, paired
   with `#fff3f2` and an explicit message.
+- **Caution Amber** (`#8a5b00`): Pending and attention states, paired with
+  `#fff5d6` and explicit next-step copy.
 
 ### Neutral
 
@@ -236,6 +248,9 @@ color never carries verification, success, or error meaning alone.
 
 **Body Font:** Instrument Sans, with system sans-serif fallbacks.
 
+**Label/Mono Font:** The platform monospace stack, reserved for relay URLs,
+commands, and single-use confirmation codes.
+
 **Character:** A single crisp grotesk supports both dense operational UI and short
 reading copy. Hierarchy comes from size and weight, never condensed styles,
 negative letter spacing, or decorative font changes.
@@ -251,6 +266,8 @@ negative letter spacing, or decorative font changes.
   navigation.
 - **Label** (600-700, 11-12px, 1.35): Field prefixes, metrics, tags, timestamps,
   and evidence metadata.
+- **Mono** (600, 12px, 1.5): Technical identifiers, commands, and confirmation
+  codes only.
 
 ### Named Rules
 

@@ -4,26 +4,32 @@
 .siteCanvas {
   max-width: 100%;
   overflow-x: clip;
-  --canvas: #f4f5f7;
+  --canvas: #f5f6f8;
   --surface: #ffffff;
-  --surface-muted: #f8f9fb;
-  --surface-selected: #f1f1ff;
+  --surface-muted: #fafbfc;
+  --surface-selected: #efefff;
   --ink: #111318;
+  --reading-ink: #414958;
   --ink-soft: #667085;
   --ink-faint: #667085;
   --line: #dfe2e8;
   --line-strong: #c9ced8;
   --accent: #5657f2;
   --accent-strong: #4445d8;
-  --accent-soft: #ececff;
+  --accent-soft: #efefff;
   --positive: #087c5b;
-  --positive-soft: #e9f8f2;
+  --positive-soft: #e8f7f1;
+  --verified-border: #b6dfcf;
   --caution: #8a5b00;
   --caution-soft: #fff5d6;
+  --caution-border: #ead59f;
   --focus: #7957ff;
-  --radius-sm: 7px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --error: #9d2b22;
+  --error-soft: #fff3f2;
+  --error-border: #f0c9c4;
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -34,12 +40,6 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   background-color: var(--canvas);
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E"),
-    radial-gradient(rgb(17 19 24 / 6.5%) 1px, transparent 1.1px);
-  background-size:
-    160px 160px,
-    22px 22px;
   color: var(--ink);
   display: flex;
   flex-direction: column;
@@ -49,15 +49,14 @@
   min-height: 100vh;
 }
 
-.siteCanvas * ,
+.siteCanvas *,
 .siteCanvas *::before,
 .siteCanvas *::after {
   box-sizing: border-box;
 }
 
 .header {
-  background: rgb(255 255 255 / 86%);
-  backdrop-filter: blur(10px) saturate(1.3);
+  background: rgb(255 255 255 / 96%);
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
@@ -70,9 +69,9 @@
   gap: var(--space-5);
   grid-template-columns: auto auto minmax(280px, 1fr);
   margin: 0 auto;
-  min-height: 62px;
+  min-height: 60px;
   padding: 0 16px;
-  width: min(100% - 32px, 1440px);
+  width: min(100% - 32px, 1320px);
 }
 
 /* Pages without a search box keep the nav in the same place as Discover — right
@@ -87,20 +86,20 @@
   align-items: center;
   color: var(--ink);
   display: inline-flex;
-  font-size: 1.2rem;
-  font-weight: 760;
+  font-size: 18px;
+  font-weight: 700;
   gap: 9px;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
   min-height: 44px;
   text-decoration: none;
 }
 
 .logo {
   border-radius: 50%;
-  flex: 0 0 34px;
-  height: 34px;
+  flex: 0 0 32px;
+  height: 32px;
   object-fit: cover;
-  width: 34px;
+  width: 32px;
 }
 
 .nav {
@@ -113,8 +112,8 @@
   align-items: center;
   color: var(--ink-soft);
   display: inline-flex;
-  font-size: 0.91rem;
-  font-weight: 590;
+  font-size: 14px;
+  font-weight: 600;
   min-height: 44px;
   padding-inline: 14px;
   position: relative;
@@ -154,8 +153,8 @@
   align-items: center;
   color: var(--ink-faint);
   display: inline-flex;
-  font-size: 0.91rem;
-  font-weight: 590;
+  font-size: 14px;
+  font-weight: 600;
   min-height: 44px;
   padding-inline: 14px;
 }

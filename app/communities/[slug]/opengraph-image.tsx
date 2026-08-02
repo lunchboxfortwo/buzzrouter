@@ -74,12 +74,12 @@ export default async function Image({
               marginLeft: "auto",
               display: "flex",
               alignItems: "center",
-              color: "#8ff0c8",
+              color: "#e8f7f1",
               fontSize: 21,
               fontWeight: 600,
             }}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8ff0c8" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 10 }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e8f7f1" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 10 }}>
               <circle cx="12" cy="12" r="9" />
               <path d="m8.5 12 2.4 2.4 4.6-5" />
             </svg>
@@ -105,7 +105,7 @@ export default async function Image({
               fontSize: 80,
               fontWeight: 800,
               color: "#fff",
-              background: "linear-gradient(135deg, #ff9d2f, #ff6a45)",
+              background: "#5657f2",
             }}
           >
             {monogram(name)}
@@ -141,7 +141,7 @@ export default async function Image({
                     marginLeft: 14,
                     borderRadius: 999,
                     background: "rgba(8,124,91,0.28)",
-                    color: "#8ff0c8",
+                    color: "#e8f7f1",
                     fontSize: 23,
                     fontWeight: 640,
                   }}

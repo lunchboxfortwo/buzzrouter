@@ -127,9 +127,9 @@
 }
 
 .error {
-  background: color-mix(in srgb, #d64545 12%, transparent);
-  border-radius: 8px;
-  color: #b03030;
+  background: var(--error-soft);
+  border-radius: var(--radius-sm);
+  color: var(--error);
   font-size: 0.88rem;
   line-height: 1.45;
   margin: 12px 0 0;
@@ -146,7 +146,7 @@
 .policyDetails {
   background: var(--surface-muted, var(--canvas));
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
 }
 
@@ -184,7 +184,7 @@
 .primary {
   background: var(--accent);
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   color: #fff;
   cursor: pointer;
   display: inline-block;
@@ -242,11 +242,11 @@
 /* Phone visitors: joining works, but Buzz mobile cannot create an identity on
    its own (it pairs with desktop), so say that before they try. */
 .mobileNotice {
-  border: 1px solid var(--border, #d8d6d2);
-  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   padding: 0.875rem 1rem;
   margin-bottom: 1.25rem;
-  background: var(--surface-raised, #f7f7f5);
+  background: var(--surface-muted);
 }
 
 .mobileNoticeTitle {
@@ -258,7 +258,7 @@
   margin-top: 0.75rem;
   width: 100%;
   padding: 0.6rem 1rem;
-  border: 1px solid var(--border, #d8d6d2);
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface, #fff);
   font: inherit;

@@ -4,8 +4,8 @@ import Link from "next/link";
 import styles from "./site-chrome.module.css";
 
 /**
- * The single masthead for every public page. Both routes render this so the
- * brand, routes, active-state colour, and search field cannot drift apart.
+ * The single masthead for every public page, rendered by the root site shell so
+ * route content cannot omit the brand, navigation, canvas, or typography.
  *
  * The directory owns its own GET form elsewhere on the page (nesting forms is
  * invalid), so it passes that form's `searchFormId` and the search input
@@ -16,10 +16,12 @@ export function SiteMasthead({
   current,
   searchDefaultValue = "",
   searchFormId,
+  showSearch = false,
 }: {
   current: "discover" | "shared-channels" | "submit";
   searchDefaultValue?: string;
   searchFormId?: string;
+  showSearch?: boolean;
 }) {
   const search = (
     <label className={styles.searchField}>
@@ -43,7 +45,7 @@ export function SiteMasthead({
     <header className={styles.header}>
       <div
         className={
-          current === "discover"
+          showSearch
             ? styles.headerInner
             : `${styles.headerInner} ${styles.headerInnerWithoutSearch}`
         }
@@ -84,7 +86,7 @@ export function SiteMasthead({
           </Link>
         </nav>
 
-        {current === "discover" ? (
+        {showSearch ? (
           searchFormId ? (
             search
           ) : (

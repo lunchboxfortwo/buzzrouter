@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-30T17:52:14-04:00",
+  "generatedAt": "2026-08-02T19:16:00-04:00",
   "title": "Design System: BuzzRouter",
   "extensions": {
     "colorMeta": {
@@ -273,6 +273,51 @@
           "#f0c9c4",
           "#fff3f2"
         ]
+      },
+      "caution": {
+        "role": "secondary",
+        "displayName": "Caution Amber",
+        "canonical": "#8a5b00",
+        "tonalRamp": [
+          "#2d1d00",
+          "#533700",
+          "#8a5b00",
+          "#ad790f",
+          "#ca9b3e",
+          "#dfbd75",
+          "#efdaa8",
+          "#fff5d6"
+        ]
+      },
+      "caution-soft": {
+        "role": "secondary",
+        "displayName": "Caution Wash",
+        "canonical": "#fff5d6",
+        "tonalRamp": [
+          "#2d230d",
+          "#56431a",
+          "#80652a",
+          "#a98a43",
+          "#ccb069",
+          "#e5cf94",
+          "#f4e5b7",
+          "#fff5d6"
+        ]
+      },
+      "caution-border": {
+        "role": "secondary",
+        "displayName": "Caution Border",
+        "canonical": "#ead59f",
+        "tonalRamp": [
+          "#2c240f",
+          "#514522",
+          "#766737",
+          "#9b8a52",
+          "#bdaa72",
+          "#d6c28c",
+          "#ead59f",
+          "#fff5d6"
+        ]
       }
     },
     "typographyMeta": {
@@ -300,6 +345,10 @@
         "displayName": "Label",
         "purpose": "11-12px metadata, tags, field prefixes, and timestamps."
       },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "12px technical identifiers, commands, and single-use confirmation codes."
+      },
       "scale": {
         "displayName": "Shipped Interface Scale",
         "purpose": "Observed public-surface sizes from 11px through 34px."
@@ -310,11 +359,6 @@
         "name": "selected-row",
         "value": "inset 2px 0 #5657f2",
         "purpose": "Identifies the selected community without lifting the row."
-      },
-      {
-        "name": "claim-notice",
-        "value": "0 4px 16px rgb(31 35 40 / 12%)",
-        "purpose": "Reserved for the floating claim-flow notice."
       }
     ],
     "motion": [],
@@ -333,9 +377,9 @@
     {
       "name": "Branded Masthead",
       "kind": "nav",
-      "description": "The 60px public masthead with exactly Discover and Submit routes.",
-      "html": "<nav class=\"ds-nav\"><span class=\"ds-brand\"><span class=\"ds-brand-mark\">B</span>BuzzRouter</span><span class=\"ds-routes\"><a class=\"ds-route ds-active\" href=\"#\">Discover</a><a class=\"ds-route\" href=\"#\">Submit</a></span><span class=\"ds-live\"><i></i>Live index</span></nav>",
-      "css": ".ds-nav{align-items:center;background:#fff;border-bottom:1px solid #dfe2e8;color:#111318;display:grid;font:600 14px Instrument Sans,ui-sans-serif,sans-serif;gap:28px;grid-template-columns:auto 1fr auto;height:60px;padding:0 24px}.ds-brand{align-items:center;display:flex;font-size:18px;font-weight:700;gap:9px}.ds-brand-mark{align-items:center;background:#111318;border-radius:50%;color:#fff;display:flex;height:32px;justify-content:center;width:32px}.ds-routes{align-self:stretch;display:flex}.ds-route{align-items:center;color:#667085;display:flex;padding:0 13px;position:relative;text-decoration:none}.ds-route.ds-active{color:#111318}.ds-route.ds-active:after{background:#5657f2;bottom:0;content:\"\";height:2px;left:13px;position:absolute;right:13px}.ds-route:focus-visible{outline:2px solid #5657f2;outline-offset:-2px}.ds-live{align-items:center;color:#087c5b;display:flex;font-size:12px;gap:7px}.ds-live i{background:#087c5b;border-radius:50%;height:7px;width:7px}"
+      "description": "The 60px public masthead with exactly Discover, Link, and List routes.",
+      "html": "<nav class=\"ds-nav\"><span class=\"ds-brand\"><span class=\"ds-brand-mark\">B</span>BuzzRouter</span><span class=\"ds-routes\"><a class=\"ds-route ds-active\" href=\"#\">Discover</a><a class=\"ds-route\" href=\"#\">Link</a><a class=\"ds-route\" href=\"#\">List</a></span></nav>",
+      "css": ".ds-nav{align-items:center;background:rgb(255 255 255 / 96%);border-bottom:1px solid #dfe2e8;color:#111318;display:grid;font:600 14px Instrument Sans,ui-sans-serif,sans-serif;gap:24px;grid-template-columns:auto minmax(0,1fr);height:60px;padding:0 16px}.ds-brand{align-items:center;display:flex;font-size:18px;font-weight:700;gap:9px}.ds-brand-mark{align-items:center;background:#111318;border-radius:50%;color:#fff;display:flex;height:32px;justify-content:center;width:32px}.ds-routes{align-self:stretch;display:flex}.ds-route{align-items:center;color:#667085;display:flex;padding:0 14px;position:relative;text-decoration:none}.ds-route.ds-active{color:#4445d8}.ds-route.ds-active:after{background:#5657f2;bottom:2px;content:\"\";height:2px;left:14px;position:absolute;right:14px}.ds-route:focus-visible{outline:2px solid #5657f2;outline-offset:-2px}"
     },
     {
       "name": "Primary Join Action",
@@ -387,44 +431,45 @@
   ],
   "narrative": {
     "northStar": "The Precise Community Index",
-    "overview": "BuzzRouter is a quiet, information-dense discovery tool. It feels closer to Linear or GitHub than to a marketing site: flat working surfaces, compact controls, clear selection, and factual copy. The first viewport is the real directory, not a hero or feature explanation. The public directory is the canonical visual source; new public work should converge toward it rather than extend older auxiliary-route variants.",
+    "overview": "BuzzRouter is a quiet, information-dense discovery tool. It should feel closer to Linear or GitHub than to a marketing site: flat working surfaces, compact controls, clear selection, and factual copy. The first viewport is the real directory, not a hero or feature explanation. The public directory is the canonical visual source. The Submit and Link routes follow the same masthead, palette, type, control, and panel language. Internal-review routes currently use older GitHub-neutral variants; new public work should converge toward the canonical directory system rather than extend those variants.",
     "keyCharacteristics": [
-      "Cool-gray canvas around flat white working planes.",
-      "One compact Instrument Sans voice with zero letter spacing.",
+      "A restrained cool-gray canvas around flat white working planes.",
+      "One compact Instrument Sans voice across headings, controls, rows, and metadata.",
       "Indigo reserved for selection, navigation, links, and primary actions.",
-      "Emerald reserved for explicit verified and success states.",
-      "One-line community purpose and category visible in result rows.",
-      "First-party logos with deterministic monogram fallbacks."
+      "Emerald reserved for explicit verified or success states.",
+      "One-line community purpose and category visible directly in every useful row.",
+      "Logos are treated as data, not decoration; monograms remain valid fallbacks.",
+      "Verification detail stays in the selected inspector instead of becoming a standalone promotional section."
     ],
     "rules": [
       {
         "name": "The Sparse Accent Rule",
-        "body": "Indigo identifies interaction and selection; it is not general decoration.",
+        "body": "Indigo identifies interaction and selection. Do not use it as general decoration or tint entire page sections.",
         "section": "colors"
       },
       {
         "name": "The Written Status Rule",
-        "body": "Semantic color supplements plain-language status and never carries meaning alone.",
+        "body": "Semantic color supplements plain-language status; color never carries verification, success, or error meaning alone.",
         "section": "colors"
       },
       {
         "name": "The Zero Tracking Rule",
-        "body": "Letter spacing is zero across the system.",
+        "body": "Letter spacing is 0 across the system. Do not tighten large headings or widen uppercase labels.",
         "section": "typography"
       },
       {
         "name": "The Context Stays Visible Rule",
-        "body": "Wide screens pair results with a sticky detail inspector; narrow screens stack them.",
+        "body": "Preserve the result list while inspecting a community. Wide screens use a sticky side inspector; narrow screens place it directly after the results.",
         "section": "layout"
       },
       {
         "name": "The Real Product First Rule",
-        "body": "The directory and current data occupy the first screen; there is no marketing hero.",
+        "body": "The directory, controls, and current data occupy the first screen. Do not prepend a marketing hero, feature cards, or a verification explainer.",
         "section": "layout"
       },
       {
         "name": "The Flat Working Plane Rule",
-        "body": "Lists, inspectors, command bars, fields, and form panels stay shadowless.",
+        "body": "Result lists, inspectors, command bars, fields, and form panels stay shadowless.",
         "section": "elevation"
       }
     ],
@@ -432,64 +477,19 @@
       "Do show a one-line purpose and useful category directly in result rows.",
       "Do keep search focused on names, descriptions, and category tags.",
       "Do use first-party cached relay logos with monogram fallbacks.",
-      "Do keep trust evidence separate from future popularity signals.",
+      "Do keep trust evidence factual and separate from future popularity signals.",
       "Do preserve flat planes, tight radii, crisp dividers, and compact controls.",
+      "Do keep all text within stable responsive grids at desktop and mobile widths.",
       "Do pair semantic colors with explicit written status."
     ],
     "donts": [
-      "Don't add ratings or popularity labels before credible telemetry exists.",
+      "Don't add ratings, stars, popularity labels, or activity claims before the required telemetry exists.",
       "Don't add a Verification route or promotional verification section.",
-      "Don't use relay hosts as the primary public search or row description.",
-      "Don't reintroduce the unshipped animated premise or decorative textures.",
-      "Don't turn sections into floating rounded cards or nest cards.",
-      "Don't add gradients, dark-neon crypto styling, glass, or marketing heroes."
+      "Don't use relay hosts as the primary public search model or row description.",
+      "Don't reintroduce the old animated premise, probe illustration, textured canvas, dot grids, glow fields, or decorative motion.",
+      "Don't turn sections into floating rounded cards or nest cards inside cards.",
+      "Don't add gradients, dark-neon crypto styling, glass surfaces, token dashboards, or generic marketing heroes.",
+      "Don't apply large type, shadows, or accent color to compact operational surfaces."
     ]
-  },
-  "typographyMeta": {
-    "scale": {
-      "0-66": "0.66rem",
-      "0-68": "0.68rem",
-      "0-72": "0.72rem",
-      "0-73": "0.73rem",
-      "0-74": "0.74rem",
-      "0-76": "0.76rem",
-      "0-77": "0.77rem",
-      "0-78": "0.78rem",
-      "0-79": "0.79rem",
-      "0-8": "0.8rem",
-      "0-82": "0.82rem",
-      "0-84": "0.84rem",
-      "0-85": "0.85rem",
-      "0-86": "0.86rem",
-      "0-87": "0.87rem",
-      "0-88": "0.88rem",
-      "0-9": "0.9rem",
-      "0-91": "0.91rem",
-      "0-92": "0.92rem",
-      "0-93": "0.93rem",
-      "0-98": "0.98rem",
-      "1": "1rem",
-      "1-05": "1.05rem",
-      "1-08": "1.08rem",
-      "1-15": "1.15rem",
-      "1-2": "1.2rem",
-      "1-25": "1.25rem",
-      "1-35": "1.35rem",
-      "1-45": "1.45rem",
-      "1-6": "1.6rem",
-      "1-65": "1.65rem",
-      "2-15": "2.15rem",
-      "2-3": "2.3rem",
-      "3-4": "3.4rem",
-      "11px": "11px",
-      "16px": "16px"
-    }
-  },
-  "rounded": {
-    "hairline": "2px",
-    "chip": "5px"
-  },
-  "colors": {
-    "verified-muted": "#316d61"
   }
 }

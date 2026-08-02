@@ -1,6 +1,4 @@
 
-import chrome from "../site-chrome.module.css";
-import { SiteMasthead } from "../SiteMasthead";
 import { SubmitForm } from "./SubmitForm";
 import styles from "./submit.module.css";
 
@@ -19,9 +17,7 @@ export default async function SubmitPage({
   const host = firstValue(params.host);
 
   return (
-    <div className={chrome.siteCanvas}>
-      <SiteMasthead current="submit" />
-      <div className={styles.page}>
+    <div className={styles.page}>
 
       <main>
         <section className={styles.intro}>
@@ -97,7 +93,6 @@ export default async function SubmitPage({
           <SubmitForm />
         </div>
       </main>
-      </div>
     </div>
   );
 }

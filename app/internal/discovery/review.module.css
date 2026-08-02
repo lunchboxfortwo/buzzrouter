@@ -32,7 +32,7 @@
 }
 
 .header h1 {
-  font-size: 30px;
+  font-size: 34px;
   font-weight: 650;
   letter-spacing: 0;
   line-height: 1.15;
@@ -72,7 +72,7 @@
 
 .metric strong {
   display: block;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 680;
 }
 
@@ -205,7 +205,7 @@
   border: 1px solid transparent;
   border-radius: 4px;
   display: inline-block;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.4;
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -214,13 +214,13 @@
 
 .healthy {
   background: var(--review-green-bg);
-  border-color: #b9ddc5;
+  border-color: var(--review-line);
   color: var(--review-green);
 }
 
 .warning {
   background: var(--review-amber-bg);
-  border-color: #ead59f;
+  border-color: var(--review-line);
   color: var(--review-amber);
 }
 
@@ -233,7 +233,7 @@
 .neutral {
   background: #eef1f4;
   border-color: #d7dce2;
-  color: #4f5965;
+  color: var(--review-muted);
 }
 
 .sourceList {
@@ -244,14 +244,14 @@
 
 .sourceList span {
   background: #eef1f4;
-  border-radius: 3px;
-  color: #4f5965;
-  font-size: 10px;
+  border-radius: 4px;
+  color: var(--review-muted);
+  font-size: 11px;
   padding: 2px 5px;
 }
 
 .tableViewport details summary {
-  color: #175ca8;
+  color: #4445d8;
   cursor: pointer;
   font-weight: 600;
 }
@@ -268,14 +268,14 @@
 
 .details p {
   color: var(--review-muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
   margin: 4px 0 0;
   overflow-wrap: anywhere;
 }
 
 .details a {
-  color: #175ca8;
+  color: #4445d8;
 }
 
 .empty {

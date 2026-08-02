@@ -2,6 +2,7 @@ import { getDatabasePool } from "../../../src/db/pool";
 import { ApiError } from "../../../src/http/api-error";
 import { checkSubmissionRateLimit } from "../../../src/http/rate-limit";
 import { assertCommunityName } from "../../../src/hosted-signup/builderlab-client";
+import { HOSTED_CREATE_NOTE } from "../../../src/hosted-signup/copy";
 import { createLiveProvisionDeps } from "../../../src/hosted-signup/provision-live";
 import { provisionHostedCommunity } from "../../../src/hosted-signup/provision";
 import { parseContactEmail } from "../../../src/submissions/validation";
@@ -85,10 +86,7 @@ export async function POST(request: Request): Promise<Response> {
         npub: result.npub,
         nsec: result.nsec,
         resumed: result.resumed,
-        note:
-          "This account can't be logged into again (its returning login needs " +
-          "an email code we can't read). Save the nsec below — it is the key " +
-          "to your community and we do not keep a copy.",
+        note: HOSTED_CREATE_NOTE,
       },
       { headers: { "cache-control": "no-store" }, status: 201 },
     );

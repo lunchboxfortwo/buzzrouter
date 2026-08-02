@@ -18,11 +18,17 @@ import {
  *   - HTTP 200/201                          → "live"
  *   - HTTP 403 { error: "invite_expired" }  → "expired"
  *   - HTTP 403 { error: "invite_invalid" }  → "invalid"
+ *   - HTTP 403 { error: "invite_exhausted" } → "exhausted" (all uses claimed)
  *   - HTTP 403 { error: "join_policy_required" } → accept the policy and retry
  *   - transport failure / anything else     → "error" (never throws)
  */
 
-export type InviteHealth = "live" | "expired" | "invalid" | "error";
+export type InviteHealth =
+  | "live"
+  | "expired"
+  | "invalid"
+  | "exhausted"
+  | "error";
 
 export interface ProbeInviteOptions {
   host: string;
@@ -110,6 +116,7 @@ function classifyProbe(status: number, body: unknown): InviteHealth {
     const error = errorCode(body);
     if (error === "invite_expired") return "expired";
     if (error === "invite_invalid") return "invalid";
+    if (error === "invite_exhausted") return "exhausted";
   }
   return "error";
 }

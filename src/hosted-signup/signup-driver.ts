@@ -49,7 +49,9 @@ interface PwPage {
   fill(selector: string, value: string, opts?: { timeout?: number }): Promise<void>;
   click(selector: string, opts?: { timeout?: number }): Promise<void>;
   waitForURL(
-    url: string | RegExp | ((url: string) => boolean),
+    // Playwright passes the predicate a URL object, not a string. Typing it as
+    // `string` is what produced "url.startsWith is not a function" at runtime.
+    url: string | RegExp | ((url: string | URL) => boolean),
     opts?: { timeout?: number },
   ): Promise<void>;
   url(): string;
@@ -175,13 +177,49 @@ export class PlaywrightSignupDriver implements SignupDriver {
     password: string,
   ): Promise<void> {
     const t = this.timeoutMs;
-    await page.goto(`${this.signupUrl}/signup`, {
+
+    // Auth0 identifier-first signup, verified live 2026-08-01:
+    //
+    //   app.builderlab.xyz
+    //     └─> /u/login/identifier        (LOGIN — not signup)
+    //           │  click "Sign up"
+    //           v
+    //         /u/signup/identifier       (email only; NO password field)
+    //           │  fill email -> Continue
+    //           v
+    //         /u/signup/password         (password now visible)
+    //              fill password -> Continue
+    //
+    // The old code went straight to `${signupUrl}/signup` and filled email and
+    // password together. Both assumptions are wrong: it lands on the LOGIN page,
+    // and the password input only exists on the second step. The password
+    // selector matched a DOM node that is never visible on step one, so
+    // page.fill sat there until it timed out and the whole create failed.
+    await page.goto(this.signupUrl, {
       timeout: t,
       waitUntil: "domcontentloaded",
     });
+
+    // Cross from login to signup. Skip when we already landed on signup, so a
+    // future redirect straight to signup does not break this.
+    if (!/\/u\/signup\//u.test(page.url())) {
+      await page.click('a:has-text("Sign up")', { timeout: t });
+      await page.waitForURL(/\/u\/signup\//u, { timeout: t });
+    }
+
+    // Step one: identifier.
     await page.fill('input[name="email"], input[type="email"]', email, {
       timeout: t,
     });
+    await page.click(
+      'button[type="submit"], button[name="action"][value="default"]',
+      { timeout: t },
+    );
+
+    // Step two: password. Wait for the step itself, not just the field, so a
+    // rejected email surfaces as a URL that never advances rather than a
+    // confusing selector timeout.
+    await page.waitForURL(/\/u\/signup\/password/u, { timeout: t });
     await page.fill(
       'input[name="password"], input[type="password"]',
       password,
@@ -191,8 +229,21 @@ export class PlaywrightSignupDriver implements SignupDriver {
       'button[type="submit"], button[name="action"][value="default"]',
       { timeout: t },
     );
-    // Land on the authenticated app. The proof run observed signup dropping
-    // straight into an authenticated session with a provisioned workspace.
+    // Signup now lands on an email-verification interstitial
+    // (`/auth/verify-email`) which offers "I've verified my email" linking to
+    // /buzz. Step past it when it appears; it did not exist when this driver
+    // was written.
+    await page.waitForURL(
+      (url) =>
+        /\/auth\/verify-email/u.test(String(url)) ||
+        /\/buzz\b/u.test(String(url)),
+      { timeout: t },
+    );
+    if (/\/auth\/verify-email/u.test(page.url())) {
+      await page.click('a:has-text("verified my email")', { timeout: t });
+    }
+
+    // Land on the authenticated app.
     await page.waitForURL(/\/buzz\b|app\.builderlab\.xyz\/(?!signup|login)/u, {
       timeout: t,
     });
@@ -211,9 +262,13 @@ export class PlaywrightSignupDriver implements SignupDriver {
         waitUntil: "commit",
       })
       .catch(() => undefined);
-    await page.waitForURL((url: string) => url.startsWith(CALLBACK_RETURN_TO), {
-      timeout: this.timeoutMs,
-    });
+    // Playwright hands the predicate a URL object, not a string, so calling
+    // string methods on it throws "url.startsWith is not a function". Normalise
+    // with String() rather than typing the parameter as a string and hoping.
+    await page.waitForURL(
+      (url) => String(url).startsWith(CALLBACK_RETURN_TO),
+      { timeout: this.timeoutMs },
+    );
     return extractLoginCode(page.url());
   }
 }

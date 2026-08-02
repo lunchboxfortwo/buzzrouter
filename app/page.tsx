@@ -165,11 +165,7 @@ export default async function DirectoryPage({
             <section aria-label="Filter communities" className={styles.commandBar}>
               <label className={styles.commandFilter}>
                 <span>Focus</span>
-                <AutoSubmitSelect
-                  defaultValue={focusFilter}
-                  form="directory-filters"
-                  name="focus"
-                >
+                <AutoSubmitSelect form="directory-filters" name="focus">
                   <option value="">Any focus</option>
                   {focusOptions.map((focus) => (
                     <option key={focus} value={focus}>
@@ -183,7 +179,6 @@ export default async function DirectoryPage({
                 title="Communities BuzzRouter's agent has joined — first-hand info, not just relay checks"
               >
                 <AutoSubmitCheckbox
-                  defaultChecked={agentOnly}
                   form="directory-filters"
                   name="agent"
                   value="1"

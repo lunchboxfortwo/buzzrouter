@@ -2,31 +2,40 @@
 
 import type { ReactNode } from "react";
 
+import { useRouter, useSearchParams } from "next/navigation";
+
 /**
- * Submits its associated GET form as soon as a choice is made, so filtering
- * needs no separate Apply step. The form may be an ancestor or associated by
- * `form` id (`event.currentTarget.form` resolves either) — the directory uses
- * the id form since its GET form lives elsewhere on the page. Without
- * JavaScript the select still posts with the form's own submit path, so the
- * control never becomes inert.
+ * A filter select that updates the URL via a client-side (soft) navigation as
+ * soon as a choice is made — no full page reload, so scroll position and other
+ * client state survive. It stays a real form control so the no-JS "Apply" button
+ * still submits it, and its value is driven by the URL, keeping it in sync
+ * across back/forward.
  */
 export function AutoSubmitSelect({
   children,
-  defaultValue,
   form,
   name,
 }: {
   children: ReactNode;
-  defaultValue: string;
   form?: string;
   name: string;
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   return (
     <select
-      defaultValue={defaultValue}
       form={form}
       name={name}
-      onChange={(event) => event.currentTarget.form?.requestSubmit()}
+      onChange={(event) => {
+        const params = new URLSearchParams(searchParams);
+        const value = event.currentTarget.value;
+        if (value) params.set(name, value);
+        else params.delete(name);
+        const qs = params.toString();
+        router.replace(qs ? `?${qs}` : "?", { scroll: false });
+      }}
+      value={searchParams.get(name) ?? ""}
     >
       {children}
     </select>

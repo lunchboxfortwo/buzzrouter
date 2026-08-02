@@ -135,3 +135,34 @@ test("shows the real policy and mints a receipt only after a genuine consent tic
   expect(body.relayUrl).toBe(relayUrl);
   expect(body.code).toBe("e2e-invite-code");
 });
+
+// A phone visitor is told what they are in for BEFORE they try: joining works
+// from a phone, but Buzz mobile cannot create an identity on its own (it pairs
+// with desktop), and a new member lands in no channel (block/buzz#4307).
+// Desktop must NOT see it — this is a mobile-only caveat, not a site-wide banner.
+test("warns phone visitors that reading needs Buzz on desktop", async ({
+  browser,
+}) => {
+  const phone = await browser.newContext({
+    userAgent:
+      "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 " +
+      "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+    viewport: { height: 800, width: 390 },
+  });
+  const phonePage = await phone.newPage();
+  await phonePage.goto(`/join/${candidateId}`);
+  await expect(
+    phonePage.getByRole("note").filter({ hasText: /Buzz on desktop/i }),
+  ).toBeVisible();
+  await phone.close();
+
+  const desktop = await browser.newContext({
+    viewport: { height: 900, width: 1280 },
+  });
+  const desktopPage = await desktop.newPage();
+  await desktopPage.goto(`/join/${candidateId}`);
+  await expect(
+    desktopPage.getByRole("note").filter({ hasText: /Buzz on desktop/i }),
+  ).toHaveCount(0);
+  await desktop.close();
+});

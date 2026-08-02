@@ -10,7 +10,10 @@ import { getJoinPolicy, type JoinPolicy } from "../../../src/presence/policy";
 import { buildInviteUrl } from "../../join-urls";
 import chrome from "../../site-chrome.module.css";
 import { SiteMasthead } from "../../SiteMasthead";
+import { headers } from "next/headers";
+
 import { JoinConsent } from "./JoinConsent";
+import { isMobileBrowser, MOBILE_JOIN_NOTICE } from "./mobile-notice";
 import styles from "./join.module.css";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +39,7 @@ export default async function JoinPage({
   const community = await getCommunityByHost(pool, target.host);
   const displayName = community?.displayName ?? target.host;
   const hostedFallbackUrl = buildInviteUrl(target.canonicalRelayUrl, target.code);
+  const onMobile = isMobileBrowser((await headers()).get("user-agent"));
 
   // Owner-only / allowlist: a code will not admit a new member. Say so rather
   // than run a consent flow whose claim would be refused.
@@ -67,6 +71,12 @@ export default async function JoinPage({
 
   return (
     <Shell displayName={displayName} host={target.host}>
+      {onMobile ? (
+        <aside className={styles.mobileNotice} role="note">
+          <p className={styles.mobileNoticeTitle}>{MOBILE_JOIN_NOTICE.title}</p>
+          <p className={styles.muted}>{MOBILE_JOIN_NOTICE.body}</p>
+        </aside>
+      ) : null}
       <JoinConsent
         ageAttestationRequired={policy?.ageAttestationRequired ?? false}
         candidateId={candidateId}

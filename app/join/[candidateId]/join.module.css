@@ -397,3 +397,18 @@
     width: 100%;
   }
 }
+
+/* Phone visitors: joining works, but Buzz mobile cannot create an identity on
+   its own (it pairs with desktop), so say that before they try. */
+.mobileNotice {
+  border: 1px solid var(--border, #d8d6d2);
+  border-radius: 12px;
+  padding: 0.875rem 1rem;
+  margin-bottom: 1.25rem;
+  background: var(--surface-raised, #f7f7f5);
+}
+
+.mobileNoticeTitle {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}

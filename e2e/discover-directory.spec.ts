@@ -158,6 +158,12 @@ test("focus is directly available without a search-options disclosure", async ({
   ).toHaveCount(0);
 });
 
+test("the removed Create page stays gone", async ({ page }) => {
+  const response = await page.goto("/create-community");
+
+  expect(response?.status()).toBe(404);
+});
+
 test("selecting a community shows its details in the inspector", async ({
   page,
 }) => {

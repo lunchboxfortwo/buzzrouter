@@ -1,12 +1,10 @@
 
-import { isUuid } from "../../src/claims/http";
 import chrome from "../site-chrome.module.css";
 import { SiteMasthead } from "../SiteMasthead";
 import { SubmitForm } from "./SubmitForm";
 import styles from "./submit.module.css";
 
 interface SubmitSearchParams {
-  candidate?: string | string[];
   host?: string | string[];
   status?: string | string[];
 }
@@ -19,7 +17,6 @@ export default async function SubmitPage({
   const params = await searchParams;
   const status = firstValue(params.status);
   const host = firstValue(params.host);
-  const candidateId = firstValue(params.candidate);
 
   return (
     <div className={chrome.siteCanvas}>
@@ -45,13 +42,11 @@ export default async function SubmitPage({
                   ? `${host} is now in the verification pipeline.`
                   : "The community is now in the verification pipeline."}
               </span>
-              {isUuid(candidateId) ? (
-                <span>
-                  Once verification succeeds, come back to{" "}
-                  <a href={`/claim/${candidateId}`}>this claim link</a> to
-                  prove ownership.
-                </span>
-              ) : null}
+              <span>
+                Once verification succeeds, open{" "}
+                <a href="/shared-channels#invite-link">Link</a> and paste an
+                owner/admin invite to connect your community.
+              </span>
             </div>
           ) : null}
           {status === "invalid" ? (

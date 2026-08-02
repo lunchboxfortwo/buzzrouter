@@ -12,7 +12,6 @@ import type { Pool, PoolClient } from "pg";
 import { ApiError } from "../http/api-error";
 import { BRIDGE_DELIVERY_QUEUE } from "../jobs/queues";
 
-const VERIFIED_CLAIM_STATES = ["admin_verified", "provider_verified"];
 const CONNECTOR_KEY_BYTES = 32;
 const WRAPPING_KEY_BYTES = 32;
 const GCM_NONCE_BYTES = 12;
@@ -657,10 +656,9 @@ export async function getOwnedCommunityConnection(
         AND connections.state = 'active'
       WHERE communities.id = $1
         AND communities.owner_pubkey = $2
-        AND communities.claim_state = ANY($3::text[])
         AND candidates.state = 'verified_buzz'
     `,
-    [input.communityId, input.ownerPubkey, VERIFIED_CLAIM_STATES],
+    [input.communityId, input.ownerPubkey],
   );
   const row = result.rows[0];
   if (!row) {
@@ -1505,10 +1503,10 @@ export async function getSharedChannelAdminWorkspace(
       LEFT JOIN community_connections AS connections
         ON connections.community_id = communities.id
       WHERE communities.owner_pubkey = $1
-        AND communities.claim_state = ANY($2::text[])
+        AND candidates.state = 'verified_buzz'
       ORDER BY display_name, communities.id
     `,
-    [ownerPubkey, VERIFIED_CLAIM_STATES],
+    [ownerPubkey],
   );
   const owned = communities.rows.map(mapCommunitySummary);
   if (owned.length === 0) {
@@ -1534,7 +1532,7 @@ export async function getSharedChannelAdminWorkspace(
         ) AS display_name,
         communities.slug,
         candidates.canonical_relay_url AS relay_url,
-        candidates.host = $2 AS featured,
+        candidates.host = $1 AS featured,
         connections.state AS connection_state,
         connections.health AS connection_health
       FROM communities
@@ -1542,12 +1540,11 @@ export async function getSharedChannelAdminWorkspace(
         ON candidates.id = communities.candidate_id
       JOIN community_connections AS connections
         ON connections.community_id = communities.id
-      WHERE communities.claim_state = ANY($1::text[])
-        AND communities.open_to_shared_channels = true
+      WHERE candidates.state = 'verified_buzz'
         AND connections.state = 'active'
       ORDER BY featured DESC, display_name, communities.id
     `,
-    [VERIFIED_CLAIM_STATES, homeCommunityHost()],
+    [homeCommunityHost()],
   );
 
   const channels = await pool.query<{
@@ -1635,43 +1632,40 @@ export interface VerifiedCommunityIdentity {
   relayUrl: string;
 }
 
+export interface VerifiedCommunityCandidate {
+  candidateId: string;
+  displayName: string;
+  relayUrl: string;
+}
+
 /**
- * Resolve the verified, owned community whose relay matches a pasted invite
- * link, so the signer-free "Link" flow can identify the community from the
- * invite alone — no owner signature. The recorded owner pubkey travels with it
- * so a minted session acts strictly as that owner for that one community.
+ * Resolve a verified candidate without mutating it. The unsigned invite flow
+ * performs this lookup before redeeming the invite, so invalid or expired
+ * links cannot create community or connector state.
  */
-export async function findVerifiedCommunityByRelayUrl(
+export async function findVerifiedCommunityCandidateByRelayUrl(
   pool: Pool,
   canonicalRelayUrl: string,
-): Promise<VerifiedCommunityIdentity> {
+): Promise<VerifiedCommunityCandidate> {
   const result = await pool.query<{
     display_name: string;
-    id: string;
-    owner_pubkey: string;
+    candidate_id: string;
     relay_url: string;
   }>(
     `
       SELECT
-        communities.id,
-        communities.owner_pubkey,
-        COALESCE(
-          communities.display_name,
-          communities.slug,
-          candidates.host
-        ) AS display_name,
+        candidates.id AS candidate_id,
+        COALESCE(communities.display_name, communities.slug, candidates.host)
+          AS display_name,
         candidates.canonical_relay_url AS relay_url
-      FROM communities
-      JOIN community_candidates AS candidates
-        ON candidates.id = communities.candidate_id
+      FROM community_candidates AS candidates
+      LEFT JOIN communities
+        ON communities.candidate_id = candidates.id
       WHERE candidates.canonical_relay_url = $1
-        AND communities.owner_pubkey IS NOT NULL
-        AND communities.claim_state = ANY($2::text[])
         AND candidates.state = 'verified_buzz'
-      ORDER BY communities.id
       LIMIT 1
     `,
-    [canonicalRelayUrl, VERIFIED_CLAIM_STATES],
+    [canonicalRelayUrl],
   );
   const row = result.rows[0];
   if (!row) {
@@ -1679,6 +1673,61 @@ export async function findVerifiedCommunityByRelayUrl(
       "invite_community_unknown",
       "That invite link is for a community BuzzRouter has not verified yet. List it first.",
       404,
+    );
+  }
+  return {
+    candidateId: row.candidate_id,
+    displayName: row.display_name,
+    relayUrl: row.relay_url,
+  };
+}
+
+/** Enroll only after the relay has accepted the pasted invite. */
+export async function enrollVerifiedCommunityFromInvite(
+  pool: Pool,
+  candidateId: string,
+  suggestedOwnerPubkey: string,
+): Promise<VerifiedCommunityIdentity> {
+  assertHex(suggestedOwnerPubkey, 64, "Session principal");
+  const result = await pool.query<{
+    display_name: string;
+    id: string;
+    owner_pubkey: string;
+    relay_url: string;
+  }>(
+    `
+      WITH enrolled AS (
+        INSERT INTO communities (candidate_id, owner_pubkey)
+        SELECT id, $2
+        FROM community_candidates
+        WHERE id = $1
+          AND state = 'verified_buzz'
+        ON CONFLICT (candidate_id) DO UPDATE
+          SET owner_pubkey = COALESCE(
+                communities.owner_pubkey,
+                EXCLUDED.owner_pubkey
+              ),
+              updated_at = now()
+        RETURNING id, candidate_id, owner_pubkey, display_name, slug
+      )
+      SELECT
+        enrolled.id,
+        enrolled.owner_pubkey,
+        COALESCE(enrolled.display_name, enrolled.slug, candidates.host)
+          AS display_name,
+        candidates.canonical_relay_url AS relay_url
+      FROM enrolled
+      JOIN community_candidates AS candidates
+        ON candidates.id = enrolled.candidate_id
+    `,
+    [candidateId, suggestedOwnerPubkey],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new ApiError(
+      "invite_community_unknown",
+      "That community is no longer verified. Try again after verification.",
+      409,
     );
   }
   return {
@@ -1722,13 +1771,12 @@ export async function connectFeaturedCommunity(
         ON connections.community_id = communities.id
       WHERE candidates.host = $1
         AND communities.owner_pubkey IS NOT NULL
-        AND communities.claim_state = ANY($2::text[])
         AND candidates.state = 'verified_buzz'
         AND connections.state = 'active'
       ORDER BY communities.id
       LIMIT 1
     `,
-    [homeCommunityHost(), VERIFIED_CLAIM_STATES],
+    [homeCommunityHost()],
   );
   const home = featured.rows[0];
   if (!home) {
@@ -2376,11 +2424,10 @@ async function requireVerifiedOwner(
         ON candidates.id = communities.candidate_id
       WHERE communities.id = $1
         AND communities.owner_pubkey = $2
-        AND communities.claim_state = ANY($3::text[])
         AND candidates.state = 'verified_buzz'
       FOR SHARE OF communities
     `,
-    [communityId, ownerPubkey, VERIFIED_CLAIM_STATES],
+    [communityId, ownerPubkey],
   );
   const row = result.rows[0];
   if (!row) {
@@ -2405,11 +2452,10 @@ async function requireVerifiedCommunity(
         ON candidates.id = communities.candidate_id
       WHERE communities.id = $1
         AND communities.owner_pubkey IS NOT NULL
-        AND communities.claim_state = ANY($2::text[])
         AND candidates.state = 'verified_buzz'
       FOR SHARE OF communities
     `,
-    [communityId, VERIFIED_CLAIM_STATES],
+    [communityId],
   );
   if (!result.rows[0]) {
     throw new ApiError(

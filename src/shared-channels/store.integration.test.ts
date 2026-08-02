@@ -38,6 +38,7 @@ import {
 } from "./connector";
 import { listCommunityLocalChannels } from "./local-channels";
 import {
+  beginConnectionFromInvite,
   getCommunityInstallDescriptor,
   hashInstallToken,
   type InviteClaimTarget,
@@ -56,7 +57,8 @@ import {
   connectFeaturedCommunity,
   createSharedChannel,
   disconnectSharedChannel,
-  findVerifiedCommunityByRelayUrl,
+  enrollVerifiedCommunityFromInvite,
+  findVerifiedCommunityCandidateByRelayUrl,
   getSharedChannelAdminWorkspace,
   ingestBridgeMessage,
   listSharedChannelEndpoints,
@@ -382,21 +384,31 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
     }
   });
 
-  it("excludes destinations that cannot accept a shared channel", async () => {
+  it("lists every connected community as a destination", async () => {
     const owner = await createConnectedCommunity(pool, "owner");
-    await setOpenToSharedChannels(pool, owner.communityId, true);
 
-    const notOpen = await createConnectedCommunity(pool, "not-open");
-    // Left at the default: open_to_shared_channels = false.
+    const defaultSettings = await createConnectedCommunity(
+      pool,
+      "default-settings",
+    );
 
     const notConnected = await createVerifiedCommunity(
       pool,
       "not-connected",
     );
-    await setOpenToSharedChannels(pool, notConnected.communityId, true);
 
     const eligible = await createConnectedCommunity(pool, "eligible");
-    await setOpenToSharedChannels(pool, eligible.communityId, true);
+    const unverified = await createConnectedCommunity(pool, "unverified");
+    await pool.query(
+      `
+        UPDATE community_candidates
+        SET state = 'rejected'
+        WHERE id = (
+          SELECT candidate_id FROM communities WHERE id = $1
+        )
+      `,
+      [unverified.communityId],
+    );
 
     const workspace = await getSharedChannelAdminWorkspace(
       pool,
@@ -406,8 +418,13 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
       (community) => community.id,
     );
     expect(destinationIds).toContain(eligible.communityId);
-    expect(destinationIds).not.toContain(notOpen.communityId);
+    expect(destinationIds).toContain(defaultSettings.communityId);
     expect(destinationIds).not.toContain(notConnected.communityId);
+    expect(destinationIds).not.toContain(unverified.communityId);
+
+    await expect(
+      getSharedChannelAdminWorkspace(pool, unverified.ownerPubkey),
+    ).resolves.toEqual({ channels: [], communities: [], destinations: [] });
   });
 
   it("does not accept an expired invitation", async () => {
@@ -844,11 +861,16 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
       return featured;
     }
 
-    it("identifies a verified community from its relay url", async () => {
+    it("identifies an existing community from its relay url", async () => {
       const community = await createVerifiedCommunity(pool, "by-relay");
-      const found = await findVerifiedCommunityByRelayUrl(
+      const candidate = await findVerifiedCommunityCandidateByRelayUrl(
         pool,
         community.relayUrl,
+      );
+      const found = await enrollVerifiedCommunityFromInvite(
+        pool,
+        candidate.candidateId,
+        "f".repeat(64),
       );
       expect(found).toMatchObject({
         communityId: community.communityId,
@@ -857,11 +879,95 @@ describeDatabase("shared-channel PostgreSQL integration", () => {
       });
 
       await expect(
-        findVerifiedCommunityByRelayUrl(pool, "wss://nobody.example.com"),
+        findVerifiedCommunityCandidateByRelayUrl(
+          pool,
+          "wss://nobody.example.com",
+        ),
       ).rejects.toMatchObject({
         code: "invite_community_unknown",
         status: 404,
       });
+    });
+
+    it("enrolls a bare verified candidate for invite-link administration", async () => {
+      const candidate = await pool.query<{ id: string }>(
+        `
+          INSERT INTO community_candidates (
+            canonical_relay_url, host, state
+          )
+          VALUES ('wss://bare-invite.example.com', 'bare-invite.example.com', 'verified_buzz')
+          RETURNING id
+        `,
+      );
+      const sessionPrincipal = "e".repeat(64);
+
+      const candidateMatch = await findVerifiedCommunityCandidateByRelayUrl(
+        pool,
+        "wss://bare-invite.example.com",
+      );
+      const found = await enrollVerifiedCommunityFromInvite(
+        pool,
+        candidateMatch.candidateId,
+        sessionPrincipal,
+      );
+
+      expect(found).toMatchObject({
+        displayName: "bare-invite.example.com",
+        ownerPubkey: sessionPrincipal,
+        relayUrl: "wss://bare-invite.example.com",
+      });
+      const enrolled = await pool.query<{
+        claim_state: string;
+        owner_pubkey: string;
+      }>(
+        "SELECT claim_state, owner_pubkey FROM communities WHERE candidate_id = $1",
+        [candidate.rows[0].id],
+      );
+      expect(enrolled.rows[0]).toEqual({
+        claim_state: "unclaimed",
+        owner_pubkey: sessionPrincipal,
+      });
+    });
+
+    it("does not persist enrollment or connector state when invite redemption fails", async () => {
+      const candidate = await pool.query<{ id: string }>(
+        `
+          INSERT INTO community_candidates (
+            canonical_relay_url, host, state
+          )
+          VALUES ('wss://rejected-invite.example.com', 'rejected-invite.example.com', 'verified_buzz')
+          RETURNING id
+        `,
+      );
+
+      await expect(
+        beginConnectionFromInvite(
+          pool,
+          "https://rejected-invite.example.com/invite/expired",
+          { getKey: async () => wrappingKey },
+          {} as RelayConnectionFactory,
+          async () => {
+            throw new Error("relay rejected invite");
+          },
+        ),
+      ).rejects.toThrow("relay rejected invite");
+
+      const state = await pool.query<{ communities: string; connections: string }>(
+        `
+          SELECT
+            (SELECT count(*)::text FROM communities WHERE candidate_id = $1)
+              AS communities,
+            (
+              SELECT count(*)::text
+              FROM community_connections
+              WHERE community_id IN (
+                SELECT id FROM communities WHERE candidate_id = $1
+              )
+            ) AS connections
+        `,
+        [candidate.rows[0].id],
+      );
+      expect(state.rows[0]).toEqual({ communities: "0", connections: "0" });
     });
 
     it("mints and resolves a community-scoped owner session", async () => {

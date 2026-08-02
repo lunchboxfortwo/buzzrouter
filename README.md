@@ -1,9 +1,9 @@
 # BuzzRouter
 
 BuzzRouter is a discovery and ranking directory for Buzz communities. The
-current product surface is a high-fidelity MVP prototype; Phases 1 through 3
-add the safe technical index, automatic discovery sources, internal review,
-community ownership claims, and public listing foundations behind it.
+current product surface includes the safe technical index, automatic discovery
+sources, internal review, public listing foundations, and invite-driven Link
+flow.
 
 - Live prototype: [buzzrouter.com](https://buzzrouter.com)
 - Product definition: [PRODUCT.md](./PRODUCT.md)
@@ -13,8 +13,6 @@ community ownership claims, and public listing foundations behind it.
   [docs/phase-1-operations.md](./docs/phase-1-operations.md)
 - Phase 2 operations:
   [docs/phase-2-operations.md](./docs/phase-2-operations.md)
-- Phase 3 operations:
-  [docs/phase-3-operations.md](./docs/phase-3-operations.md)
 
 ## Development
 
@@ -30,8 +28,8 @@ npm run typecheck
 npm run build
 ```
 
-The prototype route remains static. Claim, listing, and internal review routes
-require PostgreSQL and the environment described in the operations guides:
+The directory, Link, submission, and internal review routes require PostgreSQL
+and the environment described in the operations guides:
 
 ```bash
 npm run dev
@@ -42,7 +40,7 @@ npm run dev
 `GET /api/communities` returns the verified, listed directory communities as
 JSON — no auth required. It reuses the same read the directory page uses
 (`listDirectoryCommunities` in `src/db/directory.ts`), so it never exposes
-more than the public listing already does: no owner pubkeys, claim tokens, or
+more than the public listing already does: no owner pubkeys, invite tokens, or
 connector/install secrets.
 
 - `?joinable=true` returns only communities that have an invite code or
@@ -105,14 +103,12 @@ Implemented:
 - Independent-source listing eligibility evaluation
 - Basic-auth protected candidate review with evidence and probe history
 - NIP-98 request authentication with one-use replay protection
-- DNS TXT, HTTPS file, and hosted-relay icon ownership proofs
-- Conflict-safe ownership state and public listing metadata
-- NIP-07 claim workspace and database-backed community detail pages
+- Invite-driven community admission for shared-channel linking
+- Database-backed community detail pages
 - Adversarial unit and PostgreSQL integration verification
 
 Not yet implemented:
 
 - Directory integration for database-backed listings
 - Community ratings, popularity signals, or rankings
-- Provider-mediated claims and dispute resolution operations
 - A managed runtime for the dynamic application and discovery worker

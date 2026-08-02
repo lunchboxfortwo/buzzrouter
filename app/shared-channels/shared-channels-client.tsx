@@ -1,9 +1,15 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { signedRequest } from "../../src/http/nostr-client";
-import type { ClaimableCandidateMatch } from "../../src/claims/store";
+import type { CommunitySearchMatch } from "../../src/shared-channels/community-search";
 import type { LocalChannelListing } from "../../src/shared-channels/local-channels";
 import type {
   SharedChannelAdminRecord,
@@ -177,9 +183,12 @@ async function sessionRequest<T>(
  * through the short-lived owner session minted by that admission.
  */
 export function SharedChannelsClient() {
+  const [selectedCommunity, setSelectedCommunity] =
+    useState<CommunitySearchMatch | null>(null);
+
   return (
     <div className={styles.stack}>
-      <SignerFreeLink />
+      <SignerFreeLink selectedCommunity={selectedCommunity} />
       <section className={styles.advanced}>
         <h2 className={styles.advancedHeading}>Command-line administration</h2>
         <p className={styles.advancedNote}>
@@ -194,15 +203,19 @@ export function SharedChannelsClient() {
           .
         </p>
         <details>
-          <summary>Need to claim a community?</summary>
-          <ClaimLookup />
+          <summary>Not sure BuzzRouter knows your community?</summary>
+          <CommunityLookup onSelect={setSelectedCommunity} />
         </details>
       </section>
     </div>
   );
 }
 
-function SignerFreeLink() {
+function SignerFreeLink({
+  selectedCommunity,
+}: {
+  selectedCommunity: CommunitySearchMatch | null;
+}) {
   const [invite, setInvite] = useState("");
   const [admitting, setAdmitting] = useState(false);
   const [error, setError] = useState("");
@@ -214,6 +227,16 @@ function SignerFreeLink() {
   const [connecting, setConnecting] = useState(false);
   const [confirmation, setConfirmation] =
     useState<ArmConfirmationResponse | null>(null);
+  const inviteInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!selectedCommunity) return;
+    inviteInput.current?.focus();
+    document.getElementById("invite-link")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [selectedCommunity]);
 
   async function admit(event: FormEvent) {
     event.preventDefault();
@@ -331,7 +354,7 @@ function SignerFreeLink() {
   }
 
   return (
-    <section className={styles.linkCard}>
+    <section className={styles.linkCard} id="invite-link">
       <form onSubmit={admit}>
         <label>
           Your Buzz invite link
@@ -339,9 +362,17 @@ function SignerFreeLink() {
             aria-label="Invite link from your Buzz app"
             onChange={(event) => setInvite(event.target.value)}
             placeholder="https://your-relay/invite/…"
+            ref={inviteInput}
             value={invite}
           />
         </label>
+        {selectedCommunity ? (
+          <p className={styles.linkNote} role="status">
+            Found <strong>{selectedCommunity.displayName ?? selectedCommunity.host}</strong>.
+            Copy an owner/admin invite link from that community in Buzz and
+            paste it here.
+          </p>
+        ) : null}
         <p className={styles.linkNote}>
           Open your community&apos;s invite in Buzz, tap <strong>Copy
           link</strong>, and paste it here. No browser extension needed &mdash;
@@ -542,8 +573,10 @@ function OwnerTools({
     return (
       <section className={styles.empty}>
         <h2>No owned communities</h2>
-        <p>This invite session no longer has an owned Buzz community.</p>
-        <ClaimLookup />
+        <p>
+          This invite session no longer has a Buzz community. Paste a fresh
+          owner/admin invite link above to continue.
+        </p>
       </section>
     );
   }
@@ -645,9 +678,13 @@ function OwnerTools({
   );
 }
 
-export function ClaimLookup() {
+export function CommunityLookup({
+  onSelect,
+}: {
+  onSelect: (community: CommunitySearchMatch) => void;
+}) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<ClaimableCandidateMatch[] | null>(
+  const [results, setResults] = useState<CommunitySearchMatch[] | null>(
     null,
   );
   const [busy, setBusy] = useState(false);
@@ -660,7 +697,7 @@ export function ClaimLookup() {
     setBusy(true);
     setError("");
     try {
-      setResults(await fetchClaimableCandidates(trimmed));
+      setResults(await fetchVerifiedCommunities(trimmed));
     } catch {
       setError("Search failed. Try again.");
       setResults(null);
@@ -670,13 +707,11 @@ export function ClaimLookup() {
   }
 
   return (
-    <div className={styles.claimLookup}>
-      <p>
-        Find the community you want to claim by its relay host or name.
-      </p>
-      <form className={styles.claimForm} onSubmit={search}>
+    <div className={styles.communityLookup}>
+      <p>Search by relay host or name, then continue with an invite link.</p>
+      <form className={styles.communitySearchForm} onSubmit={search}>
         <input
-          aria-label="Search communities to claim"
+          aria-label="Search verified communities"
           onChange={(event) => setQuery(event.target.value)}
           placeholder="communities.buzz.xyz or community name"
           value={query}
@@ -687,10 +722,13 @@ export function ClaimLookup() {
       </form>
       {error ? <p className={styles.notice}>{error}</p> : null}
       {results && results.length > 0 ? (
-        <ul className={styles.claimResults}>
+        <ul className={styles.communitySearchResults}>
           {results.map((candidate) => (
             <li key={candidate.candidateId}>
-              <a href={`/claim/${candidate.candidateId}`}>
+              <a
+                href="#invite-link"
+                onClick={() => onSelect(candidate)}
+              >
                 {candidate.displayName ?? candidate.host}
               </a>
               <span>{candidate.host}</span>
@@ -699,8 +737,8 @@ export function ClaimLookup() {
         </ul>
       ) : null}
       {results && results.length === 0 ? (
-        <p className={styles.claimEmpty}>
-          No matching unclaimed, verified community found.{" "}
+        <p className={styles.communitySearchEmpty}>
+          No matching verified community found.{" "}
           <a href="/submit">Submit it</a> to start verification.
         </p>
       ) : null}
@@ -708,19 +746,19 @@ export function ClaimLookup() {
   );
 }
 
-export async function fetchClaimableCandidates(
+export async function fetchVerifiedCommunities(
   query: string,
-): Promise<ClaimableCandidateMatch[]> {
+): Promise<CommunitySearchMatch[]> {
   const response = await fetch(
-    `/api/claimable-candidates?q=${encodeURIComponent(query)}`,
+    `/api/community-search?q=${encodeURIComponent(query)}`,
   );
   if (!response.ok) {
-    throw new Error("Claimable candidate search failed.");
+    throw new Error("Community search failed.");
   }
   const data = (await response.json()) as {
-    candidates: ClaimableCandidateMatch[];
+    communities: CommunitySearchMatch[];
   };
-  return data.candidates;
+  return data.communities;
 }
 
 function ConnectionStatus({

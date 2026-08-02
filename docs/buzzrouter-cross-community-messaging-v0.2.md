@@ -722,9 +722,9 @@ Synthesized from the engineering review. Each task maps directly to an approved
 decision.
 
 - [x] **T1 (P2, human: ~1 day / CC: ~2-4h)** - HTTP auth - Extract generic NIP-98 request authentication and API errors.
-  - Surfaced by: Code quality review - claim-specific authentication errors cannot be reused safely.
-  - Files: `src/http/`, `src/claims/`, existing claim route tests.
-  - Verify: `npm test -- src/claims src/http`.
+  - Surfaced by: Code quality review - feature-specific authentication errors cannot be reused safely.
+  - Files: `src/http/` and its tests.
+  - Verify: `npm test -- src/http`.
 - [x] **T2 (P1, human: ~3 days / CC: ~1 day)** - Persistence - Add the shared-channel schema and owner-authorized store.
   - Surfaced by: Architecture review - bilateral endpoint state, immediate disconnect, and immutable identity constraints.
   - Files: `migrations/`, `src/shared-channels/store.ts`.

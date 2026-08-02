@@ -26,9 +26,11 @@ import {
   activateCommunityConnection,
   beginCommunityConnectionInstall,
   decryptConnectorPrivateKey,
-  findVerifiedCommunityByRelayUrl,
+  enrollVerifiedCommunityFromInvite,
+  findVerifiedCommunityCandidateByRelayUrl,
   getCommunityConnectionInstallContext,
   type CommunityConnectionRecord,
+  type VerifiedCommunityIdentity,
 } from "./store";
 
 const INSTALL_TOKEN_BYTES = 32;
@@ -58,10 +60,10 @@ export async function createCommunityInstallToken(
     ownerPubkey: string;
   },
   wrappingKeys: WrappingKeyProvider = createFileWrappingKeyProvider(),
+  privateKey: Uint8Array = generateSecretKey(),
 ): Promise<CommunityInstallToken> {
   const token = randomBytes(INSTALL_TOKEN_BYTES).toString("base64url");
   const command = optionalInstallerCommand(token);
-  const privateKey = generateSecretKey();
   const bridgePubkey = getPublicKey(privateKey);
   const bridgeNpub = npubEncode(bridgePubkey);
   const wrappingKeyVersion = configuredWrappingKeyVersion();
@@ -184,24 +186,43 @@ export async function beginConnectionFromInvite(
   invite: string,
   wrappingKeys: WrappingKeyProvider = createFileWrappingKeyProvider(),
   relayFactory: RelayConnectionFactory = createRelayConnectionFactory(),
+  claimInvite: InviteClaimFn = claimInviteOverHttp,
 ): Promise<BeginConnectionFromInviteResult> {
   const canonicalRelayUrl = inviteRelayUrl(invite);
-  const community = await findVerifiedCommunityByRelayUrl(
+  const candidate = await findVerifiedCommunityCandidateByRelayUrl(
     pool,
     canonicalRelayUrl,
   );
-  const token = await createCommunityInstallToken(
-    pool,
-    {
-      communityId: community.communityId,
-      ownerPubkey: community.ownerPubkey,
-    },
-    wrappingKeys,
-  );
-  await redeemInviteAndActivate(
+  const privateKey = generateSecretKey();
+  let community: VerifiedCommunityIdentity;
+  let token: CommunityInstallToken;
+  try {
+    await redeemInviteWithBridgeKey(
+      privateKey,
+      candidate.relayUrl,
+      invite,
+      claimInvite,
+    );
+    community = await enrollVerifiedCommunityFromInvite(
+      pool,
+      candidate.candidateId,
+      randomBytes(32).toString("hex"),
+    );
+    token = await createCommunityInstallToken(
+      pool,
+      {
+        communityId: community.communityId,
+        ownerPubkey: community.ownerPubkey,
+      },
+      wrappingKeys,
+      privateKey,
+    );
+  } finally {
+    privateKey.fill(0);
+  }
+  await verifyAndActivateCommunityConnection(
     pool,
     token.token,
-    invite,
     wrappingKeys,
     relayFactory,
   );
@@ -258,6 +279,16 @@ export type InviteClaimFn = (
   privateKey: Uint8Array,
   target: InviteClaimTarget,
 ) => Promise<void>;
+
+export async function redeemInviteWithBridgeKey(
+  privateKey: Uint8Array,
+  relayUrlOnRecord: string,
+  invite: string,
+  claimInvite: InviteClaimFn = claimInviteOverHttp,
+): Promise<void> {
+  const target = resolveInviteClaimTarget(relayUrlOnRecord, invite);
+  await claimInvite(privateKey, target);
+}
 
 /**
  * PRIMARY admission path: the owner mints an invite link in their Buzz app and

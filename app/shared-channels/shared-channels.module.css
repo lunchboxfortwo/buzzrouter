@@ -527,18 +527,18 @@
   width: 150px;
 }
 
-.claimLookup {
+.communityLookup {
   margin-top: 16px;
 }
 
-.claimForm {
+.communitySearchForm {
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) auto;
   margin-top: 10px;
 }
 
-.claimResults {
+.communitySearchResults {
   display: grid;
   gap: 8px;
   list-style: none;
@@ -546,7 +546,7 @@
   padding: 0;
 }
 
-.claimResults li {
+.communitySearchResults li {
   align-items: baseline;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -556,13 +556,13 @@
   padding: 10px 12px;
 }
 
-.claimResults span {
+.communitySearchResults span {
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 
-.claimEmpty {
+.communitySearchEmpty {
   color: var(--muted);
   font-size: 13px;
   margin-top: 14px;
@@ -586,7 +586,7 @@
   .toolbar,
   .installer,
   .channel,
-  .claimForm {
+  .communitySearchForm {
     align-items: stretch;
     grid-template-columns: 1fr;
   }

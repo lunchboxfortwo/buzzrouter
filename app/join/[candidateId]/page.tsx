@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { isUuid } from "../../../src/claims/http";
 import { getCommunityByHost } from "../../../src/db/directory";
 import { getCandidateInviteTarget } from "../../../src/db/join-probes";
 import { getDatabasePool } from "../../../src/db/pool";
+import { isUuid } from "../../../src/http/validation";
 import { getJoinPolicy, type JoinPolicy } from "../../../src/presence/policy";
 import { buildInviteUrl } from "../../join-urls";
 import { JoinConsent } from "./JoinConsent";

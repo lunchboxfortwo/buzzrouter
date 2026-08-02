@@ -1,8 +1,8 @@
 import { generateSecretKey } from "nostr-tools/pure";
 
-import { isUuid } from "../../../src/claims/http";
 import { getCandidateInviteTarget } from "../../../src/db/join-probes";
 import { getDatabasePool } from "../../../src/db/pool";
+import { isUuid } from "../../../src/http/validation";
 import { acceptJoinPolicy, getJoinPolicy } from "../../../src/presence/policy";
 
 export const dynamic = "force-dynamic";

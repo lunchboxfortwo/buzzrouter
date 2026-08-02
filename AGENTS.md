@@ -146,9 +146,11 @@ Key routing rules:
   management) — that path still requires NIP-98.
 - `POST /api/community-connections/begin-from-invite` (UNSIGNED,
   `beginConnectionFromInvite`) identifies the community from the pasted invite
-  LINK's relay host (`findVerifiedCommunityByRelayUrl`), reuses the existing
-  signed-owner install path with the community's RECORDED owner pubkey, redeems +
-  activates, then mints a short-lived, community-scoped **owner session**
+  LINK's relay host (`findVerifiedCommunityCandidateByRelayUrl`). Only after the
+  relay accepts the invite does `enrollVerifiedCommunityFromInvite` enroll a
+  bare candidate with a random session principal; an existing hosted or
+  signed-owner identity is preserved. The flow then activates and mints
+  a short-lived, community-scoped **owner session**
   (`src/shared-channels/owner-session.ts`, `connection_owner_sessions`,
   migration `20260801T0900_connection_owner_sessions.sql`). The session rides in
   the `x-owner-session` header in place of
@@ -294,9 +296,8 @@ next number in the old sequence — see `migrations/README.md`. Existing
   description/categories reuse the existing `source_display_name` /
   `source_description` / `source_categories` columns from
   `migrations/0005_catalog_discovery.sql`). `communities.description`/
-  `categories`/`focus` aren't touched — those rows don't exist until claim
-  (`src/claims/store.ts`), and nothing currently promotes `community_sources`
-  submission data onto them; the public directory only reads `catalog`
+  `categories`/`focus` aren't touched, and nothing currently promotes
+  `community_sources` submission data onto them; the public directory only reads `catalog`
   sources typed `'buzzdir'` (`src/db/directory.ts`), not `'submission'`.
 - Focus options come from `src/ranking/focus.ts` (`FOCUS_SLUGS`); categories
   from `src/submissions/categories.ts` (`SUBMISSION_CATEGORY_SLUGS`) — kept
@@ -402,7 +403,7 @@ next number in the old sequence — see `migrations/README.md`. Existing
 - Verify the receipt chain live before trusting reasoning: gated script
   `scripts/verify-receipt-join.ts` (`BUZZROUTER_VERIFY_RECEIPT_JOIN_LIVE=1`) runs
   policy→accept→deep-link→claim against a real community and asserts 200 joined.
-  It consumes one invite use on success; run once, never loop (10 claims/60s cap).
+  It consumes one invite use on success; run once, never loop (10 claims per 60s cap).
 
 ## Maintaining this file
 

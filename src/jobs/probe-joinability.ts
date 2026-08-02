@@ -27,7 +27,7 @@ import { PROBE_JOINABILITY_QUEUE } from "./queues";
  * `STALE_AFTER_MS` (and verdicts recorded against a since-rotated code), oldest
  * first, so a policy that changes or a code that expires stops reading as
  * joinable once the next pass catches up. Only `MAX_PER_PASS` are probed per run
- * to stay well under the relay's 10-claims/60s-per-pubkey limit even as harvest
+ * to stay well under the relay's 10 claims per 60s per-pubkey limit even as harvest
  * volume grows.
  *
  * Every community is processed under its own try/catch so one failure never

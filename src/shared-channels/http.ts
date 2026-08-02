@@ -1,7 +1,5 @@
 import { apiErrorResponse, ApiError } from "../http/api-error";
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export { requireUuid } from "../http/validation";
 
 export function sharedChannelErrorResponse(error: unknown): Response {
   if (!(error instanceof ApiError)) {
@@ -28,13 +26,6 @@ export function requireObject(
     throw new ApiError("invalid_input", "Request body is invalid.");
   }
   return value as Record<string, unknown>;
-}
-
-export function requireUuid(value: unknown): string {
-  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
-    throw new ApiError("invalid_input", "Identifier is invalid.");
-  }
-  return value;
 }
 
 export function requireInstallToken(value: unknown): string {

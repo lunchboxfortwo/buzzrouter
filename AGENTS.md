@@ -208,26 +208,6 @@ Key routing rules:
   (`shared-channel-create-channel.spec.ts`). Existing picker specs must click
   "Use a channel I already have" before touching the dropdown.
 
-## Create-community front door
-
-- `app/create-community/` LEADS with a one-page create form
-  (`CreateCommunityForm.tsx` → `POST /api/create-community`): the visitor types
-  a community name + handover email and gets back the community URL plus a
-  one-time nsec export. The old "sign up at app.builderlab.xyz yourself" +
-  desktop-download path is kept BELOW as a self-serve fallback (buzz.xyz has no
-  signup/login of its own — verified from its production bundle). The live
-  provisioning path is flag-gated OFF (`BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE=1`),
-  so with the flag off the form fails loudly to that fallback instead of hanging.
-- Per-OS desktop download resolution (`download-assets.ts`) replicates the
-  asset-matching regexes and GitHub Releases API call
-  (`api.github.com/repos/block/buzz/releases`) found in Buzz's own shipped
-  `BuzzDownloadLink` component — reverse-engineered from their production JS
-  bundle, not guessed. Server-side OS detection (`platform.ts`, from the
-  `user-agent` header) picks the initial view; architecture (arm64 vs x64 on
-  Mac) can't be read from a UA string, so the client resolves it at click
-  time via the same GitHub API call, falling back to the releases page on
-  any failure — never a fabricated direct file URL.
-
 ## Two agents commit to main — ownership map
 
 Two autonomous agents work this repo concurrently: this one (bridge /
@@ -241,57 +221,13 @@ to touch without coordinating.
 
 | Owner | Paths |
 | --- | --- |
-| Bridge / directory (this agent) | `src/shared-channels/`, `src/hosted-signup/`, `app/shared-channels/`, `app/submit/`, `app/create-community/`, `src/submissions/`, `src/directory/`, `src/db/join-probes.ts`, `src/jobs/probe-joinability.ts` |
+| Bridge / directory (this agent) | `src/shared-channels/`, `app/shared-channels/`, `app/submit/`, `src/submissions/`, `src/directory/`, `src/db/join-probes.ts`, `src/jobs/probe-joinability.ts` |
 | Presence agent | `src/presence/`, `src/jobs/auto-join-communities.ts`, `src/jobs/harvest-invites.ts`, `src/jobs/refresh-community-summaries.ts`, `src/jobs/refresh-invites.ts` |
 | SHARED — rebase immediately before touching, keep the diff minimal | `migrations/`, `vitest.config.ts`, `app/SiteMasthead.tsx`, `PRODUCT.md`, `README.md`, `package.json`, `.github/workflows/`, `src/db/` |
 
 New migrations use a timestamp prefix (`YYYYMMDDTHHmm_name.sql`), not the
 next number in the old sequence — see `migrations/README.md`. Existing
 `000N_` files keep their numbers forever; never rename them.
-
-## Hosted-community "Create" flow (Builderlab)
-
-- `src/hosted-signup/` binds a SELF-GENERATED Nostr key to Block's hosted Buzz
-  (Builderlab) and creates a hosted community owned by it — no desktop app, no
-  key-provenance check (proven live 2026-07-31). The whole HTTP contract lives
-  in ONE place, `builderlab-client.ts`, with the kind-24243 binding event shape
-  and every path cited from Block's `github.com/block/buzz` source in comments.
-  The exact shapes are NOT re-derivable from this repo — trust that file's
-  citations. `create-community.ts` orchestrates the sequence.
-- `signed_payload` on `/verify` is the raw event JSON as a STRING (not
-  `v1.`+base64url), and the kind-24243 tag ORDER is load-bearing (the server
-  recomputes the event id). Custody reuses `encryptConnectorPrivateKey` from
-  `shared-channels/store.ts`, scoped to the bind PUBKEY as AAD (available before
-  the community exists) — the secret is never returned, logged, or stored in
-  plaintext.
-- Ordered to be RECOVERABLE: validate name → check availability → encrypt +
-  PERSIST the key → bind → create. The key is durably persisted BEFORE the
-  irreversible bind, so a post-bind failure never loses it; a retry resumes with
-  `existingSecretKey` and tolerates `identity_already_bound` only after `/current`
-  confirms the bound identity is ours.
-- Live calls are opt-in: `resolveLiveBuilderlabConfig` (and the
-  `BuilderlabClient` constructor when the base URL is the real host) refuse
-  unless `BUZZROUTER_HOSTED_SIGNUP_ALLOW_LIVE=1`. Tests inject a fake endpoint +
-  fake fetch and never touch the real service.
-- The one-page front door ADDS account provisioning in front of that binding
-  module (it does not rewrite it). `provision.ts` orchestrates
-  signup → bind (`createHostedCommunity`) → directory listing → one-time nsec
-  export; `signup-driver.ts` is the ONE step needing a real browser
-  (`PlaywrightSignupDriver`, dynamic-imports `playwright`, same live flag) — it
-  drives Block's signup UI then runs the CLI-login exchange in the authenticated
-  browser to get the bearer session. Selectors are best-effort against a
-  third-party UI and every failure raises a stable `signup_*` code so the page
-  degrades to the self-serve fallback. `playwright` is only a transitive dep, so
-  an omit-dev prod build fails the live path gracefully (`signup_browser_unavailable`)
-  rather than crashing; enabling live provisioning needs `playwright install`.
-- Because the account is WRITE-ONCE (returning login is email-OTP gated), the
-  bind key is the real ownership; the user gets the nsec once (shown + download).
-  `store.ts`/`hosted_community_provisions` persists the encrypted key BEFORE the
-  bind and the encrypted session (via `session-custody.ts`, a general
-  AES-256-GCM helper because `encryptConnectorPrivateKey` asserts a 32-byte
-  payload) so a post-bind failure resumes within the session's lifetime instead
-  of orphaning the account. The nsec appears ONLY in the create response (the
-  deliberate export); no other secret is ever returned, logged, or stored plain.
 
 ## List-a-community intake (`app/submit/`)
 

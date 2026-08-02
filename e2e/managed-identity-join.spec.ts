@@ -58,7 +58,6 @@ test("a keyless visitor joins a community and can export the managed key", async
   // regression, not a copy tweak.
   await expect(page.getByRole("navigation").getByRole("link")).toHaveText([
     "Discover",
-    "Create",
     "Link",
     "List",
   ]);

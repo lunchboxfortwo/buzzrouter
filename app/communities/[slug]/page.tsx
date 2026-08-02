@@ -52,6 +52,11 @@ export async function generateMetadata({
   };
 }
 
+/** Generic relay boilerplate that says nothing community-specific — every
+ * listing is a Buzz relay, so this is filler, not a real subtitle. */
+const GENERIC_DESCRIPTION =
+  /^\s*(a\s+)?buzz(\s+(relay|community|workspace))?\.?\s*$|private team communication relay/i;
+
 function monogram(name: string): string {
   const first = [...name.trim()].find((c) => /\p{L}|\p{N}/u.test(c));
   return (first ?? "B").toUpperCase();
@@ -138,6 +143,11 @@ export default async function CommunityPage({
   const access = accessFlag(community);
   const affordance = joinAffordance(community);
   const tone = insigniaTone(community.relayHost);
+  const heroTagline =
+    community.tagline ??
+    (community.description && !GENERIC_DESCRIPTION.test(community.description)
+      ? community.description
+      : null);
   const shareUrl = `${pageOrigin()}/communities/${encodeURIComponent(community.relayHost)}`;
   const shareText = `${community.displayName} — a real, live Buzz community, verified by @buzzrouter`;
 
@@ -164,7 +174,9 @@ export default async function CommunityPage({
           )}
           <div>
             <h1 className={styles.name}>{community.displayName}</h1>
-            <div className={styles.host}>{community.canonicalRelayUrl}</div>
+            {heroTagline ? (
+              <p className={styles.tagline}>{heroTagline}</p>
+            ) : null}
             <div className={styles.tags}>
               <span className={`${styles.pill} ${styles.pillLive}`}>
                 <span className={styles.dot} />
@@ -181,11 +193,12 @@ export default async function CommunityPage({
                 <span className={`${styles.pill} ${styles.pillInvite}`}>Invite-only</span>
               ) : null}
             </div>
+            <div className={styles.host}>{community.canonicalRelayUrl}</div>
           </div>
           <div className={styles.heroActions}>
             <JoinButton
               candidateId={community.candidateId}
-              className={styles.cta}
+              className={affordance === "none" ? styles.ctaQuiet : styles.cta}
               communityName={community.displayName}
               inviteCode={community.inviteCode}
               joinStatus={community.joinStatus}
@@ -200,11 +213,6 @@ export default async function CommunityPage({
             />
           </div>
         </div>
-
-        <AddInviteCta
-          host={community.relayHost}
-          variant={affordance === "join" ? "quiet" : "prominent"}
-        />
 
         {summary ? (
           <section className={styles.pulse}>
@@ -298,6 +306,11 @@ export default async function CommunityPage({
             <Link href="/shared-channels">Propose a shared channel →</Link>
           </div>
         ) : null}
+
+        <AddInviteCta
+          host={community.relayHost}
+          variant={affordance === "join" ? "quiet" : "prominent"}
+        />
       </div>
     </div>
   );

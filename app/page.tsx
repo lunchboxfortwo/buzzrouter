@@ -4,9 +4,6 @@ import Image from "next/image";
 import { listDirectoryCommunities, type DirectoryCommunity } from "../src/db/directory";
 import { getDatabasePool } from "../src/db/pool";
 import {
-  aboutText,
-  currentWork,
-  explainChecks,
   reliabilityLabel,
   type ReliabilityFacts,
 } from "../src/ranking/explain";
@@ -78,14 +75,24 @@ export default async function DirectoryPage({
         Skip to directory
       </a>
 
-      <form action="/" className={styles.formShell} method="GET">
+      <form
+        action="/"
+        className={styles.formShell}
+        id="directory-filters"
+        method="GET"
+      >
         {selected ? (
           <input name="selected" type="hidden" value={selected.candidateId} />
         ) : null}
+      </form>
 
-        <SiteMasthead current="discover" searchDefaultValue={search} searchInForm />
+      <SiteMasthead
+        current="discover"
+        searchDefaultValue={search}
+        searchFormId="directory-filters"
+      />
 
-        <main id="directory">
+      <main id="directory">
           <div className={styles.workspaceShell}>
             <header className={styles.premiseBand}>
               <div>
@@ -149,7 +156,11 @@ export default async function DirectoryPage({
             <section aria-label="Filter communities" className={styles.commandBar}>
               <label className={styles.commandFilter}>
                 <span>Focus</span>
-                <AutoSubmitSelect defaultValue={focusFilter} name="focus">
+                <AutoSubmitSelect
+                  defaultValue={focusFilter}
+                  form="directory-filters"
+                  name="focus"
+                >
                   <option value="">Any focus</option>
                   {focusOptions.map((focus) => (
                     <option key={focus} value={focus}>
@@ -159,7 +170,11 @@ export default async function DirectoryPage({
                 </AutoSubmitSelect>
               </label>
               <noscript>
-                <button className={styles.applyButton} type="submit">
+                <button
+                  className={styles.applyButton}
+                  form="directory-filters"
+                  type="submit"
+                >
                   Apply
                 </button>
               </noscript>
@@ -231,7 +246,6 @@ export default async function DirectoryPage({
 
           </div>
         </main>
-      </form>
 
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
@@ -320,7 +334,7 @@ function CommunityRow({
         </span>
       </span>
       <span className={styles.indexFocusCell}>
-        {community.focus ? focusLabel(community.focus) : "—"}
+        {community.focus ? focusLabel(community.focus) : null}
       </span>
       <span className={styles.indexRowTrailing}>
         {affordance === "join" ? (
@@ -358,14 +372,6 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
   const hasActivity = hasActivitySummary(community);
   const keyless = !community.inviteCode && !community.publicUrl;
   const overview = summaryLine(community);
-  const about = aboutText(community.description);
-  const work = currentWork({
-    claimed: community.claimed,
-    operatorStatement: null,
-    softwareVersion: community.softwareVersion,
-    supportedNips: community.supportedNips,
-  });
-  const checks = explainChecks(facts);
   const shareUrl = `${process.env.PUBLIC_APP_ORIGIN ?? "https://buzzrouter.com"}/communities/${encodeURIComponent(community.relayHost)}`;
   const shareText = `${community.displayName} — a real, live Buzz community, verified by @buzzrouter`;
 
@@ -395,11 +401,11 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
                 </svg>
               </a>
             </div>
-            <p className={styles.inspectorSummary}>
-              {hasActivity && community.tagline
-                ? community.tagline
-                : (overview ?? `Hosted at ${community.relayHost}.`)}
-            </p>
+            {community.tagline ?? overview ? (
+              <p className={styles.inspectorSummary}>
+                {community.tagline ?? overview}
+              </p>
+            ) : null}
           </div>
         </div>
         <div className={styles.inspectorStatus}>
@@ -435,7 +441,7 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
         </div>
         <JoinButton
           candidateId={community.candidateId}
-          className={styles.copyButton}
+          className={keyless ? styles.copyButtonQuiet : styles.copyButton}
           communityName={community.displayName}
           inviteCode={community.inviteCode}
           joinStatus={community.joinStatus}
@@ -477,28 +483,7 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
             </dd>
           </div>
         </dl>
-      ) : (
-        <dl className={styles.inspectorMetrics}>
-          <div className={styles.metricTile}>
-            <dt>Uptime &middot; 30d</dt>
-            <dd>
-              {uptimeLabel(community)}
-              <span className={styles.metricNote}>
-                {community.evidenceSufficient
-                  ? "Successful relay checks"
-                  : "Not enough evidence yet"}
-              </span>
-            </dd>
-          </div>
-          <div className={styles.metricTile}>
-            <dt>Last checked</dt>
-            <dd>
-              {relativeTime(community.lastVerifiedAt)}
-              <span className={styles.metricNote}>Most recent relay probe</span>
-            </dd>
-          </div>
-        </dl>
-      )}
+      ) : null}
 
       {community.categories.length > 0 ? (
         <div className={styles.inspectorTags}>
@@ -541,33 +526,10 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
           </div>
         ) : null
       ) : (
-        <div className={styles.inspectorSections}>
-          {community.claimed && work ? (
-            <section className={styles.inspectorSection}>
-              <h3>Current work</h3>
-              <p>{work.text}</p>
-              <small>
-                {work.kind === "operator"
-                  ? "Shared by the community’s operator."
-                  : "Observed from the relay’s own published metadata."}
-              </small>
-            </section>
-          ) : null}
-          <section className={styles.inspectorSection}>
-            <h3>What we checked</h3>
-            <ul className={styles.reasonList}>
-              {checks.map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
-            <small>These are the ranking inputs, not a written summary.</small>
-          </section>
-          <section className={styles.inspectorSection}>
-            <h3>About</h3>
-            <p>{about.text}</p>
-            <small>From the relay&rsquo;s own published details.</small>
-          </section>
-        </div>
+        <p className={styles.inspectorNote}>
+          Verified live at the relay &mdash; but we don&rsquo;t have an agent
+          inside yet, so there&rsquo;s no activity to show.
+        </p>
       )}
       </MobileCollapsible>
 
@@ -662,11 +624,6 @@ function relativeTime(iso: string, now: Date = new Date()): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.round(hours / 24);
   return `${days}d ago`;
-}
-
-function uptimeLabel(community: DirectoryCommunity): string {
-  if (!community.evidenceSufficient || community.probesTotal <= 0) return "—";
-  return `${Math.round((community.probesSuccessful / community.probesTotal) * 100)}%`;
 }
 
 function reliabilityStatusClass(label: string): string {

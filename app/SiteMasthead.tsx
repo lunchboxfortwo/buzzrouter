@@ -7,18 +7,19 @@ import styles from "./site-chrome.module.css";
  * The single masthead for every public page. Both routes render this so the
  * brand, routes, active-state colour, and search field cannot drift apart.
  *
- * The directory already wraps its content in a GET form, and nesting forms is
- * invalid, so it passes `searchInForm` and lets the parent own submission.
+ * The directory owns its own GET form elsewhere on the page (nesting forms is
+ * invalid), so it passes that form's `searchFormId` and the search input
+ * associates to it via the HTML `form` attribute instead of being nested.
  * Every other page gets its own form pointing back at the directory.
  */
 export function SiteMasthead({
   current,
   searchDefaultValue = "",
-  searchInForm = false,
+  searchFormId,
 }: {
   current: "create" | "discover" | "shared-channels" | "submit";
   searchDefaultValue?: string;
-  searchInForm?: boolean;
+  searchFormId?: string;
 }) {
   const search = (
     <label className={styles.searchField}>
@@ -30,6 +31,7 @@ export function SiteMasthead({
       <input
         className={styles.searchInput}
         defaultValue={searchDefaultValue}
+        form={searchFormId}
         name="q"
         placeholder="Search communities or topics"
         type="search"
@@ -83,7 +85,7 @@ export function SiteMasthead({
           </Link>
         </nav>
 
-        {searchInForm ? (
+        {searchFormId ? (
           search
         ) : (
           <form action="/" className={styles.searchForm} method="GET">

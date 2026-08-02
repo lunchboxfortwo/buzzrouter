@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 
 import type { JoinStatus } from "../src/directory/joinability";
 import { launchJoin } from "./joinCascade";
+import { hostFromRelayUrl, trackJoinClick } from "./track";
 
 /**
  * One join action per community.
@@ -37,6 +38,11 @@ export function JoinButton({
   const [copied, setCopied] = useState(false);
 
   const openInApp = useCallback(() => {
+    trackJoinClick({
+      affordance: "invite_join",
+      candidateId,
+      host: hostFromRelayUrl(relayUrl),
+    });
     launchJoin({ candidateId, inviteCode, publicUrl: null, relayUrl });
   }, [candidateId, inviteCode, relayUrl]);
 
@@ -90,6 +96,13 @@ export function JoinButton({
       <a
         className={className}
         href={publicUrl}
+        onClick={() =>
+          trackJoinClick({
+            affordance: "open_community",
+            candidateId,
+            host: hostFromRelayUrl(relayUrl),
+          })
+        }
         rel="noopener noreferrer"
         target="_blank"
       >

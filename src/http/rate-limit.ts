@@ -131,3 +131,47 @@ export function resetRateLimitState(): void {
   perIpTimestamps.clear();
   globalTimestamps.length = 0;
 }
+
+// --- Events beacon limiter (POST /api/events) --------------------------------
+// Analytics beacons are far higher-volume than submissions, and dropping a
+// legitimate one loses data, so these caps only guard against a single flooding
+// client — not normal traffic. One 60s window each, per-IP and global.
+const EVENT_PER_IP_MINUTE_LIMIT = 60;
+const EVENT_GLOBAL_MINUTE_LIMIT = 1_000;
+const eventPerIpTimestamps = new Map<string, number[]>();
+const eventGlobalTimestamps: number[] = [];
+
+/** True if this event beacon is allowed (and recorded); false if throttled. */
+export function checkEventRateLimit(
+  ip: string,
+  now: number = Date.now(),
+): boolean {
+  const cutoff = now - 60_000;
+  const ipPruned = pruneBefore(eventPerIpTimestamps.get(ip) ?? [], cutoff);
+  const globalPruned = pruneBefore(eventGlobalTimestamps, cutoff);
+  replaceGlobalEvents(globalPruned);
+
+  if (
+    ipPruned.length >= EVENT_PER_IP_MINUTE_LIMIT ||
+    eventGlobalTimestamps.length >= EVENT_GLOBAL_MINUTE_LIMIT
+  ) {
+    if (ipPruned.length > 0) eventPerIpTimestamps.set(ip, ipPruned);
+    else eventPerIpTimestamps.delete(ip);
+    return false;
+  }
+
+  ipPruned.push(now);
+  eventPerIpTimestamps.set(ip, ipPruned);
+  eventGlobalTimestamps.push(now);
+  return true;
+}
+
+function replaceGlobalEvents(next: number[]): void {
+  eventGlobalTimestamps.length = 0;
+  for (const timestamp of next) eventGlobalTimestamps.push(timestamp);
+}
+
+export function resetEventRateLimitState(): void {
+  eventPerIpTimestamps.clear();
+  eventGlobalTimestamps.length = 0;
+}

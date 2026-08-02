@@ -47,12 +47,15 @@ Key routing rules:
   product bugs and is really one missing build.
 - **Android emulator harness** — `scripts/android-harness.sh` (boot / open /
   shot / handlers / stop). The join flow's last hop is a `buzz://` deep link to
-  a phone, which Playwright cannot see. Use it to LOOK at mobile pages: the
-  consent page shipped completely unstyled because it was "verified" by grepping
-  its HTML for the word "age" instead of rendering it. Note `buzz://` has 0
-  handlers unless the Buzz app is installed, and Buzz ships no Android artifact
-  on GitHub Releases, so the app itself can only be tested via a Play Store
-  install or by building `/tmp/block-buzz/mobile` with Flutter (not installed).
+  a phone, which Playwright cannot see. Use it to render mobile pages and inspect
+  the native handoff. Buzz mobile must already be installed and paired before it
+  can handle joins. `scripts/pair-android-buzz.ts` implements the desktop side of
+  Buzz's NIP-AB flow and pairs the existing emulator to a fresh in-memory
+  throwaway identity; it never prints or persists the nsec, pairing URI, session
+  secret, ciphertext, or receipt. Run it with `node --import tsx`, an HTTPS
+  `--identity-relay`, and the existing emulator serial. Never supply the
+  production bridge key. Buzz ships no Android artifact on GitHub Releases, so
+  install from the Play Store or a source build before using either harness.
 - If TCP auth to the system Postgres isn't set up, connect over the local
   unix socket instead (peer auth matches your OS user to a same-named role):
   `postgresql://<os-user>@/<dbname>?host=/var/run/postgresql`.

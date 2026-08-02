@@ -27,14 +27,14 @@ export const runtime = "nodejs";
 
 
 interface Filters {
-  agent: string;
   focus: string;
+  joinable: string;
   q: string;
 }
 
 interface PageSearchParams {
-  agent?: string | string[];
   focus?: string | string[];
+  joinable?: string | string[];
   q?: string | string[];
   selected?: string | string[];
 }
@@ -47,10 +47,10 @@ export default async function DirectoryPage({
   const params = await searchParams;
   const search = firstValue(params.q).trim().slice(0, 100);
   const focusFilter = firstValue(params.focus).trim();
-  const agentOnly = firstValue(params.agent) === "1";
+  const joinableOnly = firstValue(params.joinable) === "1";
   const filters: Filters = {
-    agent: agentOnly ? "1" : "",
     focus: focusFilter,
+    joinable: joinableOnly ? "1" : "",
     q: search,
   };
 
@@ -68,7 +68,7 @@ export default async function DirectoryPage({
 
   const communities = allCommunities.filter((community) => {
     if (focusFilter && community.focus !== focusFilter) return false;
-    if (agentOnly && !hasActivitySummary(community)) return false;
+    if (joinableOnly && joinAffordance(community) !== "join") return false;
     return true;
   });
 
@@ -76,7 +76,7 @@ export default async function DirectoryPage({
   const selected =
     communities.find((community) => community.candidateId === selectedId) ??
     communities[0];
-  const filtersApplied = Boolean(search || focusFilter || agentOnly);
+  const filtersApplied = Boolean(search || focusFilter || joinableOnly);
 
   return (
     <div className={`${chrome.siteCanvas} ${styles.page}`}>
@@ -175,14 +175,14 @@ export default async function DirectoryPage({
               </label>
               <label
                 className={styles.commandToggle}
-                title="Communities BuzzRouter's agent has joined — first-hand info, not just relay checks"
+                title="Communities you can join right now"
               >
                 <AutoSubmitCheckbox
                   form="directory-filters"
-                  name="agent"
+                  name="joinable"
                   value="1"
                 />
-                <span>Agent inside</span>
+                <span>Joinable</span>
               </label>
               <noscript>
                 <button
@@ -676,7 +676,7 @@ function buildHref(
   const params = new URLSearchParams();
   if (merged.q) params.set("q", merged.q);
   if (merged.focus) params.set("focus", merged.focus);
-  if (merged.agent) params.set("agent", merged.agent);
+  if (merged.joinable) params.set("joinable", merged.joinable);
   if (overrides.selected) params.set("selected", overrides.selected);
   const qs = params.toString();
   return `/${qs ? `?${qs}` : ""}`;

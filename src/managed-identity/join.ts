@@ -205,6 +205,11 @@ export async function joinCommunityWithManagedIdentity(
       } catch {
         return { displayName, relayHost: community.relayHost, status: "unreachable" };
       }
+      // The relay demanded a policy but advertises none: contradictory, and we
+      // will not invent an attestation on the visitor's behalf.
+      if (!policy) {
+        return { displayName, relayHost: community.relayHost, status: "error" };
+      }
       if (
         policy.version !== input.policyVersion ||
         (policy.ageAttestationRequired && input.ageConfirmed !== true)

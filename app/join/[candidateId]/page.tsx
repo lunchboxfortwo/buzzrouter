@@ -68,11 +68,18 @@ export default async function JoinPage({
 
   // The live policy is fetched at render for DISPLAY only — never a receipt,
   // which is short-lived and minted on the consent click (see JoinConsent).
+  //
+  // Three outcomes, and they are NOT the same. `null` from getJoinPolicy means
+  // the community configured no policy at all: nothing to accept, and a bare
+  // claim admits you. Only a throw means we genuinely could not reach the relay.
+  // Collapsing the two told visitors to BuzzRouter's own community "we couldn't
+  // reach it" and sent them on a pointless detour to Buzz.
   let policy: JoinPolicy | null = null;
+  let policyUnreachable = false;
   try {
     policy = await getJoinPolicy(target.host);
   } catch {
-    policy = null;
+    policyUnreachable = true;
   }
 
   return (
@@ -86,7 +93,7 @@ export default async function JoinPage({
           code={target.code}
           displayName={displayName}
           hostedFallbackUrl={hostedFallbackUrl}
-          policyUnavailable={policy === null}
+          policyUnavailable={policyUnreachable}
           policyVersion={policy?.version ?? ""}
           privacyMarkdown={policy?.privacyMarkdown ?? null}
           relayUrl={target.canonicalRelayUrl}

@@ -54,7 +54,9 @@ export async function POST(request: Request): Promise<Response> {
   if (typeof ageConfirmed !== "boolean") {
     return error(400, "invalid_age_confirmed");
   }
-  if (typeof policyVersion !== "string" || policyVersion.length === 0) {
+  // An EMPTY version is legitimate: the community advertised no policy, so the
+  // page had no version to echo back. The live read below settles it.
+  if (typeof policyVersion !== "string") {
     return error(400, "invalid_policy_version");
   }
 
@@ -70,6 +72,19 @@ export async function POST(request: Request): Promise<Response> {
     policy = await getJoinPolicy(target.host);
   } catch {
     return error(502, "policy_unavailable");
+  }
+  // No policy configured: there is nothing to accept and no receipt to mint.
+  // Hand back the bare code so the caller can deep-link straight in.
+  if (!policy) {
+    return Response.json(
+      {
+        code: target.code,
+        policyVersion: null,
+        receipt: null,
+        relayUrl: target.canonicalRelayUrl,
+      },
+      { headers: { "cache-control": "no-store" } },
+    );
   }
   if (policy.version !== policyVersion) {
     // The terms changed under the user — make them review again.

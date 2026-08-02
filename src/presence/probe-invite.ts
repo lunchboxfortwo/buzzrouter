@@ -68,7 +68,11 @@ export async function probeInvite(
   // everywhere the agent transacts with Buzz.
   let policyVersion: string;
   try {
-    policyVersion = (await getJoinPolicy(host, fetchImpl)).version;
+    const policy = await getJoinPolicy(host, fetchImpl);
+    // 403 join_policy_required but the relay advertises no policy: contradictory,
+    // so do not guess an attestation on the operator's behalf.
+    if (!policy) return "error";
+    policyVersion = policy.version;
   } catch {
     return "error";
   }

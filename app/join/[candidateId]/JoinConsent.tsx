@@ -48,7 +48,7 @@ export function JoinConsent({
 
   const consentSatisfied = ageAttestationRequired ? agreed : true;
 
-  const prepareReceipt = useCallback(async (): Promise<string> => {
+  const prepareReceipt = useCallback(async (): Promise<string | null> => {
     if (!consentSatisfied) {
       throw new Error("Please confirm the terms above before joining.");
     }
@@ -67,8 +67,10 @@ export function JoinConsent({
       };
       throw new Error(errorMessage(body.error, response.status));
     }
-    const { receipt } = (await response.json()) as { receipt: string };
-    return receipt;
+    // null receipt = this community configured no join policy, so there is
+    // nothing to accept and the bare code admits the joiner.
+    const { receipt } = (await response.json()) as { receipt: string | null };
+    return receipt ?? null;
   }, [
     ageAttestationRequired,
     agreed,

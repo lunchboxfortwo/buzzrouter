@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import chrome from "../site-chrome.module.css";
 import { SiteMasthead } from "../SiteMasthead";
+import { SharedChannelFlow } from "./shared-channel-flow";
 import { SharedChannelsClient } from "./shared-channels-client";
 import styles from "./shared-channels.module.css";
 
@@ -21,11 +22,11 @@ export default function SharedChannelsPage() {
               Shared channels on Buzz work like shared channels in Slack.
             </strong>{" "}
             Two communities each keep a channel of their own, and messages sent
-            in one show up in the other. Add the BuzzRouter bot to the channel
-            you want to share, then send messages there to reach the linked
-            community.
+            in one show up in the other. Each community first admits the
+            BuzzRouter bot; then the owners link their chosen channels.
           </p>
         </header>
+        <SharedChannelFlow />
         <SharedChannelsClient />
       </main>
     </div>

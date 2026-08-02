@@ -84,6 +84,23 @@ test("a phone with no extension links to BuzzRouter from an invite link", async 
       "Shared channels on Buzz work like shared channels in Slack.",
     ),
   ).toBeVisible();
+  const flow = page.getByRole("figure", {
+    name: "Two communities. One verified link.",
+  });
+  await expect(flow).toBeVisible();
+  await expect(flow.getByText("Admit both bots")).toBeVisible();
+  await expect(flow.getByText("Accept arms")).toBeVisible();
+  await expect(flow.getByText("Code verifies")).toBeVisible();
+  await expect(flow.getByText("Messages mirror")).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(flow.getByText("Both admitted")).toBeVisible();
+  await expect(flow.getByText("Armed · not live")).toBeVisible();
+  await expect(
+    flow.getByText(
+      "Franz - OrangeMagic · Sure, give me a couple of hours",
+    ),
+  ).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   await expect(
     page.getByRole("button", { name: "Connect signer" }),
   ).toHaveCount(0);

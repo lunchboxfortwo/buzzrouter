@@ -963,6 +963,38 @@
   border-color: var(--line-strong);
 }
 
+/* Secondary treatment for the keyless card, where the only action is copying
+   the relay URL (there is no invite to join with). It should not read as the
+   card's primary CTA — the owner "add an invite" prompt is what matters there. */
+.copyButtonQuiet {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.83rem;
+  font-weight: 600;
+  gap: 7px;
+  grid-area: join;
+  justify-content: center;
+  min-height: 40px;
+  min-width: 132px;
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+
+.copyButtonQuiet svg {
+  fill: none;
+  height: 16px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 16px;
+}
+
 .copyButton {
   align-items: center;
   background: var(--accent);
@@ -1087,6 +1119,19 @@
 
 .inspectorSections {
   border-bottom: 1px solid var(--line);
+}
+
+/* Quiet stand-in shown when we have no in-community agent yet: one honest line
+   instead of relay-probe telemetry (uptime / "what we checked" / boilerplate
+   about). Pairs with the owner "add an invite" prompt below it. */
+.inspectorNote {
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 60ch;
+  padding: 18px 20px;
 }
 
 .inspectorSection {

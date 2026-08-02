@@ -2,11 +2,16 @@ import { getDatabasePool } from "../../../../../src/db/pool";
 import { authenticateJsonRequest } from "../../../../../src/http/nostr-auth";
 import { ApiError } from "../../../../../src/http/api-error";
 import {
+  readInstallerRequest,
   requireObject,
   requireText,
   requireUuid,
   sharedChannelErrorResponse,
 } from "../../../../../src/shared-channels/http";
+import {
+  OWNER_SESSION_HEADER,
+  resolveOwnerSession,
+} from "../../../../../src/shared-channels/owner-session";
 import {
   armSharedChannelConfirmation,
   disconnectSharedChannel,
@@ -36,16 +41,30 @@ export async function POST(
     const sharedChannelId = requireUuid(params.id);
     const action = parseAction(params.action);
     const pool = getDatabasePool();
-    const authenticated = await authenticateJsonRequest(request, pool);
-    const body = requireObject(authenticated.value);
+    const token = request.headers.get(OWNER_SESSION_HEADER);
+    const session = token ? await resolveOwnerSession(pool, token) : null;
+    const authenticated = session
+      ? null
+      : await authenticateJsonRequest(request, pool);
+    const body = session
+      ? await readInstallerRequest(request)
+      : requireObject(authenticated!.value);
+    const communityId = requireUuid(body.communityId);
+    if (session && communityId !== session.communityId) {
+      throw new ApiError(
+        "owner_session_forbidden",
+        "The owner session does not match this community.",
+        403,
+      );
+    }
     const common = {
-      communityId: requireUuid(body.communityId),
+      communityId,
       idempotencyKey: requireText(
         body.idempotencyKey,
         200,
         "Idempotency key",
       ),
-      ownerPubkey: authenticated.pubkey,
+      ownerPubkey: session?.ownerPubkey ?? authenticated!.pubkey,
       sharedChannelId,
     };
 

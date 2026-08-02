@@ -9,13 +9,13 @@ import { resolve } from "node:path";
 process.env.NODE_EXTRA_CA_CERTS = resolve("e2e/fixtures/fake-relay-cert.pem");
 
 import { expect, test } from "@playwright/test";
-import type { EventTemplate } from "nostr-tools/core";
-import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
+import { getPublicKey } from "nostr-tools/pure";
 import { Pool } from "pg";
 
 import { encryptConnectorPrivateKey } from "../src/shared-channels/store";
 
 import { startFakeRelay, type FakeRelay } from "./support/fake-relay";
+import { openOwnerSessionWorkspace } from "./support/owner-session";
 
 /**
  * The DEFAULT link flow: the owner does NOT pre-make a channel. They pick a
@@ -62,10 +62,12 @@ test.afterAll(async () => {
 test("the bridge creates and hands off a dedicated channel for a link", async ({
   page,
 }) => {
-  await installSigner(page, source);
-
-  await page.goto("/shared-channels");
-  await page.getByRole("button", { name: "Connect signer" }).click();
+  await openOwnerSessionWorkspace(page, pool, {
+    communityId: source.communityId,
+    displayName: "E2E Alpha",
+    ownerPubkey: source.pubkey,
+    relayUrl: relay.url,
+  });
   await expect(page.getByLabel("Community", { exact: true })).toHaveValue(
     source.communityId,
   );
@@ -115,34 +117,6 @@ function createOwner(marker: number): Owner {
     privateKey,
     pubkey: getPublicKey(privateKey),
   };
-}
-
-async function installSigner(
-  page: import("@playwright/test").Page,
-  owner: Owner,
-): Promise<void> {
-  await page.exposeFunction("__testGetPublicKey", () => owner.pubkey);
-  await page.exposeFunction("__testSignEvent", (template: EventTemplate) =>
-    finalizeEvent(template, owner.privateKey),
-  );
-  await page.addInitScript(() => {
-    const testWindow = window as unknown as Window & {
-      __testGetPublicKey(): Promise<string>;
-      __testSignEvent(
-        template: EventTemplate,
-      ): Promise<Record<string, unknown>>;
-      nostr?: {
-        getPublicKey(): Promise<string>;
-        signEvent(
-          template: EventTemplate,
-        ): Promise<Record<string, unknown>>;
-      };
-    };
-    testWindow.nostr = {
-      getPublicKey: () => testWindow.__testGetPublicKey(),
-      signEvent: (template) => testWindow.__testSignEvent(template),
-    };
-  });
 }
 
 async function seed(

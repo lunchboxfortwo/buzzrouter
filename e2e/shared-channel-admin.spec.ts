@@ -1,15 +1,12 @@
 import { expect, test } from "@playwright/test";
-import type { EventTemplate } from "nostr-tools/core";
-import {
-  finalizeEvent,
-  getPublicKey,
-} from "nostr-tools/pure";
+import { getPublicKey } from "nostr-tools/pure";
 import { Pool } from "pg";
 
 import {
   armSharedChannelConfirmation,
   confirmSharedChannelBinding,
 } from "../src/shared-channels/store";
+import { openOwnerSessionWorkspace } from "./support/owner-session";
 
 interface Owner {
   communityId: string;
@@ -38,34 +35,7 @@ test.afterAll(async () => {
 test("owners control their side of a shared-channel route", async ({
   page,
 }) => {
-  let activeOwner = ownerA;
-  await page.exposeFunction("__testGetPublicKey", () => activeOwner.pubkey);
-  await page.exposeFunction(
-    "__testSignEvent",
-    (template: EventTemplate) =>
-      finalizeEvent(template, activeOwner.privateKey),
-  );
-  await page.addInitScript(() => {
-    const testWindow = window as unknown as Window & {
-      __testGetPublicKey(): Promise<string>;
-      __testSignEvent(
-        template: EventTemplate,
-      ): Promise<Record<string, unknown>>;
-      nostr?: {
-        getPublicKey(): Promise<string>;
-        signEvent(
-          template: EventTemplate,
-        ): Promise<Record<string, unknown>>;
-      };
-    };
-    testWindow.nostr = {
-      getPublicKey: () => testWindow.__testGetPublicKey(),
-      signEvent: (template) => testWindow.__testSignEvent(template),
-    };
-  });
-
-  await page.goto("/shared-channels");
-  await page.getByRole("button", { name: "Connect signer" }).click();
+  await openOwnerWorkspace(page, ownerA);
   await expect(page.getByLabel("Community", { exact: true })).toHaveValue(
     ownerA.communityId,
   );
@@ -89,8 +59,7 @@ test("owners control their side of a shared-channel route", async ({
   await page.getByRole("button", { name: "Send invitation" }).click();
   await expect(page.getByText("Invitation sent.")).toBeVisible();
 
-  activeOwner = ownerB;
-  await page.getByRole("button", { name: "Refresh" }).click();
+  await openOwnerWorkspace(page, ownerB);
   await expect(page.getByLabel("Community", { exact: true })).toHaveValue(
     ownerB.communityId,
   );
@@ -111,16 +80,14 @@ test("owners control their side of a shared-channel route", async ({
   });
   await expect(route).toContainText("active");
 
-  activeOwner = ownerA;
-  await page.getByRole("button", { name: "Refresh" }).click();
+  await openOwnerWorkspace(page, ownerA);
   route = page.locator("article").filter({
     hasText: "benchmark-review",
   });
   await route.getByRole("button", { name: "Pause" }).click();
   await expect(page.getByText("Your endpoint is paused.")).toBeVisible();
 
-  activeOwner = ownerB;
-  await page.getByRole("button", { name: "Refresh" }).click();
+  await openOwnerWorkspace(page, ownerB);
   route = page.locator("article").filter({
     hasText: "benchmark-review",
   });
@@ -129,16 +96,14 @@ test("owners control their side of a shared-channel route", async ({
     route.getByRole("button", { name: "Resume" }),
   ).toHaveCount(0);
 
-  activeOwner = ownerA;
-  await page.getByRole("button", { name: "Refresh" }).click();
+  await openOwnerWorkspace(page, ownerA);
   route = page.locator("article").filter({
     hasText: "benchmark-review",
   });
   await route.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByText("Your endpoint is active.")).toBeVisible();
 
-  activeOwner = ownerB;
-  await page.getByRole("button", { name: "Refresh" }).click();
+  await openOwnerWorkspace(page, ownerB);
   route = page.locator("article").filter({
     hasText: "benchmark-review",
   });
@@ -146,8 +111,7 @@ test("owners control their side of a shared-channel route", async ({
   await expect(page.getByText("Shared channel disconnected.")).toBeVisible();
   await expect(route).toContainText("disconnected");
 
-  activeOwner = ownerA;
-  await page.getByRole("button", { name: "Refresh" }).click();
+  await openOwnerWorkspace(page, ownerA);
   route = page.locator("article").filter({
     hasText: "benchmark-review",
   });
@@ -164,6 +128,18 @@ test("owners control their side of a shared-channel route", async ({
     )
     .toBe(true);
 });
+
+async function openOwnerWorkspace(
+  page: import("@playwright/test").Page,
+  owner: Owner,
+): Promise<void> {
+  await openOwnerSessionWorkspace(page, pool, {
+    communityId: owner.communityId,
+    displayName: owner === ownerA ? "E2E Alpha" : "E2E Beta",
+    ownerPubkey: owner.pubkey,
+    relayUrl: owner === ownerA ? "wss://alpha.example" : "wss://beta.example",
+  });
+}
 
 function createOwner(marker: number): Owner {
   const privateKey = new Uint8Array(32);

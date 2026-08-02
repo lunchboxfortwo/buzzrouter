@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
-import type { EventTemplate } from "nostr-tools/core";
 import { decode } from "nostr-tools/nip19";
-import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
+import { getPublicKey } from "nostr-tools/pure";
 import { Pool } from "pg";
+
+import { openOwnerSessionWorkspace } from "./support/owner-session";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (!databaseUrl) {
@@ -66,27 +67,12 @@ test.afterAll(async () => {
 test("an owner admits the bot with a pasted key rendered as an npub", async ({
   page,
 }) => {
-  await page.exposeFunction("__testGetPublicKey", () => ownerPubkey);
-  await page.exposeFunction("__testSignEvent", (template: EventTemplate) =>
-    finalizeEvent(template, privateKey),
-  );
-  await page.addInitScript(() => {
-    const testWindow = window as unknown as Window & {
-      __testGetPublicKey(): Promise<string>;
-      __testSignEvent(
-        template: EventTemplate,
-      ): Promise<Record<string, unknown>>;
-      nostr?: unknown;
-    };
-    testWindow.nostr = {
-      getPublicKey: () => testWindow.__testGetPublicKey(),
-      signEvent: (template: EventTemplate) =>
-        testWindow.__testSignEvent(template),
-    };
+  await openOwnerSessionWorkspace(page, pool, {
+    communityId,
+    displayName: "E2E bot",
+    ownerPubkey,
+    relayUrl,
   });
-
-  await page.goto("/shared-channels");
-  await page.getByRole("button", { name: "Connect signer" }).click();
   await expect(page.getByLabel("Community", { exact: true })).toHaveValue(
     communityId,
   );

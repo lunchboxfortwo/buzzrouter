@@ -77,7 +77,7 @@ export function JoinButton({
         onClick={openInApp}
         type="button"
       >
-        Open in Buzz
+        Join in Buzz
         <svg aria-hidden="true" viewBox="0 0 24 24">
           <path d="M5 12h14M13 6l6 6-6 6" />
         </svg>

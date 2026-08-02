@@ -111,6 +111,53 @@ test("search for something absent does not strand the visitor", async ({
   await expect(page.getByRole("navigation")).toBeVisible();
 });
 
+test("mobile navigation stays on one line and search stays on Discover", async ({
+  page,
+}) => {
+  await page.setViewportSize({ height: 568, width: 320 });
+  await page.goto("/");
+
+  const navLinks = page.getByRole("navigation").getByRole("link");
+  await expect(navLinks).toHaveText(["Discover", "Create", "Link", "List"]);
+  const linkTops = await navLinks.evaluateAll((links) =>
+    links.map((link) => Math.round(link.getBoundingClientRect().top)),
+  );
+  expect(new Set(linkTops).size).toBe(1);
+  const linkEdges = await navLinks.evaluateAll((links) =>
+    links.map((link) => {
+      const box = link.getBoundingClientRect();
+      return { left: Math.round(box.left), right: Math.round(box.right) };
+    }),
+  );
+  expect(
+    Math.min(...linkEdges.map(({ left }) => left)),
+  ).toBeGreaterThanOrEqual(0);
+  expect(
+    Math.max(...linkEdges.map(({ right }) => right)),
+  ).toBeLessThanOrEqual(320);
+  await expect(
+    page.getByPlaceholder("Search communities or topics"),
+  ).toBeVisible();
+
+  await page.goto("/create-community");
+  await expect(
+    page.getByPlaceholder("Search communities or topics"),
+  ).toHaveCount(0);
+});
+
+test("focus is directly available without a search-options disclosure", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await expect(
+    page.getByLabel("Filter communities").getByLabel("Focus"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Search options" }),
+  ).toHaveCount(0);
+});
+
 test("selecting a community shows its details in the inspector", async ({
   page,
 }) => {
@@ -132,6 +179,32 @@ test("selecting a community shows its details in the inspector", async ({
   await expect(
     page.getByText("Admission is by approval only.").first(),
   ).toBeVisible();
+  await expect(
+    page.getByRole("note", { name: /request an invite/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open Discover Locked Community in Buzz" }),
+  ).toHaveCount(0);
+});
+
+test("selecting a joinable community keeps its join action obvious on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ height: 667, width: 375 });
+  await page.goto("/");
+
+  await page
+    .getByRole("link", { name: "View Discover Open Community" })
+    .click();
+
+  const join = page.getByRole("button", {
+    name: "Open Discover Open Community in Buzz",
+  });
+  await expect(join).toBeVisible();
+  await expect(join).toHaveText(/Join in Buzz/);
+  const box = await join.boundingBox();
+  expect(box).not.toBeNull();
+  expect((box?.y ?? Infinity) + (box?.height ?? 0)).toBeLessThanOrEqual(667);
 });
 
 async function seedCommunity(

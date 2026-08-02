@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 
 import { buildJoinDeepLink } from "../../join-urls";
-import { ManagedIdentityJoin } from "./ManagedIdentityJoin";
 import styles from "./join.module.css";
 
 type Phase = "idle" | "minting" | "launched" | "error";
@@ -192,13 +191,6 @@ export function JoinConsent({
         </p>
       </section>
 
-      <ManagedIdentityJoin
-        ageConfirmed={ageAttestationRequired ? agreed : false}
-        candidateId={candidateId}
-        disabled={!consentSatisfied}
-        policyVersion={policyVersion}
-        relayHost={new URL(relayUrl).host}
-      />
     </>
   );
 }

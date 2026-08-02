@@ -83,7 +83,33 @@ test.afterAll(async () => {
 test("shows the real policy and mints a receipt only after a genuine consent tick", async ({
   page,
 }) => {
+  await page.setViewportSize({ height: 844, width: 390 });
   await page.goto(`/join/${candidateId}`);
+
+  // The join page uses the same shell as the rest of BuzzRouter.
+  await expect(page.getByRole("navigation")).toBeVisible();
+  await expect(page.locator("main")).toHaveCSS(
+    "font-family",
+    /Instrument Sans/,
+  );
+
+  // Browser joins bypass BuzzRouter's consent gate. The hosted Buzz page owns
+  // that handshake, so this direct link is available before the checkbox tick.
+  const continueOnWeb = page.getByRole("link", {
+    name: "Continue on the web",
+  });
+  await expect(continueOnWeb).toBeVisible();
+  await expect(continueOnWeb).toHaveAttribute(
+    "href",
+    `https://${new URL(relayUrl).host}/invite/e2e-invite-code`,
+  );
+
+  if (process.env.JOIN_SCREENSHOT_PATH) {
+    await page.screenshot({
+      fullPage: true,
+      path: process.env.JOIN_SCREENSHOT_PATH,
+    });
+  }
 
   // The actual policy is shown for review, and its text is reachable.
   await page.getByText("Terms of Service", { exact: true }).click();

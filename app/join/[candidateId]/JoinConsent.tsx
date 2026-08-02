@@ -127,65 +127,81 @@ export function JoinConsent({
 
   return (
     <>
-      <p className={styles.lead}>
-        Joining {displayName} means accepting the community operator's join
-        policy.
-      </p>
-
-      {termsMarkdown || privacyMarkdown ? (
-        <div className={styles.policy}>
-          {termsMarkdown ? (
-            <PolicySection text={termsMarkdown} title="Terms of Service" />
-          ) : null}
-          {privacyMarkdown ? (
-            <PolicySection text={privacyMarkdown} title="Privacy Notice" />
-          ) : null}
+      <section className={styles.webChoice}>
+        <div>
+          <p className={styles.choiceLabel}>Join in your browser</p>
+          <p>
+            Continue on the community&apos;s own Buzz page. Buzz will show its
+            terms and collect consent there, once.
+          </p>
         </div>
-      ) : null}
+        <a
+          className={styles.webButton}
+          href={hostedFallbackUrl}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          Continue on the web
+        </a>
+      </section>
 
-      {ageAttestationRequired ? (
-        <label className={styles.consent}>
-          <input
-            checked={agreed}
-            onChange={(event) => setAgreed(event.target.checked)}
-            type="checkbox"
-          />
-          <span>
-            I am 18 or older and I agree to the Terms of Service and Privacy
-            Notice above.
-          </span>
-        </label>
-      ) : null}
+      <div className={styles.divider} aria-hidden="true">
+        <span>or</span>
+      </div>
 
-      <button
-        className={styles.primary}
-        disabled={!consentSatisfied || phase === "minting"}
-        onClick={openInBuzz}
-        type="button"
-      >
-        {phase === "minting" ? "Preparing…" : "Open in Buzz"}
-      </button>
-
-      {phase === "launched" ? (
-        <p className={styles.muted} role="status">
-          Sending you to Buzz. If nothing happens, tap "Open in Buzz" again — the
-          approval is only valid for a few minutes.
+      <section className={styles.appChoice}>
+        <p className={styles.choiceLabel}>Open in the Buzz app</p>
+        <p className={styles.lead}>
+          The app needs BuzzRouter to carry your approval with the invite.
+          Review this community&apos;s policy, then confirm below.
         </p>
-      ) : null}
-      {phase === "error" && message ? (
-        <p className={styles.error} role="alert">
-          {message}
-        </p>
-      ) : null}
 
-      <a
-        className={styles.secondary}
-        href={hostedFallbackUrl}
-        rel="noopener noreferrer"
-        target="_blank"
-      >
-        Continue on the web instead
-      </a>
+        {termsMarkdown || privacyMarkdown ? (
+          <div className={styles.policy}>
+            {termsMarkdown ? (
+              <PolicySection text={termsMarkdown} title="Terms of Service" />
+            ) : null}
+            {privacyMarkdown ? (
+              <PolicySection text={privacyMarkdown} title="Privacy Notice" />
+            ) : null}
+          </div>
+        ) : null}
+
+        {ageAttestationRequired ? (
+          <label className={styles.consent}>
+            <input
+              checked={agreed}
+              onChange={(event) => setAgreed(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              I am 18 or older and I agree to the Terms of Service and Privacy
+              Notice above.
+            </span>
+          </label>
+        ) : null}
+
+        <button
+          className={styles.primary}
+          disabled={!consentSatisfied || phase === "minting"}
+          onClick={openInBuzz}
+          type="button"
+        >
+          {phase === "minting" ? "Preparing…" : "Open in Buzz"}
+        </button>
+
+        {phase === "launched" ? (
+          <p className={styles.muted} role="status">
+            Sending you to Buzz. If nothing happens, tap "Open in Buzz" again —
+            the approval is only valid for a few minutes.
+          </p>
+        ) : null}
+        {phase === "error" && message ? (
+          <p className={styles.error} role="alert">
+            {message}
+          </p>
+        ) : null}
+      </section>
 
       <ManagedIdentityJoin
         ageConfirmed={ageAttestationRequired ? agreed : false}

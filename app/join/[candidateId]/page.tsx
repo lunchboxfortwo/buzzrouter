@@ -8,6 +8,8 @@ import { getDatabasePool } from "../../../src/db/pool";
 import { isUuid } from "../../../src/http/validation";
 import { getJoinPolicy, type JoinPolicy } from "../../../src/presence/policy";
 import { buildInviteUrl } from "../../join-urls";
+import chrome from "../../site-chrome.module.css";
+import { SiteMasthead } from "../../SiteMasthead";
 import { JoinConsent } from "./JoinConsent";
 import styles from "./join.module.css";
 
@@ -91,17 +93,16 @@ function Shell({
   host: string;
 }) {
   return (
-    <div className={styles.page}>
-      <div className={styles.card}>
-        <div className={styles.head}>
-          <Link className={styles.brand} href="/">
-            BuzzRouter
-          </Link>
+    <div className={chrome.siteCanvas}>
+      <SiteMasthead current="discover" />
+      <main className={styles.page}>
+        <div className={styles.card}>
+          <p className={styles.eyebrow}>Community invite</p>
+          <h1 className={styles.title}>Join {displayName}</h1>
+          <div className={styles.host}>{host}</div>
+          {children}
         </div>
-        <h1 className={styles.title}>Join {displayName}</h1>
-        <div className={styles.host}>{host}</div>
-        {children}
-      </div>
+      </main>
     </div>
   );
 }

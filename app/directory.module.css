@@ -454,6 +454,41 @@
   outline: 0;
 }
 
+/* "Agent inside" filter — a toggle pill beside the Focus filter. It turns
+   accent when on, so the active state reads at a glance. */
+.commandToggle {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.86rem;
+  font-weight: 600;
+  gap: 8px;
+  height: 46px;
+  padding: 0 14px;
+  transition:
+    background var(--duration) var(--ease),
+    border-color var(--duration) var(--ease),
+    color var(--duration) var(--ease);
+}
+
+.commandToggle:has(input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.commandToggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+  height: 15px;
+  margin: 0;
+  width: 15px;
+}
+
 .applyButton {
   align-items: center;
   background: var(--surface);

@@ -7,10 +7,9 @@
 # member of that relay — but we OPERATE the relay, so we can mint an admin,
 # use it once, and throw it away. No long-lived secret is stored anywhere.
 #
-# It also has to run on a schedule: this relay caps invite lifetime at ~2 days
-# regardless of the requested expiry (asked for 365, got 2). Other relays issue
-# 18-24 day codes, so this cap is local config, not protocol. Until it is
-# raised, a stale code means a dead join button.
+# It still has to run on a schedule: the relay ceiling is 30 days
+# (MAX_INVITE_TTL_SECS in buzz-core/src/invite.rs), so a code always ages out
+# eventually and a stale code is a dead join button. Run this well inside 30d.
 #
 # Usage:  scripts/refresh-home-invite.sh          # mint + store
 #         scripts/refresh-home-invite.sh --check  # report current expiry only
@@ -60,7 +59,10 @@ code=$(node -e '
   const {finalizeEvent}=require("nostr-tools/pure");
   const sk=Buffer.from(readFileSync(process.argv[1]+"/sk","utf8").trim(),"hex");
   const url=`https://${process.argv[2]}/api/invites`;
-  const body=JSON.stringify({max_uses:0, expires_in_days:365, role:"member"});
+  // MintInviteRequest takes ttl_secs (NOT expires_in_days, which serde drops
+  // silently, falling back to the 72h default). Ceiling is 30 days,
+  // max_uses ceiling is 10_000 (buzz-core/src/invite.rs).
+  const body=JSON.stringify({ttl_secs: 30*24*60*60, max_uses: 10000});
   const ev=finalizeEvent({kind:27235,created_at:Math.floor(Date.now()/1000),content:"",
     tags:[["u",url],["method","POST"],["nonce",randomUUID()],
           ["payload",createHash("sha256").update(body).digest("hex")]]},sk);

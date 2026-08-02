@@ -234,19 +234,22 @@
     width: 30px;
   }
 
-  /* The masthead scrolls away on phones, so the nav can have a full row and
-     fit all three routes without a hidden sideways swipe. */
+  /* The masthead scrolls away on phones. Give the four full route labels a
+     compact 2x2 grid instead of forcing a hidden sideways swipe. */
   .nav {
+    display: grid;
     grid-column: 1 / -1;
     grid-row: 2;
-    justify-content: space-between;
-    margin-inline: -8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-inline: 0;
   }
 
   .navLink {
     flex: 0 1 auto;
     font-size: 0.86rem;
+    justify-content: center;
     padding-inline: 8px;
+    text-align: center;
   }
 
   .searchField,

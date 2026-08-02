@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 
 import { buildJoinDeepLink } from "../../join-urls";
+import { ManagedIdentityJoin } from "./ManagedIdentityJoin";
 import styles from "./join.module.css";
 
 type Phase = "idle" | "minting" | "launched" | "error";
@@ -47,47 +48,58 @@ export function JoinConsent({
 
   const consentSatisfied = ageAttestationRequired ? agreed : true;
 
+  const prepareReceipt = useCallback(async (): Promise<string> => {
+    if (!consentSatisfied) {
+      throw new Error("Please confirm the terms above before joining.");
+    }
+    const response = await fetch("/api/invite-receipt", {
+      body: JSON.stringify({
+        ageConfirmed: ageAttestationRequired ? agreed : false,
+        candidateId,
+        policyVersion,
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      throw new Error(errorMessage(body.error, response.status));
+    }
+    const { receipt } = (await response.json()) as { receipt: string };
+    return receipt;
+  }, [
+    ageAttestationRequired,
+    agreed,
+    candidateId,
+    consentSatisfied,
+    policyVersion,
+  ]);
+
   const openInBuzz = useCallback(async () => {
     if (!consentSatisfied || phase === "minting") return;
     setPhase("minting");
     setMessage(null);
     try {
-      const response = await fetch("/api/invite-receipt", {
-        body: JSON.stringify({
-          ageConfirmed: ageAttestationRequired ? agreed : false,
-          candidateId,
-          policyVersion,
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        setPhase("error");
-        setMessage(errorMessage(body.error, response.status));
-        return;
-      }
-      const { receipt } = (await response.json()) as { receipt: string };
+      const receipt = await prepareReceipt();
       const deepLink = buildJoinDeepLink(relayUrl, code, receipt);
       setPhase("launched");
       // Hand straight off to the app while the fresh receipt is still valid.
       window.location.href = deepLink;
-    } catch {
+    } catch (error) {
       setPhase("error");
       setMessage(
-        "Couldn't reach BuzzRouter to prepare your join. Check your connection and try again.",
+        error instanceof Error
+          ? error.message
+          : "Couldn't reach BuzzRouter to prepare your join. Check your connection and try again.",
       );
     }
   }, [
-    ageAttestationRequired,
-    agreed,
-    candidateId,
     code,
     consentSatisfied,
     phase,
-    policyVersion,
+    prepareReceipt,
     relayUrl,
   ]);
 
@@ -174,6 +186,14 @@ export function JoinConsent({
       >
         Continue on the web instead
       </a>
+
+      <ManagedIdentityJoin
+        ageConfirmed={ageAttestationRequired ? agreed : false}
+        candidateId={candidateId}
+        disabled={!consentSatisfied}
+        policyVersion={policyVersion}
+        relayHost={new URL(relayUrl).host}
+      />
     </>
   );
 }

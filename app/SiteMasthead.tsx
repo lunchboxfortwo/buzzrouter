@@ -16,7 +16,7 @@ export function SiteMasthead({
   searchDefaultValue = "",
   searchInForm = false,
 }: {
-  current: "create" | "discover" | "join" | "shared-channels" | "submit";
+  current: "create" | "discover" | "shared-channels" | "submit";
   searchDefaultValue?: string;
   searchInForm?: boolean;
 }) {
@@ -61,32 +61,25 @@ export function SiteMasthead({
             Discover
           </Link>
           <Link
-            aria-current={current === "join" ? "page" : undefined}
-            className={styles.navLink}
-            href="/join"
-          >
-            Join
-          </Link>
-          <Link
             aria-current={current === "create" ? "page" : undefined}
             className={styles.navLink}
             href="/create-community"
           >
-            Create
+            Create a community
           </Link>
           <Link
             aria-current={current === "shared-channels" ? "page" : undefined}
             className={styles.navLink}
             href="/shared-channels"
           >
-            Link
+            Shared channels
           </Link>
           <Link
             aria-current={current === "submit" ? "page" : undefined}
             className={styles.navLink}
             href="/submit"
           >
-            List
+            List a community
           </Link>
         </nav>
 

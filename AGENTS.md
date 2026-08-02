@@ -353,17 +353,18 @@ next number in the old sequence — see `migrations/README.md`. Existing
   `POST /api/identity/export` (nsec, once, marks `exported_at`). `store.ts` and
   `join.ts` deliberately never log it — see the no-leak assertions in
   `store.integration.test.ts` and `join.test.ts`.
-- Click-to-join (`join.ts`) resolves the community server-side by relay host
-  (never trusting a client-supplied invite code), pins the claim URL to the
-  on-record relay via the connector's `resolveInviteClaimTarget` (SSRF control),
-  and returns a STRUCTURED outcome — a refused claim (`403 join_policy_required`)
-  is `status: "refused"` with a plain reason, not a thrown error to retry.
+- Click-to-join (`join.ts`) resolves the community server-side by candidate id
+  (never trusting a client-supplied relay or invite code), pins the claim URL to
+  the on-record relay via the connector's `resolveInviteClaimTarget` (SSRF
+  control), and submits the fresh consent-minted policy receipt with the claim.
+  Relay refusals remain structured outcomes, not thrown errors to retry.
 - Rate limits live in `src/managed-identity/rate-limit.ts` (generic keyed
   sliding window, separate from the submission limiter): joins are capped per
   managed pubkey well under the upstream 10/60s so we are not an abuse amplifier.
-- UI is `app/join/` (server list + `JoinClient`); custody is disclosed up front,
-  never buried. E2e: `e2e/managed-identity-join.spec.ts` runs the whole journey
-  against the fake relay's `/api/invites/claim` stub.
+- UI is the Discover-routed `app/join/[candidateId]/` consent page; its keyless
+  option keeps custody disclosed up front and uses the same click-minted policy
+  receipt as the Buzz handoff. E2e: `e2e/managed-identity-join.spec.ts` runs the
+  whole journey against a policy-enforcing fake relay.
 ## Directory "joinable" = make the join work, don't hide the community
 
 - Holding an invite code is not proof a bare deep link (`buzz://join?relay&code`)

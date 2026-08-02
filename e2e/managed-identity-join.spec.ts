@@ -1,7 +1,8 @@
 // The managed-identity click-to-join journey, end to end through the REAL app
-// routes: a visitor with no key opens /join, presses Join on a community, and
-// BuzzRouter mints + holds a Nostr key for them and claims the invite on their
-// behalf against the (fake) community relay. Then they export the key.
+// routes: a visitor with no key starts in Discover, opens one community's
+// consent page, accepts its real policy, and chooses the keyless join option.
+// BuzzRouter then mints + holds a Nostr key and claims the invite with the fresh
+// policy receipt. Then the visitor exports the key.
 //
 // Only the community relay is a fake (in-process HTTPS server the app already
 // trusts via NODE_EXTRA_CA_CERTS). Identity creation, the encrypted-at-rest
@@ -23,7 +24,15 @@ let relay: FakeRelay;
 let relayHost: string;
 
 test.beforeAll(async () => {
-  relay = await startFakeRelay([{ id: "general", name: "general" }]);
+  relay = await startFakeRelay([{ id: "general", name: "general" }], {
+    joinPolicy: {
+      ageAttestationRequired: true,
+      privacyMarkdown: "KEYLESS E2E PRIVACY NOTICE",
+      receipt: "keyless-e2e-receipt",
+      termsMarkdown: "KEYLESS E2E TERMS",
+      version: "keyless-e2e-v1",
+    },
+  });
   relayHost = relay.url.slice("wss://".length);
   pool = new Pool({ connectionString: databaseUrl });
   await resetDatabase(pool);
@@ -43,50 +52,63 @@ test.afterAll(async () => {
 test("a keyless visitor joins a community and can export the managed key", async ({
   page,
 }) => {
-  await page.goto("/join");
+  await page.goto("/");
+
+  await expect(page.getByRole("navigation").getByRole("link")).toHaveText([
+    "Discover",
+    "Create a community",
+    "Shared channels",
+    "List a community",
+  ]);
+  const [joinPage] = await Promise.all([
+    page.context().waitForEvent("page"),
+    page.getByRole("button", { name: "Join Test Joinable Community" }).click(),
+  ]);
+  await joinPage.waitForLoadState("domcontentloaded");
 
   // Custody is disclosed up front, not buried.
   await expect(
-    page.getByRole("heading", { name: "BuzzRouter holds your key" }),
+    joinPage.getByRole("heading", { name: "BuzzRouter holds your key" }),
   ).toBeVisible();
-  await expect(page.getByText(/encrypted on our servers/i)).toBeVisible();
+  await expect(joinPage.getByText(/encrypted on our servers/i)).toBeVisible();
 
-  // The seeded community is listed with a Join affordance.
-  await expect(page.getByText("Test Joinable Community")).toBeVisible();
-  const row = page
-    .locator("li", { hasText: "Test Joinable Community" })
-    .first();
-  const join = row.getByRole("button", { name: "Join" });
+  // The same real consent gate controls both Buzz and keyless entry.
+  const consent = joinPage.getByRole("checkbox");
+  await expect(consent).not.toBeChecked();
+  const join = joinPage.getByRole("button", { name: "Join without Buzz" });
+  await expect(join).toBeDisabled();
+  await consent.check();
+  await expect(join).toBeEnabled();
   await join.click();
 
-  // A managed identity is created on demand and the invite is claimed for it,
-  // so the button settles on "Joined".
-  await expect(row.getByRole("button", { name: "Joined" })).toBeVisible({
+  // The relay rejects bare claims in this fixture, so Joined proves the fresh
+  // receipt travelled through the managed-identity claim.
+  await expect(joinPage.getByRole("button", { name: "Joined" })).toBeVisible({
     timeout: 15_000,
   });
 
   // The durable session cookie is set (HttpOnly), so the identity persists.
-  const cookies = await page.context().cookies();
+  const cookies = await joinPage.context().cookies();
   const sessionCookie = cookies.find((c) => c.name === "br_identity");
   expect(sessionCookie?.httpOnly).toBe(true);
 
   // The identity now shows in the custody panel.
-  await expect(page.locator("code", { hasText: /^npub1/ })).toBeVisible();
+  await expect(joinPage.locator("code", { hasText: /^npub1/ })).toBeVisible();
 
   // Export reveals the nsec exactly once, with a plain custody warning.
-  await page.getByRole("button", { name: "Export my key" }).click();
-  const dialog = page.getByRole("dialog");
+  await joinPage.getByRole("button", { name: "Export my key" }).click();
+  const dialog = joinPage.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText(/exists outside BuzzRouter's custody/i)).toBeVisible();
   const nsecBoxes = dialog.locator("code", { hasText: /^nsec1/ });
   await expect(nsecBoxes).toHaveCount(1);
-  await expect(page.getByRole("button", { name: "Copy nsec" })).toBeVisible();
+  await expect(joinPage.getByRole("button", { name: "Copy nsec" })).toBeVisible();
 
   // Dismissing hides the secret; the custody panel now flags the export.
   await dialog.getByRole("button", { name: "I've saved it" }).click();
   await expect(dialog).toBeHidden();
   await expect(
-    page.getByText(/a copy exists outside our custody/i),
+    joinPage.getByText(/a copy exists outside our custody/i),
   ).toBeVisible();
 });
 

@@ -4,6 +4,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   alreadyRows: [] as { id: string }[],
+  inviteTarget: {
+    candidateId: "11111111-1111-4111-8111-111111111111",
+    canonicalRelayUrl: "wss://relay.example.com/",
+    code: "inv123",
+    host: "relay.example.com",
+  } as {
+    candidateId: string;
+    canonicalRelayUrl: string;
+    code: string;
+    host: string;
+  } | null,
   community: null as {
     canonicalRelayUrl: string;
     displayName: string | null;
@@ -13,6 +24,10 @@ const state = vi.hoisted(() => ({
   privateKey: new Uint8Array(32) as Uint8Array,
   pubkey: "",
   recordMembership: vi.fn(),
+}));
+
+vi.mock("../db/join-probes", () => ({
+  getCandidateInviteTarget: vi.fn(async () => state.inviteTarget),
 }));
 
 vi.mock("../db/directory", () => ({
@@ -32,6 +47,13 @@ vi.mock("./store", () => ({
 
 import { joinCommunityWithManagedIdentity } from "./join";
 
+const JOIN_INPUT = {
+  ageConfirmed: true,
+  candidateId: "11111111-1111-4111-8111-111111111111",
+  identityId: "id-1",
+  policyVersion: "v1",
+};
+
 function fakePool(): Pool {
   return {
     query: vi.fn(async () => ({ rows: state.alreadyRows })),
@@ -46,6 +68,12 @@ beforeEach(() => {
   state.privateKey = generateSecretKey();
   state.pubkey = getPublicKey(state.privateKey);
   state.alreadyRows = [];
+  state.inviteTarget = {
+    candidateId: JOIN_INPUT.candidateId,
+    canonicalRelayUrl: "wss://relay.example.com/",
+    code: "inv123",
+    host: "relay.example.com",
+  };
   state.community = {
     canonicalRelayUrl: "wss://relay.example.com/",
     displayName: "Example Community",
@@ -72,7 +100,7 @@ describe("joinCommunityWithManagedIdentity", () => {
 
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -82,6 +110,7 @@ describe("joinCommunityWithManagedIdentity", () => {
       role: "member",
       status: "joined",
     });
+    expect(JSON.stringify(outcome)).not.toContain("policy-receipt");
     expect(state.recordMembership).toHaveBeenCalledTimes(1);
 
     // SSRF: the claim is pinned to the community's on-record relay over https,
@@ -97,36 +126,64 @@ describe("joinCommunityWithManagedIdentity", () => {
     );
   });
 
-  it("returns a clear 'refused' outcome for join_policy_required (no membership recorded)", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse(403, { error: "join_policy_required" }),
-    );
+  it("accepts a required policy with the managed key and retries with its receipt", async () => {
+    let claimAttempts = 0;
+    let acceptPubkey = "";
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/api/join-policy")) {
+        return jsonResponse(200, {
+          policy: { age_attestation_required: true, version: "v1" },
+        });
+      }
+      if (url.endsWith("/api/invites/accept-policy")) {
+        expect(init?.body).toBe(
+          JSON.stringify({
+            age_confirmed: true,
+            code: "inv123",
+            policy_version: "v1",
+          }),
+        );
+        acceptPubkey = nip98Pubkey(init);
+        return jsonResponse(200, { receipt: "policy-receipt" });
+      }
+      if (url.endsWith("/api/invites/claim")) {
+        claimAttempts += 1;
+        if (claimAttempts === 1) {
+          expect(init?.body).toBe(JSON.stringify({ code: "inv123" }));
+          return jsonResponse(403, { error: "join_policy_required" });
+        }
+        expect(init?.body).toBe(
+          JSON.stringify({ code: "inv123", policy_receipt: "policy-receipt" }),
+        );
+        expect(nip98Pubkey(init)).toBe(acceptPubkey);
+        return jsonResponse(200, { community_id: "c-1", role: "member" });
+      }
+      return jsonResponse(404, {});
+    });
 
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
 
-    expect(outcome.status).toBe("refused");
-    if (outcome.status === "refused") {
-      expect(outcome.reason).toMatch(/approval/i);
-    }
-    expect(state.recordMembership).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("joined");
+    expect(claimAttempts).toBe(2);
+    expect(state.recordMembership).toHaveBeenCalledTimes(1);
   });
 
   it("gives a generic refusal for a 403 without a known policy signal", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(403, {}));
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
     expect(outcome.status).toBe("refused");
     if (outcome.status === "refused") {
-      expect(outcome.reason).toMatch(/declined/i);
+      expect(outcome.reason).toBe("This community declined the join request.");
     }
   });
 
@@ -136,7 +193,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     );
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -149,7 +206,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     });
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -160,7 +217,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     const fetchImpl = vi.fn(async () => jsonResponse(500, {}));
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -172,7 +229,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     const fetchImpl = vi.fn();
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -180,17 +237,12 @@ describe("joinCommunityWithManagedIdentity", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("is not_joinable when the community exposes no invite code", async () => {
-    state.community = {
-      canonicalRelayUrl: "wss://relay.example.com/",
-      displayName: "Example",
-      inviteCode: null,
-      relayHost: "relay.example.com",
-    };
+  it("is not_joinable when the candidate no longer has an invite", async () => {
+    state.inviteTarget = null;
     const fetchImpl = vi.fn();
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -202,7 +254,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     state.community = null;
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "nope.example.com" },
+      JOIN_INPUT,
       undefined,
       (vi.fn() as unknown) as typeof fetch,
     );
@@ -215,7 +267,7 @@ describe("joinCommunityWithManagedIdentity", () => {
     );
     const outcome = await joinCommunityWithManagedIdentity(
       fakePool(),
-      { identityId: "id-1", relayHost: "relay.example.com" },
+      JOIN_INPUT,
       undefined,
       fetchImpl as unknown as typeof fetch,
     );
@@ -223,3 +275,14 @@ describe("joinCommunityWithManagedIdentity", () => {
     expect(JSON.stringify(outcome)).not.toContain(secretHex);
   });
 });
+
+function nip98Pubkey(init: RequestInit | undefined): string {
+  const authorization = String(
+    (init?.headers as Record<string, string> | undefined)?.authorization ?? "",
+  );
+  const encoded = authorization.replace(/^Nostr /, "");
+  const event = JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as {
+    pubkey: string;
+  };
+  return event.pubkey;
+}

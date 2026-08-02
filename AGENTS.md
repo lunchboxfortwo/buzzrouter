@@ -39,8 +39,12 @@ Key routing rules:
   `*.integration.test.ts` glob to get the same serialization.
 - There is no React component-testing library (no RTL/jsdom config) — client
   component behavior is covered by Playwright specs in `e2e/` instead
-  (`npm run test:e2e`, needs `TEST_DATABASE_URL` and the app running per
-  `playwright.config.ts`, which builds+starts it automatically).
+  (`npm run test:e2e`, needs `TEST_DATABASE_URL`).
+- **Run `npm run build` yourself before Playwright.** `playwright.config.ts`'s
+  `webServer.command` is `npm run start`, which serves whatever is already in
+  `.next` — it does NOT build. A stale `.next` fails nearly every spec with
+  "element(s) not found" on pages that are actually fine; that reads as ~18
+  product bugs and is really one missing build.
 - If TCP auth to the system Postgres isn't set up, connect over the local
   unix socket instead (peer auth matches your OS user to a same-named role):
   `postgresql://<os-user>@/<dbname>?host=/var/run/postgresql`.

@@ -75,6 +75,14 @@
   width: min(100% - 32px, 1440px);
 }
 
+.headerInnerWithoutSearch {
+  grid-template-columns: auto 1fr;
+}
+
+.headerInnerWithoutSearch .nav {
+  justify-self: end;
+}
+
 .brand {
   align-items: center;
   color: var(--ink);
@@ -234,21 +242,20 @@
     width: 30px;
   }
 
-  /* The masthead scrolls away on phones. Give the four full route labels a
-     compact 2x2 grid instead of forcing a hidden sideways swipe. */
   .nav {
-    display: grid;
+    display: flex;
     grid-column: 1 / -1;
     grid-row: 2;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-inline: 0;
+    width: 100%;
   }
 
   .navLink {
-    flex: 0 1 auto;
+    flex: 1 1 0;
     font-size: 0.86rem;
     justify-content: center;
-    padding-inline: 8px;
+    min-width: 0;
+    padding-inline: 6px;
     text-align: center;
   }
 

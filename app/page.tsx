@@ -152,7 +152,6 @@ export default async function DirectoryPage({
               </svg>
             </header>
 
-            <MobileCollapsible label="Search options">
             <section aria-label="Filter communities" className={styles.commandBar}>
               <label className={styles.commandFilter}>
                 <span>Focus</span>
@@ -183,7 +182,6 @@ export default async function DirectoryPage({
                 {communities.length === 1 ? "result" : "results"}
               </span>
             </section>
-            </MobileCollapsible>
 
             <div className={styles.workspaceGrid}>
               <section

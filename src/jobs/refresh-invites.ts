@@ -101,7 +101,10 @@ export async function refreshStaleInvites(
         continue;
       }
 
-      const dead = health === "expired" || health === "invalid";
+      const dead =
+        health === "expired" ||
+        health === "invalid" ||
+        health === "exhausted";
       const currentExpiry = parseInviteExpiry(directory.code);
       const expiringSoon =
         currentExpiry !== null &&

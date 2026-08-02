@@ -11,7 +11,7 @@
  * It is NOT a test and NEVER runs in CI: it is gated behind an env flag and
  * consumes one real invite use on success (the throwaway key genuinely joins).
  * Run it by hand, once, against one community; respect the relay's
- * 10-claims/60s-per-pubkey limit and do not loop it.
+ * 10 claims per 60s per-pubkey limit and do not loop it.
  *
  *   BUZZROUTER_VERIFY_RECEIPT_JOIN_LIVE=1 \
  *   VERIFY_HOST=<host> \

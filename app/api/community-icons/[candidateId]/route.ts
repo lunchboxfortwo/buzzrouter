@@ -1,5 +1,5 @@
-import { requireUuid } from "../../../../src/claims/http";
 import { getDatabasePool } from "../../../../src/db/pool";
+import { requireUuid } from "../../../../src/http/validation";
 
 export const runtime = "nodejs";
 

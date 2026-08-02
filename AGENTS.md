@@ -49,12 +49,11 @@ Key routing rules:
   unix socket instead (peer auth matches your OS user to a same-named role):
   `postgresql://<os-user>@/<dbname>?host=/var/run/postgresql`.
 - `e2e/shared-channel-unseeded-journey.spec.ts` drives the whole new-owner
-  journey (claim → publish → connector activation → propose → accept) from a
-  bare `verified_buzz` candidate, using an in-process fake `wss://` relay
+  journey (search → invite admission → connector activation → propose → accept)
+  from a bare `verified_buzz` candidate, using in-process fake `wss://` relays
   (`e2e/support/fake-relay.ts`) plus the committed cert/wrapping-key fixtures
-  and connector env in `playwright.config.ts`. The only un-CI-able step, the
-  claim-proof network hop (DNS/HTTPS/hosted-icon), is skipped explicitly and
-  documented in that spec — do not add live-path proof bypasses to make it run.
+  and connector env in `playwright.config.ts`. No ownership claim or editable
+  directory listing is part of this flow.
 
 ## Migrations & the deploy verification gate
 
@@ -146,9 +145,11 @@ Key routing rules:
   management) — that path still requires NIP-98.
 - `POST /api/community-connections/begin-from-invite` (UNSIGNED,
   `beginConnectionFromInvite`) identifies the community from the pasted invite
-  LINK's relay host (`findVerifiedCommunityByRelayUrl`), reuses the existing
-  signed-owner install path with the community's RECORDED owner pubkey, redeems +
-  activates, then mints a short-lived, community-scoped **owner session**
+  LINK's relay host (`findVerifiedCommunityCandidateByRelayUrl`). Only after the
+  relay accepts the invite does `enrollVerifiedCommunityFromInvite` enroll a
+  bare candidate with a random session principal; an existing hosted or
+  signed-owner identity is preserved. The flow then activates and mints
+  a short-lived, community-scoped **owner session**
   (`src/shared-channels/owner-session.ts`, `connection_owner_sessions`,
   migration `20260801T0900_connection_owner_sessions.sql`). The session rides in
   the `x-owner-session` header in place of
@@ -294,9 +295,8 @@ next number in the old sequence — see `migrations/README.md`. Existing
   description/categories reuse the existing `source_display_name` /
   `source_description` / `source_categories` columns from
   `migrations/0005_catalog_discovery.sql`). `communities.description`/
-  `categories`/`focus` aren't touched — those rows don't exist until claim
-  (`src/claims/store.ts`), and nothing currently promotes `community_sources`
-  submission data onto them; the public directory only reads `catalog`
+  `categories`/`focus` aren't touched, and nothing currently promotes
+  `community_sources` submission data onto them; the public directory only reads `catalog`
   sources typed `'buzzdir'` (`src/db/directory.ts`), not `'submission'`.
 - Focus options come from `src/ranking/focus.ts` (`FOCUS_SLUGS`); categories
   from `src/submissions/categories.ts` (`SUBMISSION_CATEGORY_SLUGS`) — kept
@@ -305,7 +305,7 @@ next number in the old sequence — see `migrations/README.md`. Existing
 - `GET /api/submissions/prefill?relayUrl=` (`src/db/directory.ts`'s
   `getSubmissionPrefill`) looks up already-known display name/description/
   categories/focus for a relay that's already a candidate (from prior
-  discovery, probes, or a claimed public listing), so a submitter isn't
+  discovery, probes, or catalog metadata), so a submitter isn't
   asked to retype what BuzzRouter already knows. It does not live-fetch
   NIP-11 from the relay; unknown relays just get an empty form.
 - `POST /api/submissions` requires a valid contact email
@@ -402,7 +402,7 @@ next number in the old sequence — see `migrations/README.md`. Existing
 - Verify the receipt chain live before trusting reasoning: gated script
   `scripts/verify-receipt-join.ts` (`BUZZROUTER_VERIFY_RECEIPT_JOIN_LIVE=1`) runs
   policy→accept→deep-link→claim against a real community and asserts 200 joined.
-  It consumes one invite use on success; run once, never loop (10 claims/60s cap).
+  It consumes one invite use on success; run once, never loop (10 claims per 60s cap).
 
 ## Maintaining this file
 

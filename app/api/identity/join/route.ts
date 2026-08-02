@@ -1,6 +1,6 @@
 import { getDatabasePool } from "../../../../src/db/pool";
-import { isUuid } from "../../../../src/claims/http";
 import { ApiError } from "../../../../src/http/api-error";
+import { isUuid } from "../../../../src/http/validation";
 import {
   clientIp,
   identityErrorResponse,

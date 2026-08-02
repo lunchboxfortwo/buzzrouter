@@ -148,8 +148,8 @@ export default async function DiscoveryReviewPage() {
                       <summary>Inspect</summary>
                       <div className={styles.details}>
                         <p>
-                          <a href={`/claim/${candidate.id}`}>
-                            Open claim workspace
+                          <a href="/shared-channels#invite-link">
+                            Link this community with an owner invite
                           </a>
                         </p>
                         <DetailSources sources={candidate.sources} />

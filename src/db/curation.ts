@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 
-import { isUuid } from "../claims/http";
+import { isUuid } from "../http/validation";
 import { isFocusSlug } from "../ranking/focus";
 
 const DISPLAY_NAME_OVERRIDE_MAX_LENGTH = 120;

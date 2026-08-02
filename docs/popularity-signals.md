@@ -9,7 +9,7 @@ BuzzRouter treats popularity, trust, and activity as separate concepts:
   privacy-safe data becomes available.
 
 Trust is an eligibility requirement, not a popularity boost. Relay uptime,
-protocol support, source count, and claim status must not make a community look
+protocol support, source count, and Link enrollment must not make a community look
 popular.
 
 ## First public score

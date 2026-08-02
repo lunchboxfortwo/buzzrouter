@@ -18,9 +18,10 @@ communities, privacy communities, and people working with agents. They expect a
 quiet, credible product with the information density and precision of serious
 developer tools.
 
-Community operators are the secondary user. They can submit a relay or invite URL,
-claim a verified listing, publish bounded metadata, and provide a direct public
-join path without controlling BuzzRouter's independent technical evidence.
+Community operators are the secondary user. They can submit a relay or invite
+URL, provide listing context during intake, and link verified communities by
+pasting an owner/admin invite without controlling BuzzRouter's independent
+technical evidence.
 
 ## Product Purpose
 
@@ -72,8 +73,8 @@ The shipped directory provides:
 - Evidence-strength and recently-verified sorting.
 - Compact result rows with a community logo or monogram, name, primary category,
   one-line description, verification state, and evidence count.
-- A persistent detail panel with description, categories, join action, claim
-  action, latest verification, handshake timing, access mode, evidence sources,
+- A persistent detail panel with description, categories, join action, latest
+  verification, handshake timing, access mode, evidence sources,
   and protocol profile.
 - Empty and no-result states that keep the next action explicit.
 
@@ -82,9 +83,9 @@ invite URL. Invite capability tokens were formerly redacted; as of the join-link
 discarded before persistence. A submission enters the normal discovery and
 verification pipeline; it does not publish immediately.
 
-Verified operators can claim listings and publish bounded display metadata,
-categories, slugs, and public join configuration. Claimed communities can have a
-dedicated public profile route.
+Operators submit listing context during intake. Directory metadata remains
+independent of Link authorization; linking uses an owner/admin invite and the
+roster-signed in-channel confirmation.
 
 ## Link: Cross-Community Shared Channels
 
@@ -191,9 +192,9 @@ A community is visible only when its candidate state is `verified_buzz` and its
 latest successful direct verification is no more than 48 hours old. Discovery
 sources cannot bypass this requirement.
 
-NIP-11 descriptions may provide fallback copy. Public Buzzdir metadata or
-operator-claimed metadata can provide a more useful display name, description,
-and category set. Relay-provided logos are accepted only as bounded PNG, JPEG,
+NIP-11 descriptions may provide fallback copy. Public Buzzdir metadata can
+provide a more useful display name, description, and category set.
+Relay-provided logos are accepted only as bounded PNG, JPEG,
 WebP, or GIF data URIs with matching file signatures. BuzzRouter stores and serves
 those bytes from a first-party endpoint; it does not hotlink arbitrary remote
 images. Listings without a safe logo use a monogram.
@@ -252,7 +253,7 @@ Implemented:
 - Daily source reconciliation and daily candidate reprobes.
 - Safe first-party community logo ingestion and serving.
 - Public submission intake with invite-capability redaction.
-- Operator claim and listing metadata workflows.
+- Invite-driven Link enrollment for verified communities.
 - Internal evidence review and operational tooling.
 - Self-hosted continuous deployment to `buzzrouter.com`.
 - Link: bridge admission by invite link, key, or connector command;

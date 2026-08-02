@@ -6,8 +6,6 @@ const REQUIRED_TABLES = [
   "probe_snapshots",
   "discovery_source_state",
   "communities",
-  "claim_challenges",
-  "community_claims",
   "nostr_auth_events",
   "community_icons",
   "community_reliability_metrics",
@@ -34,8 +32,6 @@ export async function assertDiscoveryDatabaseReady(
     probe_snapshots: string | null;
     discovery_source_state: string | null;
     communities: string | null;
-    claim_challenges: string | null;
-    community_claims: string | null;
     nostr_auth_events: string | null;
     community_icons: string | null;
     community_reliability_metrics: string | null;
@@ -58,10 +54,6 @@ export async function assertDiscoveryDatabaseReady(
         AS discovery_source_state,
       to_regclass('public.communities')::text
         AS communities,
-      to_regclass('public.claim_challenges')::text
-        AS claim_challenges,
-      to_regclass('public.community_claims')::text
-        AS community_claims,
       to_regclass('public.nostr_auth_events')::text
         AS nostr_auth_events,
       to_regclass('public.community_icons')::text

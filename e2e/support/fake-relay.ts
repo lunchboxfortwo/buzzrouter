@@ -183,9 +183,22 @@ export async function startFakeRelay(
   // request handler never sees them.
   server.on("request", (req, res) => {
     if (req.method === "POST" && req.url === "/api/invites/claim") {
-      req.resume();
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true }));
+      let rawBody = "";
+      req.setEncoding("utf8");
+      req.on("data", (chunk) => {
+        rawBody += chunk;
+      });
+      req.on("end", () => {
+        const body = safeJsonObject(rawBody);
+        const expectedReceipt = joinPolicy?.receipt ?? "fake-receipt";
+        if (joinPolicy && body?.policy_receipt !== expectedReceipt) {
+          res.writeHead(403, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "join_policy_required" }));
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      });
       return;
     }
     // Opt-in ToS/age handshake, so the receipt-minting consent flow
@@ -271,6 +284,17 @@ export async function startFakeRelay(
       return [...roster].map(([pubkey, role]) => ({ pubkey, role }));
     },
   };
+}
+
+function safeJsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const value = JSON.parse(text) as unknown;
+    return value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 interface RelayContext {

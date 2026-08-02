@@ -118,7 +118,7 @@ test("mobile navigation stays on one line and search stays on Discover", async (
   await page.goto("/");
 
   const navLinks = page.getByRole("navigation").getByRole("link");
-  await expect(navLinks).toHaveText(["Discover", "Create", "Link", "List"]);
+  await expect(navLinks).toHaveText(["Discover", "Link", "List"]);
   const linkTops = await navLinks.evaluateAll((links) =>
     links.map((link) => Math.round(link.getBoundingClientRect().top)),
   );
@@ -139,7 +139,7 @@ test("mobile navigation stays on one line and search stays on Discover", async (
     page.getByPlaceholder("Search communities or topics"),
   ).toBeVisible();
 
-  await page.goto("/create-community");
+  await page.goto("/submit");
   await expect(
     page.getByPlaceholder("Search communities or topics"),
   ).toHaveCount(0);
@@ -156,6 +156,12 @@ test("focus is directly available without a search-options disclosure", async ({
   await expect(
     page.getByRole("button", { name: "Search options" }),
   ).toHaveCount(0);
+});
+
+test("the removed Create page stays gone", async ({ page }) => {
+  const response = await page.goto("/create-community");
+
+  expect(response?.status()).toBe(404);
 });
 
 test("selecting a community shows its details in the inspector", async ({

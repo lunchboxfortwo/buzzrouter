@@ -42,7 +42,7 @@ the community ids your key owns.
 ## Notes
 
 - Signed requests are available only when the community already has that
-  `owner_pubkey` recorded, such as a hosted community created by BuzzRouter.
+  `owner_pubkey` recorded.
 - For every other verified community, use the invite-first web flow. The
   roster-signed confirmation message remains the authority that activates a
   channel binding.

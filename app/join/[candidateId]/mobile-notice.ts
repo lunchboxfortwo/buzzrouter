@@ -1,8 +1,8 @@
 /**
  * Is this request coming from a phone or tablet browser?
  *
- * `app/create-community/platform.ts` deliberately maps Android to "unknown"
- * (it answers "which desktop build do I offer?"), so it cannot answer this.
+ * This is intentionally local to the join flow: it answers whether the current
+ * browser is mobile, rather than which downloadable desktop build matches it.
  */
 export function isMobileBrowser(userAgent: string | null): boolean {
   if (!userAgent) return false;

@@ -1,9 +1,16 @@
 # BuzzRouter Cross-Community Messaging
 
-**Status:** Engineering reviewed; ready for implementation
+**Status:** Historical engineering plan; implemented flow has evolved
 **Version:** 0.2
 **Date:** 2026-07-30
 **Supersedes:** Version 0.1 managed message router proposal
+
+> **Current implementation:** Link now leads with signer-free owner/admin invite
+> admission. A cold owner can search verified communities, select theirs, and is
+> routed back to the invite field. The web step mints a scoped session; the
+> roster-signed confirmation typed in the chosen Buzz channel remains the
+> authority that activates a binding. See `src/shared-channels/` and
+> `app/shared-channels/` for the shipped mechanics.
 
 ## 1. Decision
 
@@ -388,9 +395,9 @@ verified `communities.owner_pubkey`. Authorization is checked in the store
 query as well as the route handler. There are no delegated administrators in
 v0.2.
 
-The reusable bounded-body, NIP-98 verification, and replay-protection code moves
-from the claim domain into generic HTTP modules. Claims and shared channels use
-the same implementation without sharing domain-specific error codes.
+The reusable bounded-body, NIP-98 verification, and replay-protection code moved
+into generic HTTP modules. Ownership-claim routes have since been removed;
+signed shared-channel administration remains a consumer of those modules.
 
 ### 9.2 Connector credentials
 
@@ -685,7 +692,7 @@ Buzz relays remain the conversation-history source of truth.
 
 | Existing capability | Reuse decision |
 | --- | --- |
-| Verified communities, immutable IDs, `owner_pubkey`, and claim state | Reuse as the identity and owner-authorization source |
+| Verified candidates, community records, immutable IDs, and `owner_pubkey` principals | Reuse as identity and signed-administration inputs; invite admission handles cold owners |
 | NIP-98 signature verification and replay table | Extract into generic HTTP modules; do not duplicate |
 | Relay URL normalization and SSRF controls | Reuse for connector relay validation |
 | `nostr-tools` signature and event primitives | Reuse; build a separate persistent connector because discovery queries are bounded |

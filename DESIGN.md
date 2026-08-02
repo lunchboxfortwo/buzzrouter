@@ -171,10 +171,10 @@ clear selection, and factual copy. The first viewport is the real directory, not
 hero or feature explanation.
 
 The public directory in `app/page.tsx` and `app/directory.module.css` is the
-canonical visual source. The Submit route follows the same masthead, palette, type,
-control, and panel language. Claim, public-profile, and internal-review routes
-currently use older GitHub-neutral variants; new public work should converge toward
-the canonical directory system rather than extend those variants.
+canonical visual source. The Submit and Link routes follow the same masthead,
+palette, type, control, and panel language. Internal-review routes currently use
+older GitHub-neutral variants; new public work should converge toward the
+canonical directory system rather than extend those variants.
 
 **Key Characteristics:**
 
@@ -204,9 +204,9 @@ or action.
 
 ### Secondary
 
-- **Verified Emerald** (`#087c5b`): Live-index, verified, claimed, and success
+- **Verified Emerald** (`#087c5b`): Live-index, verified, admitted, and success
   language. Always pair it with written text.
-- **Verified Wash** (`#e8f7f1`): Success and claimed-label backgrounds.
+- **Verified Wash** (`#e8f7f1`): Success and verified-status backgrounds.
 - **Error Red** (`#9d2b22`): Submission failures and validation errors, paired
   with `#fff3f2` and an explicit message.
 
@@ -302,10 +302,6 @@ instead of ambient shadows. The selected result is identified by a pale indigo
 surface and a 2px inset rule. Sticky positioning creates functional depth without
 visual lift.
 
-The claim-flow notice is the only current public exception: it uses a small
-`0 4px 16px rgb(31 35 40 / 12%)` shadow because it floats above the document.
-Do not generalize that shadow to rows, panels, forms, or buttons.
-
 ### Named Rules
 
 **The Flat Working Plane Rule.** Result lists, inspectors, command bars, fields,
@@ -316,7 +312,7 @@ and form panels stay shadowless.
 Structural sections are rectangular and defined by borders. Controls, logos, tags,
 and actions use a tight two-step radius:
 
-- 4px for category, evidence, and claimed tags.
+- 4px for category, evidence, and status tags.
 - 6px for fields, buttons, monograms, and community logos.
 - 50% only for the BuzzRouter brand mark and semantic status dots.
 - 999px only for established status or category pills on auxiliary profile routes.
@@ -383,8 +379,8 @@ plane with divider-separated rows.
   first.
 - A 2x2 fact grid exposes last verification, handshake, evidence count, and access.
 - Discovery evidence and protocol profile follow as compact factual sections.
-- The inspector may expose claim state; it does not need a separate verification
-  page or explainer.
+- The inspector exposes technical verification, not ownership or listing-edit
+  controls.
 
 ### Submission Panel
 

@@ -1,8 +1,14 @@
 # BuzzRouter Community Auto-Discovery
 
-Status: Phase 1 and Phase 2 implemented; Phase 3 proposed
+Status: Phase 1 and Phase 2 implemented; claim-based Phase 3 retired
 
 Date: 2026-07-29
+
+> **Current product note (2026-08-01):** Ownership claiming and directory
+> listing editing were removed. Operators provide listing context at submission,
+> while Link admission starts with an owner/admin invite and ends with a
+> roster-authorized confirmation in Buzz. The discovery and probe design below
+> remains authoritative; claim-specific sections have been updated accordingly.
 
 ## Executive recommendation
 
@@ -19,8 +25,8 @@ BuzzRouter should:
    the Block Buzz implementation.
 5. Keep technically discovered communities in an internal index until there is
    evidence that public listing is appropriate.
-6. Let an administrator claim a listing to add its public name, description,
-   categories, and join policy.
+6. Collect operator-supplied listing context during submission without letting
+   it override independent technical evidence.
 7. Rank communities using BuzzRouter engagement and ratings, not private relay
    content.
 
@@ -120,8 +126,10 @@ Technical discovery and public listing are separate states.
 A validated relay may be published automatically when:
 
 - It appears in at least two independent public sources; or
-- A trusted hosting provider marks it public/listable; or
-- An administrator claims it and opts into listing.
+- A trusted hosting provider marks it public/listable.
+
+An operator submission enters the same discovery and verification pipeline; it
+does not bypass the evidence or probe requirements.
 
 A source only counts while it is fresh: NIP-66 evidence for 7 days and GitHub
 or provider evidence for 30 days. Automatic eligibility also requires the
@@ -151,7 +159,7 @@ Public source adapters
                                |
                  Internal candidate / public listing
                                |
-                 Claim, enrich, rate, and rank
+                 Submit, enrich, rate, and rank
                                |
                          BuzzRouter search
 ```
@@ -245,7 +253,7 @@ Quarantine for review when:
 - the `software` field is missing or noncanonical.
 
 Probable matches should not be publicly labeled as Buzz until another
-independent signal or administrator claim exists.
+independent signal exists.
 
 ### Not Buzz
 
@@ -314,7 +322,8 @@ aggregates.
 
 - `candidate_id` unique
 - `visibility`: `internal`, `public`, `suppressed`
-- `claim_state`: `unclaimed`, `admin_verified`, `provider_verified`
+- `owner_pubkey` nullable; used by hosted and signed administration paths, not
+  as proof that directory metadata is owner-authored
 - `display_name`
 - `description`
 - `categories`
@@ -323,41 +332,29 @@ aggregates.
 - `listed_at`
 - `updated_at`
 
-### `claims`, `ratings`, and `community_metrics_daily`
+### `ratings` and `community_metrics_daily`
 
-Claims store challenge state and verification method. Ratings store one current
-rating per Nostr pubkey per community plus its signed envelope. Daily metrics
-store unique views, saves, outbound community opens, rating counts, and probe
-uptime.
+Ratings store one current rating per Nostr pubkey per community plus its signed
+envelope. Daily metrics store unique views, saves, outbound community opens,
+rating counts, and probe uptime.
 
-## Administrator claim verification
+## Listing intake and Link admission
 
-### Custom-domain and self-hosted relays
+Listing context comes from `app/submit/` and is stored as attributed submission
+source data. It does not create an ownership record or unlock a listing editor,
+and it cannot replace the independent discovery and probe evidence required for
+publication.
 
-Offer either:
+Link uses a separate authority path:
 
-- DNS TXT at `_buzzrouter.<community-host>`; or
-- `https://<community-host>/.well-known/buzzrouter.json`.
+1. A cold owner searches verified communities by name or relay host.
+2. Selecting a result returns focus to the primary invite field.
+3. The owner pastes an owner/admin invite; the bridge redeems it against the
+   candidate's on-record relay, then activates and receives a scoped session.
+4. A channel binding becomes active only after an owner/admin named by the
+   relay-signed roster types the one-time confirmation in Buzz.
 
-Both contain a short-lived nonce and the claiming Nostr pubkey.
-
-### Block-hosted subdomains
-
-Owners cannot edit `communities.buzz.xyz` DNS. For the MVP, use the public icon
-mirror as a control proof:
-
-1. BuzzRouter issues a short-lived image URL containing a nonce.
-2. The administrator temporarily sets it as the Buzz workspace icon.
-3. BuzzRouter reads `/info` and verifies the nonce URL in `icon`.
-4. The claim is marked administrator-verified.
-5. The administrator restores the original icon.
-
-This works because setting the workspace icon is restricted to Buzz admins or
-owners and the result is intentionally public in NIP-11. It proves
-administrator control, not legal ownership of the domain.
-
-Long term, replace this with a provider-signed listing feed or an upstream
-Buzz/NIP extension designed for directory claims.
+The invite is admission to Link, not permission to edit directory metadata.
 
 ## Ratings and ranking
 
@@ -471,16 +468,16 @@ zero stored invite paths and zero network requests to private address ranges.
 Exit condition: new publicly referenced Buzz relays appear in the internal index
 within 6 hours, with source provenance and classifier evidence.
 
-### Phase 3: Claim and public metadata, days 8-10
+### Phase 3: Public listings and invite-first Link
 
-- Add Nostr authentication.
-- Add DNS/HTTP claim methods.
-- Add the hosted icon challenge.
-- Add listing metadata, categories, join policy, opt-out, and dispute states.
-- Publish community detail pages.
+- Publish database-backed community details from verified discovery data.
+- Accept attributed listing context through submission intake.
+- Search verified communities by relay host or name on the Link page.
+- Admit the bridge with an owner/admin invite and activate it by relay round trip.
+- Require the roster-authorized in-channel confirmation before binding a route.
 
-Exit condition: both a custom-domain relay and a hosted Buzz subdomain can be
-claimed without BuzzRouter joining either community.
+Exit condition: an owner arriving cold can find a verified community and link it
+without a browser signer, ownership claim, or editable directory listing.
 
 ### Phase 4: Ratings and launch ranking, days 11-14
 
@@ -504,8 +501,8 @@ has a freshness timestamp.
 - Freshness: 95 percent of public listings probed within the previous 24 hours.
 - Coverage: at least 50 verified Buzz relays or 80 percent of a manually
   maintained benchmark set, whichever is smaller.
-- Claims: at least 30 percent of public listings administrator-verified in the
-  first month.
+- Link conversion: owners can find a verified community and reach invite
+  admission without a dead route or browser signer.
 - Ranking integrity: no community reaches global trending without the minimum
   unique-identity threshold.
 
@@ -514,7 +511,8 @@ has a freshness timestamp.
 - Scraping messages, channels, members, agents, repos, or workflows.
 - Estimating private community activity.
 - Crawling every possible hosted subdomain.
-- Mirroring or redeeming invites.
+- Discovery jobs mirroring or redeeming invites; Link redeems only an invite
+  explicitly pasted by an owner/admin.
 - Replacing Buzz's planned native naming or directory work.
 - Building a general-purpose Nostr relay directory.
 - Workflow routing between communities.
@@ -522,7 +520,7 @@ has a freshness timestamp.
 ## Decisions to carry into implementation
 
 - Automatic technical indexing is allowed; public listing needs public evidence
-  or administrator/provider intent.
+  and a current successful probe. Submission intake cannot bypass either.
 - Exact Block Buzz `software` metadata is the primary classifier.
 - Invite URLs are capabilities and are never a discovery source of record.
 - Ratings measure BuzzRouter user opinion, not relay health.

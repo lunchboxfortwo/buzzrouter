@@ -49,12 +49,11 @@ Key routing rules:
   unix socket instead (peer auth matches your OS user to a same-named role):
   `postgresql://<os-user>@/<dbname>?host=/var/run/postgresql`.
 - `e2e/shared-channel-unseeded-journey.spec.ts` drives the whole new-owner
-  journey (claim → publish → connector activation → propose → accept) from a
-  bare `verified_buzz` candidate, using an in-process fake `wss://` relay
+  journey (search → invite admission → connector activation → propose → accept)
+  from a bare `verified_buzz` candidate, using in-process fake `wss://` relays
   (`e2e/support/fake-relay.ts`) plus the committed cert/wrapping-key fixtures
-  and connector env in `playwright.config.ts`. The only un-CI-able step, the
-  claim-proof network hop (DNS/HTTPS/hosted-icon), is skipped explicitly and
-  documented in that spec — do not add live-path proof bypasses to make it run.
+  and connector env in `playwright.config.ts`. No ownership claim or editable
+  directory listing is part of this flow.
 
 ## Migrations & the deploy verification gate
 
@@ -306,7 +305,7 @@ next number in the old sequence — see `migrations/README.md`. Existing
 - `GET /api/submissions/prefill?relayUrl=` (`src/db/directory.ts`'s
   `getSubmissionPrefill`) looks up already-known display name/description/
   categories/focus for a relay that's already a candidate (from prior
-  discovery, probes, or a claimed public listing), so a submitter isn't
+  discovery, probes, or catalog metadata), so a submitter isn't
   asked to retype what BuzzRouter already knows. It does not live-fetch
   NIP-11 from the relay; unknown relays just get an empty form.
 - `POST /api/submissions` requires a valid contact email

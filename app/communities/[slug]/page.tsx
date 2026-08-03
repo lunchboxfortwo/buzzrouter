@@ -282,21 +282,6 @@ export default async function CommunityPage({
           </>
         ) : null}
 
-        {community.openToSharedChannels ? (
-          <div className={styles.connect}>
-            <span className={styles.connectIcon}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5657f2" strokeWidth="1.8" strokeLinecap="round">
-                <path d="M8.5 15.5l7-7" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="6" r="2.5" />
-              </svg>
-            </span>
-            <div>
-              <strong>Open to shared channels</strong>
-              <span>This community welcomes cross-community collaboration through BuzzRouter.</span>
-            </div>
-            <Link href="/shared-channels">Propose a shared channel →</Link>
-          </div>
-        ) : null}
-
         <AddInviteCta
           host={community.relayHost}
           variant={affordance === "join" ? "quiet" : "prominent"}

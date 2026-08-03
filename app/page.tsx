@@ -192,6 +192,7 @@ export default async function DirectoryPage({
                       ? `${allCommunities.length} verified ${allCommunities.length === 1 ? "community" : "communities"}`
                       : `${communities.length} of ${allCommunities.length} verified communities shown`}
                   </span>
+                  <span>Connected marks current hub participants.</span>
                 </footer>
               </section>
 
@@ -289,8 +290,21 @@ function CommunityRow({
               </span>
             ) : null}
           </span>
-          {community.tagline ? (
-            <small className={styles.indexSummary}>{community.tagline}</small>
+          {community.connectedToHub || community.tagline ? (
+            <span className={styles.indexSecondaryLine}>
+              {community.connectedToHub ? (
+                <span
+                  aria-label="Connected to BuzzRouter hub"
+                  className={styles.connectionMarker}
+                >
+                  <span aria-hidden="true" className={styles.connectionMarkerDot} />
+                  Connected
+                </span>
+              ) : null}
+              {community.tagline ? (
+                <small className={styles.indexSummary}>{community.tagline}</small>
+              ) : null}
+            </span>
           ) : null}
         </span>
       </span>
@@ -375,6 +389,14 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
             {label}
           </span>
           <span>Checked {relativeTime(community.lastVerifiedAt)}</span>
+          <span
+            className={`${styles.connectionMarker} ${
+              community.connectedToHub ? "" : styles.connectionMarkerInactive
+            }`}
+          >
+            <span aria-hidden="true" className={styles.connectionMarkerDot} />
+            {community.connectedToHub ? "Connected to hub" : "Not connected to hub"}
+          </span>
           {accessFlag(community) === "open" ? (
             <span className={`${styles.accessFlag} ${styles.accessFlagOpen}`}>
               Open to join
@@ -383,15 +405,6 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
             <span className={`${styles.accessFlag} ${styles.accessFlagInvite}`}>
               Invite-only
             </span>
-          ) : null}
-          {community.openToSharedChannels ? (
-            <a
-              className={`${styles.accessFlag} ${styles.accessFlagOpen}`}
-              href="/shared-channels"
-              title="This community welcomes shared-channel invitations"
-            >
-              Open to shared channels
-            </a>
           ) : null}
           <ShareOnX
             className={styles.inspectorShare}

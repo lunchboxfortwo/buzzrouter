@@ -103,7 +103,7 @@ Key routing rules:
 
 ## Open BuzzRouter hub
 
-- Link is hub-only. There is no bilateral proposal, acceptance, typed code, or
+- Connect is hub-only. There is no bilateral proposal, acceptance, typed code, or
   roster-auth confirmation path. A private pair is the same hub endpoint with
   `filter_mode = 'only_these'` and exactly one community in `filter_list`.
 - `POST /api/community-connections/begin-from-invite` is unsigned: the pasted

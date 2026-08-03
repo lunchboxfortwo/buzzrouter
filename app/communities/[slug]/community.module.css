@@ -380,50 +380,6 @@
   color: var(--soft);
 }
 
-.connect {
-  margin-top: 16px;
-  background: var(--accent-soft);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 20px 22px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.connectIcon {
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  border-radius: var(--radius-sm);
-  background: #fff;
-  border: 1px solid var(--line);
-  display: grid;
-  place-items: center;
-  color: var(--accent);
-}
-
-.connect strong {
-  display: block;
-  font-size: 1.02rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.connect span {
-  font-size: 0.86rem;
-  color: var(--reading);
-}
-
-.connect a {
-  margin-left: auto;
-  white-space: nowrap;
-  color: var(--accent2);
-  font-weight: 660;
-  font-size: 0.9rem;
-  text-decoration: none;
-}
-
 .illus {
   margin-top: 10px;
   font-size: 0.72rem;

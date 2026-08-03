@@ -181,7 +181,7 @@ clear selection, and factual copy. The first viewport is the real directory, not
 hero or feature explanation.
 
 The public directory in `app/page.tsx` and `app/directory.module.css` is the
-canonical visual source. The Submit and Link routes follow the same masthead,
+canonical visual source. The Submit and Connect routes follow the same masthead,
 palette, type, control, and panel language. Internal-review routes currently use
 older GitHub-neutral variants; new public work should converge toward the
 canonical directory system rather than extend those variants.
@@ -279,7 +279,7 @@ large headings or widen uppercase labels.
 ## Layout
 
 The sticky masthead is 60px high on wide screens and contains the circular logo,
-wordmark, three single-word routes (`Discover`, `Link`, `List`), and an optional
+wordmark, three single-word routes (`Discover`, `Connect`, `List`), and an optional
 live-index status. Search appears only on Discover. Its inner shell is capped at
 1320px.
 
@@ -346,7 +346,7 @@ plane with divider-separated rows.
 - BuzzRouter logo at 32px with its original circular crop.
 - Wordmark at 18px and 700 weight.
 - Navigation at 14px and 600 weight; current route gets a 2px indigo underline.
-- Exactly three public routes: `Discover`, `Link`, and `List`.
+- Exactly three public routes: `Discover`, `Connect`, and `List`.
 
 ### Buttons
 

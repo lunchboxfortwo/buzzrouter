@@ -516,6 +516,40 @@
   white-space: nowrap;
 }
 
+.indexSecondaryLine {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+}
+
+.connectionMarker {
+  align-items: center;
+  color: var(--ink-soft);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  font-weight: 590;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.connectionMarkerDot {
+  background: var(--ink-soft);
+  border-radius: 50%;
+  height: 5px;
+  width: 5px;
+}
+
+.connectionMarkerInactive {
+  color: var(--ink-faint);
+}
+
+.connectionMarkerInactive .connectionMarkerDot {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+}
+
 .indexFocusCell,
 
 .indexStatusCell {
@@ -623,6 +657,7 @@
   border-top: 1px solid var(--line);
   color: var(--ink-soft);
   display: flex;
+  flex-wrap: wrap;
   font-size: 0.72rem;
   gap: var(--space-4);
   min-height: 48px;

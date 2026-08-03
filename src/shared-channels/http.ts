@@ -9,7 +9,7 @@ export function sharedChannelErrorResponse(error: unknown): Response {
     error,
     new ApiError(
       "shared_channel_failed",
-      "The shared-channel request could not be completed.",
+      "The hub connection could not be completed.",
       500,
     ),
   );

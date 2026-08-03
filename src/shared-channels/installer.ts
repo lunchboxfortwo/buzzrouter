@@ -134,7 +134,7 @@ export async function verifyAndActivateCommunityConnection(
       {
         content: JSON.stringify({
           about:
-            "Routes explicitly approved BuzzRouter shared channels.",
+            "Routes explicitly approved BuzzRouter hub connections.",
           display_name: "BuzzRouter Bridge",
           name: "buzzrouter-bridge",
         }),
@@ -177,7 +177,7 @@ export interface BeginConnectionFromInviteResult {
  * signer pastes an invite LINK from their Buzz app. We identify their verified
  * community from the link's relay host (no signature), let the bridge redeem the
  * invite and prove admission, then mint a short-lived, community-scoped owner
- * session the "Link" page uses to bind one hub channel and manage that
+ * session the Connect page uses to bind one hub channel and manage that
  * community's send, receive, and filter settings. The invite is the owner-level
  * consent; there is no second proposal or confirmation mechanism.
  */

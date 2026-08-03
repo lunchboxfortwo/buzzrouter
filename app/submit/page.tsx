@@ -40,8 +40,8 @@ export default async function SubmitPage({
               </span>
               <span>
                 Once verification succeeds, open{" "}
-                <a href="/shared-channels#invite-link">Link</a> and paste an
-                owner/admin invite to connect your community.
+                <a href="/shared-channels#invite-link">Connect</a> and paste an
+                owner/admin invite from your community.
               </span>
             </div>
           ) : null}

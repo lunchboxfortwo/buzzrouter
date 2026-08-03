@@ -43,7 +43,7 @@ Three surfaces:
   community in Buzz.
 - **List** (`/submit`) — a community owner submits a relay, community URL, or
   invite for verification and listing.
-- **Link** (`/shared-channels`) — a community connects one local channel to the
+- **Connect** (`/shared-channels`) — a community connects one local channel to the
   **open BuzzRouter channel** and reaches every permitted hub community.
   BuzzRouter mirrors messages with visible attribution.
 
@@ -71,7 +71,7 @@ prototype or placeholder directory in the serving path.
 
 The shipped directory provides:
 
-- A three-route masthead: `Discover`, `Link`, and `List`; directory
+- A three-route masthead: `Discover`, `Connect`, and `List`; directory
   search appears only on Discover.
 - Community and category totals for the current result set.
 - Search across display name, one-line description, and category tags.
@@ -91,13 +91,13 @@ discarded before persistence. A submission enters the normal discovery and
 verification pipeline; it does not publish immediately.
 
 Operators submit listing context during intake. Directory metadata remains
-independent of Link authorization; linking uses an owner/admin invite.
+independent of Connect authorization; connecting uses an owner/admin invite.
 
-## The Pitch: Shared Channels Are the Product
+## The Pitch: The Open Hub Is the Product
 
 One line: **discover, join, and connect with other Buzz communities.** The thing
-people need to understand is that BuzzRouter enables *shared channels* across the
-Buzz ecosystem. Discovery exists so you can find who to connect with.
+people need to understand is that BuzzRouter connects communities through one
+open hub. Discovery exists so you can see who already participates.
 
 Longer horizon: this messaging layer is meant to be TCP for a productive economy
 built on Buzz. Guilds are workflows for human-AI and multi-agent collaboration,
@@ -177,14 +177,14 @@ BuzzRouter operates two distinct Nostr identities against Buzz relays. They
 are not interchangeable, and the difference is a trust boundary, not an
 implementation detail:
 
-- **The bridge** (`src/shared-channels/`) exists only to carry Link traffic.
+- **The bridge** (`src/shared-channels/`) exists only to carry hub traffic.
   It joins a community's relay only after being explicitly invited or
   admitted by an owner/admin, gets a freshly generated keypair per connection,
   and subscribes to exactly one hub-mapped channel (a `#h`-tag filter
   scoped to that channel's ID — see `src/shared-channels/connector.ts`). It
   runs no LLM and does not summarize, interpret, or act on what it reads; it
   mirrors message content verbatim, re-signed under its own identity with
-  attribution tags. It cannot see any channel not selected during Link,
+  attribution tags. It cannot see any channel not selected during Connect,
   and it cannot see communities it was never admitted into at all.
 - **The presence agent** (`src/presence/`, plus the jobs in
   `src/jobs/auto-join-communities.ts`, `harvest-invites.ts`, and
@@ -198,7 +198,7 @@ implementation detail:
   carry conversation between communities.
 
 The bridge's narrow, invitation-gated scope is a deliberate trust property:
-an owner who admits the bridge for one Link connection is not granting
+an owner who admits the bridge for one hub connection is not granting
 BuzzRouter agent-wide read access to their community. The presence agent, by
 contrast, is BuzzRouter's own directory-research member and is expected to be
 present in every joinable community, reading everything it is permitted to
@@ -290,10 +290,10 @@ Implemented:
 - Daily source reconciliation and daily candidate reprobes.
 - Safe first-party community logo ingestion and serving.
 - Public submission intake with invite-capability redaction.
-- Invite-driven Link enrollment for verified communities.
+- Invite-driven Connect enrollment for verified communities.
 - Internal evidence review and operational tooling.
 - Self-hosted continuous deployment to `buzzrouter.com`.
-- Link: owner-invite bridge admission, one selected channel per community,
+- Connect: owner-invite bridge admission, one selected channel per community,
   hub-wide fan-out with per-community send/receive filtering, durable delivery
   outcomes, and human-name-first attributed message mirroring.
 - The presence agent: scheduled auto-join of joinable directory communities

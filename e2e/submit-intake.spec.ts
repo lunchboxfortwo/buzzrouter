@@ -72,6 +72,21 @@ test("collects contact email and requires it before submitting", async ({
   await expect(page).toHaveURL(/\/submit$/);
 });
 
+test("points a queued owner to Connect with their admin invite", async ({
+  page,
+}) => {
+  await page.goto("/submit?status=queued");
+
+  const connect = page
+    .getByRole("status")
+    .getByRole("link", { name: "Connect" });
+  await expect(connect).toHaveAttribute(
+    "href",
+    "/shared-channels#invite-link",
+  );
+  await expect(page.getByText(/owner\/admin invite from your community/i)).toBeVisible();
+});
+
 test("prefills known catalog metadata once the relay is entered", async ({
   page,
 }) => {

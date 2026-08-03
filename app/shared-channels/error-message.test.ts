@@ -16,7 +16,7 @@ describe("errorMessage", () => {
     ["authentication_invalid", "The signed request was not accepted."],
     [
       "shared_channel_failed",
-      "The shared-channel request could not be completed.",
+      "The hub connection could not be completed.",
     ],
   ])("maps %s to a readable sentence", (code, expected) => {
     expect(errorMessage(new Error(code))).toBe(expected);

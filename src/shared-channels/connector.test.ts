@@ -499,6 +499,8 @@ describe("ConnectorSupervisor operated-community routing", () => {
     );
     const state = {
       connectCalls: 0,
+      probeCalls: 0,
+      probeAlive: true,
       lockCalls: 0,
       readRosterCalls: 0,
       subscriptions: [] as Array<{
@@ -553,6 +555,10 @@ describe("ConnectorSupervisor operated-community routing", () => {
             return new Set();
           },
           async readRosterRoles() { return new Map(); },
+          async probe() {
+            state.probeCalls += 1;
+            return state.probeAlive;
+          },
           subscribe(_routes, watchRoster, _onEvent, onClose) {
             state.subscriptions.push({ onClose, watchRoster });
           },
@@ -568,6 +574,39 @@ describe("ConnectorSupervisor operated-community routing", () => {
     );
     return { state, supervisor };
   }
+
+  // Production sat deaf while the socket looked open and the relay logged no
+  // close, so the supervisor kept a session that received nothing and reported
+  // healthy. Quiet alone must not condemn a session; quiet plus an unanswered
+  // probe must.
+  it("rebuilds a session that goes quiet and stops answering", async () => {
+    const { state, supervisor } = supervisorHarness("wss://third-party.example");
+    await supervisor.start();
+    expect(state.connectCalls).toBe(1);
+
+    // Quiet but still answering: keep it.
+    state.probeAlive = true;
+    vi.setSystemTime(Date.now() + 120_000);
+    await supervisor.reconcile();
+    expect(state.probeCalls).toBeGreaterThan(0);
+    expect(state.connectCalls).toBe(1);
+
+    // Quiet and no longer answering: replace it.
+    state.probeAlive = false;
+    vi.setSystemTime(Date.now() + 120_000);
+    await supervisor.reconcile();
+    expect(state.connectCalls).toBe(2);
+    await supervisor.stop();
+  });
+
+  it("does not probe a session that is still receiving events", async () => {
+    const { state, supervisor } = supervisorHarness("wss://third-party.example");
+    await supervisor.start();
+    await supervisor.reconcile();
+    expect(state.probeCalls).toBe(0);
+    expect(state.connectCalls).toBe(1);
+    await supervisor.stop();
+  });
 
   it("never watches or reconciles a third-party relay", async () => {
     const { state, supervisor } = supervisorHarness("wss://third-party.example");

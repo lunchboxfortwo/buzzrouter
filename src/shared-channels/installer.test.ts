@@ -176,6 +176,45 @@ describe("existing connector re-entry", () => {
     expect(privateKey.every((byte) => byte === 0)).toBe(true);
     expect(result.session).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
+
+  it("wipes the existing bridge key when the fresh invite is rejected", async () => {
+    const communityId = "00000000-0000-4000-8000-000000000000";
+    const ownerPubkey = "a".repeat(64);
+    const privateKey = Buffer.alloc(32, 9);
+    findCandidate.mockResolvedValue({
+      candidateId: "10000000-0000-4000-8000-000000000000",
+      communityId,
+      displayName: "Existing Community",
+      ownerPubkey,
+      relayUrl: "wss://relay.example.com",
+    });
+    getOwnedConnection.mockResolvedValue({
+      authTag: Buffer.alloc(16),
+      bridgePubkey: "b".repeat(64),
+      ciphertext: Buffer.alloc(32),
+      communityId,
+      health: "healthy",
+      id: "20000000-0000-4000-8000-000000000000",
+      nonce: Buffer.alloc(12),
+      relayUrl: "wss://relay.example.com",
+      state: "active",
+      wrappingKeyVersion: 1,
+    });
+    decryptConnectorKey.mockReturnValue(privateKey);
+
+    await expect(
+      beginConnectionFromInvite(
+        { query: vi.fn() } as never,
+        "https://relay.example.com/invite/rejected-code",
+        { getKey: async () => Buffer.alloc(32, 7) },
+        {} as never,
+        vi.fn().mockRejectedValue(new Error("invite rejected")),
+      ),
+    ).rejects.toThrow("invite rejected");
+
+    expect(privateKey.every((byte) => byte === 0)).toBe(true);
+    expect(beginInstall).not.toHaveBeenCalled();
+  });
 });
 
 describe("invite claim target resolution", () => {

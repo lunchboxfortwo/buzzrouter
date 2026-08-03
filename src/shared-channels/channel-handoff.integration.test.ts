@@ -48,6 +48,7 @@ describeDatabase("bridge channel ownership handoff", () => {
   it("creates the owner-named channel and hands ownership to the relay owner", async () => {
     const community = await createConnectedCommunity(pool, "alpha");
     const relay = new RecordingRelay(community.ownerPubkey);
+    relay.rosterRoles.set("0".repeat(64), "admin");
     const idempotencyKey = `idem-${randomUUID()}`;
 
     const result = await createDedicatedChannel(
@@ -97,6 +98,30 @@ describeDatabase("bridge channel ownership handoff", () => {
       requesterPubkey: community.ownerPubkey,
     });
     expect(handoff?.state).toBe("completed");
+
+    // A completed replay returns from the journal without decrypting a key or
+    // connecting to the relay again.
+    await expect(
+      createDedicatedChannel(
+        pool,
+        {
+          communityId: community.communityId,
+          idempotencyKey,
+          ownerPubkey: community.ownerPubkey,
+          channelName: "Beta Collective",
+        },
+        {
+          getKey: async () => {
+            throw new Error("must not read key");
+          },
+        },
+        {
+          connect: async () => {
+            throw new Error("must not connect");
+          },
+        },
+      ),
+    ).resolves.toEqual(result);
   });
 
   it("retries the handoff after a simulated promotion failure", async () => {
@@ -187,6 +212,59 @@ describeDatabase("bridge channel ownership handoff", () => {
     ).rejects.toMatchObject({ code: "channel_owner_unavailable" });
 
     expect(relay.published).toHaveLength(0);
+  });
+
+  it("resumes at bridge demotion after a demotion failure", async () => {
+    const community = await createConnectedCommunity(pool, "demotion");
+    const relay = new RecordingRelay(community.ownerPubkey);
+    relay.failDemote = true;
+    const idempotencyKey = `idem-${randomUUID()}`;
+
+    await expect(
+      createDedicatedChannel(
+        pool,
+        {
+          communityId: community.communityId,
+          idempotencyKey,
+          ownerPubkey: community.ownerPubkey,
+          channelName: "Resume Demotion",
+        },
+        wrappingKeys,
+        new SingleRelayFactory(relay),
+      ),
+    ).rejects.toMatchObject({ code: "channel_handoff_incomplete" });
+
+    const stalled = await getChannelHandoff(pool, {
+      idempotencyKey,
+      requesterPubkey: community.ownerPubkey,
+    });
+    expect(stalled?.state).toBe("handed_off");
+    expect(relay.byKind(9_007)).toHaveLength(1);
+    expect(relay.byKind(9_000)).toHaveLength(1);
+
+    relay.failDemote = false;
+    relay.rosterAvailable = false;
+    await expect(
+      createDedicatedChannel(
+        pool,
+        {
+          communityId: community.communityId,
+          idempotencyKey,
+          ownerPubkey: community.ownerPubkey,
+          channelName: "Resume Demotion",
+        },
+        wrappingKeys,
+        new SingleRelayFactory(relay),
+      ),
+    ).resolves.toMatchObject({ channelId: stalled?.channelId });
+
+    expect(relay.byKind(9_007)).toHaveLength(1);
+    expect(relay.byKind(9_000)).toHaveLength(2);
+    expect(tag(relay.byKind(9_000).at(-1)!, "p")).toEqual([
+      "p",
+      community.bridgePubkey,
+      "member",
+    ]);
   });
 });
 
@@ -280,10 +358,14 @@ function tag(event: Event, name: string): string[] | undefined {
  */
 class RecordingRelay implements RelayConnection {
   readonly published: Event[] = [];
+  readonly rosterRoles = new Map<string, string>();
+  failDemote = false;
   failPromote = false;
   rosterAvailable = true;
 
-  constructor(private readonly ownerPubkey: string) {}
+  constructor(private readonly ownerPubkey: string) {
+    this.rosterRoles.set(ownerPubkey, "owner");
+  }
 
   close(): void {}
 
@@ -300,6 +382,14 @@ class RecordingRelay implements RelayConnection {
     if (this.failPromote && event.kind === 9_000 && put?.[2] === "owner") {
       throw new Error("relay rejected the promotion");
     }
+    if (
+      this.failDemote &&
+      event.kind === 9_000 &&
+      put?.[1] !== this.ownerPubkey &&
+      put?.[2] === "member"
+    ) {
+      throw new Error("relay rejected the demotion");
+    }
     this.published.push(event);
   }
 
@@ -313,7 +403,7 @@ class RecordingRelay implements RelayConnection {
 
   async readRosterRoles(): Promise<Map<string, string> | null> {
     return this.rosterAvailable
-      ? new Map([[this.ownerPubkey, "owner"]])
+      ? new Map(this.rosterRoles)
       : null;
   }
 

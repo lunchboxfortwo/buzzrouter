@@ -63,6 +63,9 @@ const RELAY_HEARTBEAT_INTERVAL_MS = 30_000;
  * reconnect cost is negligible.
  */
 const RELAY_IDLE_RECYCLE_AFTER_MS = 60_000;
+/** Traffic cadence that keeps Cloudflare from idling the connection out. */
+const RELAY_KEEPALIVE_INTERVAL_MS = 30_000;
+const RELAY_KEEPALIVE_TIMEOUT_MS = 10_000;
 const AUTH_REQUIRED_PATTERN = /auth-required/i;
 
 /**
@@ -769,6 +772,7 @@ function isMissingChallenge(error: unknown): boolean {
 
 export class NostrRelayConnection implements RelayConnection {
   private subscription: Subscription | undefined;
+  private keepAlive: NodeJS.Timeout | undefined;
   private readonly profileNames = new Map<string, string | null>();
   private relayIdentity: string | undefined;
 
@@ -809,6 +813,8 @@ export class NostrRelayConnection implements RelayConnection {
   }
 
   close(): void {
+    if (this.keepAlive) clearInterval(this.keepAlive);
+    this.keepAlive = undefined;
     this.subscription?.close("connector stopped");
     this.subscription = undefined;
     this.relay.close();
@@ -1085,6 +1091,42 @@ export class NostrRelayConnection implements RelayConnection {
       onevent: onEvent,
       onclose: onClose,
     });
+    this.startKeepAlive();
+  }
+
+  /**
+   * Keep the subscription from going stale in the first place.
+   *
+   * Both relays sit behind Cloudflare, which drops an idle WebSocket. When it
+   * does, nostr-tools reconnects the transport but does NOT restore
+   * subscriptions, so the connection stays perfectly healthy while delivering
+   * nothing. The supervisor recovers from that, but only after noticing, which
+   * costs up to ~90s — long enough that a chat message reads as never sent.
+   *
+   * A no-match REQ every 30s is real traffic through Cloudflare, so the
+   * connection never goes idle and the subscription is never orphaned. The
+   * supervisor's idle rebuild stays as the safety net for whatever this does
+   * not prevent; this is about latency, not correctness.
+   */
+  private startKeepAlive(): void {
+    if (this.keepAlive) return;
+    this.keepAlive = setInterval(() => {
+      try {
+        // `since` in the future matches nothing: a lookup and an EOSE, no events.
+        const probe = this.relay.subscribe(
+          [{ kinds: [GROUP_METADATA_KIND], since: 2_000_000_000, limit: 1 }],
+          {
+            oneose: () => probe.close("keepalive complete"),
+            onevent: () => undefined,
+            onclose: () => undefined,
+          },
+        );
+        setTimeout(() => probe.close("keepalive timeout"), RELAY_KEEPALIVE_TIMEOUT_MS);
+      } catch {
+        // A failed keepalive is not itself a problem; the idle rebuild covers it.
+      }
+    }, RELAY_KEEPALIVE_INTERVAL_MS);
+    this.keepAlive.unref?.();
   }
 
 }

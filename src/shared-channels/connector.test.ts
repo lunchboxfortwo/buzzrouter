@@ -6,11 +6,8 @@ import type { Event } from "nostr-tools/core";
 import type { Relay } from "nostr-tools/relay";
 
 import {
-  isPrivilegedRole,
   NostrRelayConnection,
-  parseRoster,
   parseWrappingKeyFile,
-  resolveRosterRole,
 } from "./connector";
 
 describe("NostrRelayConnection", () => {
@@ -192,57 +189,36 @@ describe("NostrRelayConnection.listGroups", () => {
   });
 });
 
-describe("parseRoster / resolveRosterRole", () => {
-  const owner = "a".repeat(64);
-  const admin = "b".repeat(64);
-  const member = "c".repeat(64);
+describe("NostrRelayConnection profile names", () => {
+  it("reads display_name from kind-0 and caches it by pubkey", async () => {
+    const pubkey = "a".repeat(64);
+    let subscriptions = 0;
+    const relay = {
+      connected: true,
+      subscribe(
+        _filters: unknown,
+        params: {
+          oneose: () => void;
+          onevent: (event: Event) => void;
+        },
+      ) {
+        subscriptions += 1;
+        params.onevent({
+          content: JSON.stringify({ display_name: "Franz" }),
+          created_at: 1,
+          kind: 0,
+          pubkey,
+          tags: [],
+        } as unknown as Event);
+        params.oneose();
+        return { close() {} };
+      },
+    } as unknown as Relay;
+    const connection = new NostrRelayConnection(relay, randomBytes(32));
 
-  function rosterEvent(tags: string[][]): Event {
-    return { created_at: 1, kind: 13_534, tags } as unknown as Event;
-  }
-
-  it("reads inline roles from member tags", () => {
-    const roster = parseRoster(
-      rosterEvent([
-        ["p", owner, "owner"],
-        ["p", admin, "admin"],
-        ["p", member, "member"],
-      ]),
-    );
-    expect(resolveRosterRole(roster, owner)).toBe("owner");
-    expect(resolveRosterRole(roster, admin)).toBe("admin");
-    expect(resolveRosterRole(roster, member)).toBe("member");
-    expect(resolveRosterRole(roster, "d".repeat(64))).toBeNull();
-  });
-
-  it("accepts a trailing role element and defaults a missing role to member", () => {
-    const roster = parseRoster(
-      rosterEvent([
-        ["p", owner, "wss://relay.example", "admin"],
-        ["p", member],
-      ]),
-    );
-    expect(resolveRosterRole(roster, owner)).toBe("admin");
-    expect(resolveRosterRole(roster, member)).toBe("member");
-  });
-
-  it("ignores malformed member entries", () => {
-    const roster = parseRoster(
-      rosterEvent([
-        ["p", "not-a-pubkey", "owner"],
-        ["e", owner, "owner"],
-        ["p"],
-      ]),
-    );
-    expect(roster.size).toBe(0);
-  });
-
-  it("treats only owner and admin as privileged", () => {
-    expect(isPrivilegedRole("owner")).toBe(true);
-    expect(isPrivilegedRole("admin")).toBe(true);
-    expect(isPrivilegedRole("member")).toBe(false);
-    expect(isPrivilegedRole("moderator")).toBe(false);
-    expect(isPrivilegedRole(null)).toBe(false);
+    await expect(connection.getProfileName(pubkey)).resolves.toBe("Franz");
+    await expect(connection.getProfileName(pubkey)).resolves.toBe("Franz");
+    expect(subscriptions).toBe(1);
   });
 });
 

@@ -1,17 +1,12 @@
 const API_ERROR_MESSAGES: Record<string, string> = {
   authentication_invalid: "The signed request was not accepted.",
   channel_already_routed:
-    "That channel is already connected to another shared channel. Pick a different channel or create a new one.",
-  channel_create_failed:
-    "The new channel couldn’t be created on your relay. Try again shortly.",
-  channel_handoff_incomplete:
-    "The channel was created but ownership couldn’t be transferred yet. Try again — it will finish the handoff.",
+    "That channel is already linked to the hub. Pick a different channel.",
   connection_required: "The community connector must be active first.",
   connector_package_unavailable:
     "The connector package is temporarily unavailable. Try again shortly.",
   connector_round_trip_failed:
     "The bot isn’t admitted to your community yet. Make sure you added it, then try again.",
-  destination_not_verified: "The destination community is not verified.",
   install_token_unavailable:
     "That connection session has expired or was already used. Request a new one.",
   invite_claim_rejected:

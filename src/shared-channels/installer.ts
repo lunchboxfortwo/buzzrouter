@@ -177,9 +177,9 @@ export interface BeginConnectionFromInviteResult {
  * signer pastes an invite LINK from their Buzz app. We identify their verified
  * community from the link's relay host (no signature), let the bridge redeem the
  * invite and prove admission, then mint a short-lived, community-scoped owner
- * session the "Link" page uses in place of a browser signature. Binding a shared
- * channel still needs the roster-signed code typed in-channel — the session only
- * stands in for the owner signature, never for that proof.
+ * session the "Link" page uses to bind one hub channel and manage that
+ * community's send, receive, and filter settings. The invite is the owner-level
+ * consent; there is no second proposal or confirmation mechanism.
  */
 export async function beginConnectionFromInvite(
   pool: Pool,

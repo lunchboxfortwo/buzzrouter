@@ -59,12 +59,9 @@ Key routing rules:
 - If TCP auth to the system Postgres isn't set up, connect over the local
   unix socket instead (peer auth matches your OS user to a same-named role):
   `postgresql://<os-user>@/<dbname>?host=/var/run/postgresql`.
-- `e2e/shared-channel-unseeded-journey.spec.ts` drives the whole new-owner
-  journey (search → invite admission → connector activation → propose → accept)
-  from a bare `verified_buzz` candidate, using in-process fake `wss://` relays
-  (`e2e/support/fake-relay.ts`) plus the committed cert/wrapping-key fixtures
-  and connector env in `playwright.config.ts`. No ownership claim or editable
-  directory listing is part of this flow.
+- `e2e/shared-channel-signer-free.spec.ts` drives the hub journey from invite
+  admission through connector activation, channel selection, and active
+  participant settings using the in-process fake relay.
 
 ## Migrations & the deploy verification gate
 
@@ -104,112 +101,35 @@ Key routing rules:
   no-auth fallback), so any e2e assertion that waits on a connector's first
   relay read needs a timeout past that settle deadline.
 
-## Shared-channel bot admission
+## Open BuzzRouter hub
 
-- Owners admit the BuzzRouter bridge to their community three ways, in
-  priority order: **invite link** (the bridge redeems it itself), **paste the
-  bridge npub** in the Buzz app, then the **self-host npx command**. UI is
-  `app/shared-channels/shared-channels-client.tsx` (`InstallerCommand`); server
-  is `src/shared-channels/installer.ts`.
-- The invite-claim contract lives on the **Buzz relay**, not this repo:
-  `POST https://<relay-host>/api/invites/claim`, NIP-98 signed by the bridge
-  key (the joining pubkey), body `{"code":"<code>"}`, exempt from the
-  membership gate, pins role=member. Invite links are
-  `https://<relay-host>/invite/<code>`. Verified empirically against a real
-  relay — the relay source is a separate repo, so do not expect to find or
-  re-derive this contract here. `resolveInviteClaimTarget` pins the claim URL
-  to the community's on-record relay (SSRF guard).
-- Activation is unchanged proof-of-admission: the bridge publishes a kind-0 and
-  confirms the relay returns it (`verifyAndActivateCommunityConnection`).
-- E2E that mints a token needs `BUZZROUTER_CONNECTOR_WRAPPING_KEYS_FILE` (set
-  in `playwright.config.ts` → `e2e/fixtures/connector-wrapping-keys.json`).
-
-## Shared-channel binding is chat-proof, not click-proof
-
-- Accepting a shared channel is two steps. The web "Accept" only ARMS: it pins
-  the chosen local channel onto the still-pending destination endpoint and mints
-  a single-use code (`armSharedChannelConfirmation` in
-  `src/shared-channels/store.ts`, `POST /api/shared-channels/[id]/accept`). It
-  does NOT activate — a forwarded/leaked link or web click grants nothing.
-- The bridge activates the route only when it hears that code typed as a kind-9
-  in the chosen channel from a pubkey the community's relay-signed **kind-13534
-  roster** marks owner/admin (`ConnectorSupervisor.handleConfirmationEvent`,
-  then `confirmSharedChannelBinding`). It FAILS CLOSED if the roster can't be
-  read. Roster format assumed: member tags `["p", <pubkey>, <role>]` (see
-  `parseRoster`) — bespoke to Buzz relays, not re-derivable from this repo.
-- So the bridge must subscribe to a pending endpoint's channel BEFORE the code
-  is typed: `listActiveConnectorConfigs` returns `pendingConfirmations`, and
-  `NostrRelayConnection.subscribe` adds them as a SECOND filter element (never a
-  second key on one Filter — keys AND).
-- The app server does NOT run the connector (that's `src/worker.ts`), so e2e for
-  the confirmation runs a `ConnectorSupervisor` in the test process against the
-  fake relay; the auth branches (owner ok / member / unreadable roster / replay
-  / expired) are covered in `store.integration.test.ts`.
-
-## Signer-free "Link" flow (mobile, no NIP-07)
-
-- The `/shared-channels` page (`current="shared-channels"`, heading "Link", nav
-  label "Link") leads with a signer-free flow so a phone with no browser
-  extension can link. `SignerFreeLink` in `shared-channels-client.tsx`; the old
-  browser-signer workspace (`OwnerTools`) is kept below as an optional power path
-  (needed for outbound propose to an ARBITRARY community + full route
-  management) — that path still requires NIP-98.
-- `POST /api/community-connections/begin-from-invite` (UNSIGNED,
-  `beginConnectionFromInvite`) identifies the community from the pasted invite
-  LINK's relay host (`findVerifiedCommunityCandidateByRelayUrl`). Only after the
-  relay accepts the invite does `enrollVerifiedCommunityFromInvite` enroll a
-  bare candidate with a random session principal; an existing hosted or
-  signed-owner identity is preserved. The flow then activates and mints
-  a short-lived, community-scoped **owner session**
-  (`src/shared-channels/owner-session.ts`, `connection_owner_sessions`,
-  migration `20260801T0900_connection_owner_sessions.sql`). The session rides in
-  the `x-owner-session` header in place of
-  a signature.
-- `POST /api/shared-channels/connect-featured` (session-authed,
-  `connectFeaturedCommunity`) is the one-press "Connect with the BuzzRouter
-  community" CTA: **BuzzRouter is the source** proposing to the caller so the
-  caller reuses the unchanged roster-gated ACCEPT path (arm→code→confirm). The
-  source channel id is `buzzrouter:<callerCommunityId>` — scoped per caller
-  precisely to dodge the `(community_id, local_channel_id)` unique index on active
-  endpoints (BuzzRouter cannot reuse one shared source channel across partners).
-- The session only substitutes for the owner signature; the roster-signed
-  in-channel code is still the real bind authority (unchanged). E2e:
-  `shared-channel-signer-free.spec.ts` (the fake relay now serves a stub
-  `POST /api/invites/claim`); the connect-featured + code branch is in
-  `store.integration.test.ts`.
-
-## Channel-per-link: the bridge creates the channel
-
-- Linking no longer needs a hand-made channel. The picker
-  (`LocalChannelPicker`, both propose and accept) DEFAULTS to "create a new
-  channel for this link"; the relay-backed picker is the "use one I already
-  have" alternative. On submit the client calls
-  `POST /api/shared-channels/create-channel` (NIP-98 signed) and links the
-  channel it returns.
-- `createDedicatedChannel` (`src/shared-channels/channel-handoff.ts`) publishes
-  kind **9007** (create — the bridge becomes owner), then kind **9000** to
-  promote the signing owner to `owner`, then 9000 to demote the bridge to
-  `member`. The bot must never linger as owner of a channel in someone else's
-  community. Kinds verified against Buzz's source — do not re-derive.
-- The create→promote→demote sequence is 3 relay round trips, so it is journaled
-  in `bridge_channel_handoffs`
-  (migration `20260801T1100_bridge_channel_handoffs.sql`) and the call is RESUMABLE:
-  invoked again with the same `idempotencyKey` it reuses the same channel and
-  finishes the remaining steps. States: `creating → created → handed_off →
-  completed`; `created` is the danger state (channel exists, bot still owns it).
-  It throws a clear product error (`channel_create_failed` /
-  `channel_handoff_incomplete`), never a raw failure, leaving the row retryable.
-  The create-fail-promote-retry path is covered in
-  `channel-handoff.integration.test.ts`.
-- The `(community_id, local_channel_id)` unique index on active/paused endpoints
-  is INTACT — a fresh channel per link is what keeps it satisfiable. Hand-picking
-  an already-routed channel now fails as a product error
-  (`channel_already_routed`, `assertChannelNotRouted`) instead of a raw 23505.
-- The e2e fake relay MODELS these kinds now (`applyGroupManagement` in
-  `e2e/support/fake-relay.ts`): 9007 makes a channel listable, 9000 writes a
-  roster role, exposed via `relay.channels()` / `relay.roster()` for assertions
-  (`shared-channel-create-channel.spec.ts`). Existing picker specs must click
-  "Use a channel I already have" before touching the dropdown.
+- Link is hub-only. There is no bilateral proposal, acceptance, typed code, or
+  roster-auth confirmation path. A private pair is the same hub endpoint with
+  `filter_mode = 'only_these'` and exactly one community in `filter_list`.
+- `POST /api/community-connections/begin-from-invite` is unsigned: the pasted
+  owner/admin invite identifies the verified community, admits its per-community
+  bridge, activates the connector, and mints a short-lived owner session. Invite
+  claim URLs remain pinned to the community's on-record relay; never weaken that
+  SSRF boundary or log the bearer invite code.
+- After activation, `GET /api/shared-channels/local-channels` lists the
+  community's actual relay channels. `POST /api/shared-channels/hub` binds the
+  selected channel immediately with sends/receives on. The link-step copy is the
+  disclosure and the owner-level invite is the consent.
+- The hub is one `shared_channels` row with N `participant` endpoints. Each
+  endpoint owns `sends`, `receives`, one `filter_mode`, and one UUID
+  `filter_list`. Fan-out creates one ordinary `bridge_deliveries` row/job per
+  eligible destination, preserving the existing retry and relay-ack semantics.
+- Mirrored kind-9 content starts with the source actor's kind-0 display name and
+  community. `NostrRelayConnection.getProfileName` caches pubkey-to-name on the
+  actor's own relay; only a missing profile falls back to a pubkey prefix. Because
+  names are user-controlled, `createDestinationProjection` must escape every
+  body line matching the attribution grammar before prepending the real line.
+- The invite-claim contract lives in the separate Buzz relay repository:
+  `POST https://<relay-host>/api/invites/claim`, NIP-98 signed by the joining
+  bridge key, body `{"code":"<code>"}`. This repo cannot implement the
+  relay-side rule that newly admitted members enter `general`.
+- E2E is `e2e/shared-channel-signer-free.spec.ts`; DB fan-out/filter coverage is
+  `src/shared-channels/store.integration.test.ts`.
 
 ## Two agents commit to main — ownership map
 

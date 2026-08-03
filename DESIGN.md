@@ -248,8 +248,8 @@ color never carries verification, success, or error meaning alone.
 
 **Body Font:** Instrument Sans, with system sans-serif fallbacks.
 
-**Label/Mono Font:** The platform monospace stack, reserved for relay URLs,
-commands, and single-use confirmation codes.
+**Label/Mono Font:** The platform monospace stack, reserved for relay URLs and
+technical identifiers.
 
 **Character:** A single crisp grotesk supports both dense operational UI and short
 reading copy. Hierarchy comes from size and weight, never condensed styles,
@@ -266,8 +266,7 @@ negative letter spacing, or decorative font changes.
   navigation.
 - **Label** (600-700, 11-12px, 1.35): Field prefixes, metrics, tags, timestamps,
   and evidence metadata.
-- **Mono** (600, 12px, 1.5): Technical identifiers, commands, and confirmation
-  codes only.
+- **Mono** (600, 12px, 1.5): Technical identifiers only.
 
 ### Named Rules
 

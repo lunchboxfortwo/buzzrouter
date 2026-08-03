@@ -3,11 +3,11 @@ import type { ReactNode } from "react";
 import styles from "./shared-channels.module.css";
 
 const stages = [
-  { title: "Admit both bots", detail: "Two invite links" },
-  { title: "Propose", detail: "Choose channels" },
-  { title: "Accept arms", detail: "Not live yet" },
-  { title: "Code verifies", detail: "Owner or admin" },
-  { title: "Messages mirror", detail: "Both ways" },
+  { title: "Paste invite", detail: "Owner or admin" },
+  { title: "Bridge joins", detail: "One community" },
+  { title: "Pick channel", detail: "From your relay" },
+  { title: "Hub opens", detail: "Send and receive on" },
+  { title: "Messages fan out", detail: "Per-relay outcomes" },
 ] as const;
 
 export function SharedChannelFlow() {
@@ -17,8 +17,8 @@ export function SharedChannelFlow() {
       className={styles.flow}
     >
       <figcaption className={styles.flowHeading}>
-        <h2 id="shared-channel-flow-title">Two communities. One verified link.</h2>
-        <span>Accepting is not enough—the channel code makes it live.</span>
+        <h2 id="shared-channel-flow-title">One link. Every hub community.</h2>
+        <span>No proposal, acceptance, or confirmation code.</span>
       </figcaption>
 
       <ol className={styles.flowSteps}>
@@ -38,16 +38,16 @@ export function SharedChannelFlow() {
         >
           <div className={styles.channelAction}>
             <span className={styles.channelActionBefore}>
-              + Create a new channel
+              Loading channels…
             </span>
-            <span className={styles.channelActionAfter}># launch-collab</span>
+            <span className={styles.channelActionAfter}># general selected</span>
           </div>
           <div className={`${styles.chatMessage} ${styles.outboundMessage}`}>
             Hey Orange Magic team, could you send us video ad copy for
             tomorrow&apos;s product launch?
           </div>
           <div className={`${styles.chatMessage} ${styles.mirroredMessage}`}>
-            <strong>Franz - OrangeMagic</strong>
+            <strong>Franz · Orange Magic [via BuzzRouter]</strong>
             Sure, give me a couple of hours
           </div>
         </CommunityPanel>
@@ -63,10 +63,10 @@ export function SharedChannelFlow() {
             <strong>BuzzRouter</strong>
           </div>
           <div className={styles.routeLine} />
-          <div className={styles.proposalCard}>Shared channel proposed</div>
-          <div className={styles.armedBadge}>Armed · waiting for code</div>
+          <div className={styles.proposalCard}>Open channel joined</div>
+          <div className={styles.armedBadge}>Send + receive on</div>
           <div className={styles.verifiedBadge}>
-            <CheckIcon /> Roster verified · live
+            <CheckIcon /> Relay delivered · live
           </div>
         </div>
 
@@ -76,10 +76,7 @@ export function SharedChannelFlow() {
           name="Orange Magic"
         >
           <div className={styles.channelName}># launch-collab</div>
-          <div className={styles.codeBubble}>
-            <span>Owner</span>
-            BRIDGE-7K4M
-          </div>
+          <div className={styles.codeBubble}><span>Hub</span>Linked</div>
           <div className={`${styles.chatMessage} ${styles.replyMessage}`}>
             <strong>Franz</strong>
             Sure, give me a couple of hours
@@ -89,24 +86,24 @@ export function SharedChannelFlow() {
 
       <div aria-hidden="true" className={styles.staticScene}>
         <div>
-          <strong>Both admitted</strong>
-          <span>Your team ✓&nbsp;&nbsp; Orange Magic ✓</span>
+          <strong>Invite accepted</strong>
+          <span>Your bridge joins the relay ✓</span>
         </div>
         <div>
-          <strong>Proposed</strong>
-          <span>Your team → Orange Magic</span>
+          <strong>Bridge online</strong>
+          <span>Channels loaded from your relay</span>
         </div>
         <div>
-          <strong>Accepted</strong>
-          <span>Armed · not live</span>
+          <strong>Channel picked</strong>
+          <span># launch-collab</span>
         </div>
         <div>
-          <strong>Code sent</strong>
-          <span>Owner/admin → roster verified ✓</span>
+          <strong>Hub joined</strong>
+          <span>Send + receive on ✓</span>
         </div>
         <div>
-          <strong>Live both ways</strong>
-          <span>Franz - OrangeMagic · Sure, give me a couple of hours</span>
+          <strong>Delivered</strong>
+          <span>Franz · Orange Magic [via BuzzRouter] · Sure, give me a couple of hours</span>
         </div>
       </div>
     </figure>

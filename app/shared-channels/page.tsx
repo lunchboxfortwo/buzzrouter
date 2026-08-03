@@ -15,11 +15,11 @@ export default function SharedChannelsPage() {
           <h1>Link</h1>
           <p className={styles.explainerLead}>
             <strong>
-              Shared channels on Buzz work like shared channels in Slack.
+              Link one channel to the open BuzzRouter channel.
             </strong>{" "}
-            Two communities each keep a channel of their own, and messages sent
-            in one show up in the other. Each community first admits the
-            BuzzRouter bot; then the owners link their chosen channels.
+            Your community keeps talking at home while BuzzRouter mirrors
+            messages to every other participating community. To keep a link
+            private, switch the community filter to one selected community.
           </p>
         </header>
         <SharedChannelFlow />

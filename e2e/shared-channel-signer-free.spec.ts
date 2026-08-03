@@ -14,14 +14,9 @@ import { startFakeRelay, type FakeRelay } from "./support/fake-relay";
 /**
  * The signer-free "Link" journey: a phone with NO browser extension pastes an
  * invite link, admits the bridge, and connects to the BuzzRouter community in
- * one tap — authorized end to end by the pasted invite + the community-scoped
- * session it mints, never a NIP-07 signature.
- *
- * begin-from-invite and connect-featured both run through the REAL app HTTP
- * routes. The one thing not re-driven here is the roster-signed in-channel code
- * that finishes the bind — that authorization branch is covered against a live
- * ConnectorSupervisor in store.integration.test.ts. This spec asserts the arm
- * state the connector would then consume.
+ * one step — authorized by the pasted owner/admin invite and the
+ * community-scoped session it mints, never a NIP-07 signature or a second
+ * proposal/confirmation mechanism.
  */
 
 const HOME_HOST = "relay.buzzrouter.com";
@@ -37,6 +32,7 @@ const featuredOwner = ownerKey(2);
 let pool: Pool;
 let relay: FakeRelay;
 let callerCommunityId: string;
+let featuredCommunityId: string;
 
 test.beforeAll(async () => {
   relay = await startFakeRelay([
@@ -48,14 +44,18 @@ test.beforeAll(async () => {
 
   // The BuzzRouter community itself: verified, owned, connector already active.
   // Its relay is never dialed in this spec (no supervisor runs here), so a
-  // placeholder wss:// is fine — connect-featured only needs the active row.
-  const featured = await seedOwnedCommunity(pool, {
+  // placeholder wss:// is fine — hub creation only needs the active row.
+  featuredCommunityId = await seedOwnedCommunity(pool, {
     canonicalRelayUrl: "wss://relay.buzzrouter.com",
     displayName: "BuzzRouter",
     host: HOME_HOST,
     ownerPubkey: featuredOwner,
   });
-  await seedActiveConnection(pool, featured, "wss://relay.buzzrouter.com");
+  await seedActiveConnection(
+    pool,
+    featuredCommunityId,
+    "wss://relay.buzzrouter.com",
+  );
 
   // The caller's own community: verified + owned, but NOT yet connected — the
   // invite flow admits the bridge. Its relay IS the live fake relay, so the real
@@ -66,7 +66,6 @@ test.beforeAll(async () => {
     host: "caller.signerfree.example",
     ownerPubkey: callerOwner,
   });
-  relay.setRoster([{ pubkey: callerOwner, role: "owner" }]);
 });
 
 test.afterAll(async () => {
@@ -80,34 +79,28 @@ test("a phone with no extension links to BuzzRouter from an invite link", async 
   // The page leads with the signer-free flow — no extension wall gating it.
   await page.goto("/shared-channels");
   await expect(
-    page.getByText(
-      "Shared channels on Buzz work like shared channels in Slack.",
-    ),
+    page.getByText("Link one channel to the open BuzzRouter channel."),
   ).toBeVisible();
   const flow = page.getByRole("figure", {
-    name: "Two communities. One verified link.",
+    name: "One link. Every hub community.",
   });
   await expect(flow).toBeVisible();
-  await expect(flow.getByText("Admit both bots")).toBeVisible();
-  await expect(flow.getByText("Accept arms")).toBeVisible();
-  await expect(flow.getByText("Code verifies")).toBeVisible();
-  await expect(flow.getByText("Messages mirror")).toBeVisible();
+  await expect(flow.getByText("Paste invite")).toBeVisible();
+  await expect(flow.getByText("Pick channel")).toBeVisible();
+  await expect(flow.getByText("Hub opens")).toBeVisible();
+  await expect(flow.getByText("Messages fan out")).toBeVisible();
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect(flow.getByText("Both admitted")).toBeVisible();
-  await expect(flow.getByText("Armed · not live")).toBeVisible();
+  await expect(flow.getByText("Invite accepted")).toBeVisible();
+  await expect(flow.getByText("Send + receive on ✓")).toBeVisible();
   await expect(
     flow.getByText(
-      "Franz - OrangeMagic · Sure, give me a couple of hours",
+      "Franz · Orange Magic [via BuzzRouter] · Sure, give me a couple of hours",
     ),
   ).toBeVisible();
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await expect(
     page.getByRole("button", { name: "Connect signer" }),
   ).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "command line" })).toHaveAttribute(
-    "href",
-    /admin-without-a-browser-signer\.md$/,
-  );
   const inviteField = page.getByLabel("Invite link from your Buzz app");
   await expect(inviteField).toBeVisible();
 
@@ -119,23 +112,33 @@ test("a phone with no extension links to BuzzRouter from an invite link", async 
   await expect(
     page.getByRole("heading", { name: "Connected: Caller Community" }),
   ).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole("heading", { name: "Routes" })).toBeVisible();
 
-  // Pick the channel to share and take the one-press canonical CTA.
-  await page.getByLabel("Channel to share name").fill("general");
-  await page.getByLabel("Channel to share ID").fill("general");
+  // The admitted connector lists real channels before the hub can be joined.
+  await page.getByLabel("Channel for hub messages").selectOption("general");
   await page
-    .getByRole("button", { name: "Connect with the BuzzRouter community" })
+    .getByRole("button", { name: "Join the open BuzzRouter channel" })
     .click();
 
-  // The page shows the one-time code the owner types in their channel to finish.
-  await expect(page.getByText("One step left")).toBeVisible();
-  const code = (await page.locator("code").first().innerText()).trim();
-  expect(code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
+  await expect(
+    page.getByRole("heading", {
+      name: "Caller Community is in the open channel",
+    }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Send messages to the hub")).toBeChecked();
+  await expect(page.getByLabel("Receive messages from the hub")).toBeChecked();
 
-  // The route BuzzRouter proposed to the caller is armed and waiting for the
-  // roster-signed code — source (BuzzRouter) active on a caller-scoped channel,
-  // destination (caller) still pending until the code lands.
+  // The one filter controls both directions, so it remains editable when
+  // receiving is off. Selecting only BuzzRouter models a private pair without
+  // reviving a proposal or confirmation mechanism.
+  await page.getByLabel("Receive messages from the hub").click();
+  await expect(page.getByLabel("Receive messages from the hub")).not.toBeChecked();
+  await expect(page.getByLabel("Community filter mode")).toBeEnabled();
+  await page.getByLabel("Community filter mode").selectOption("only_these");
+  await expect(page.getByLabel("Community filter mode")).toHaveValue("only_these");
+  await page.getByLabel("BuzzRouter", { exact: true }).click();
+  await expect(page.getByLabel("BuzzRouter", { exact: true })).toBeChecked();
+
+  // Hub membership is immediately active. There is no bilateral confirmation.
   const endpoints = await pool.query<{
     community_id: string;
     local_channel_id: string | null;
@@ -148,30 +151,40 @@ test("a phone with no extension links to BuzzRouter from an invite link", async 
       FROM shared_channel_endpoints AS endpoints
       JOIN shared_channels AS channels
         ON channels.id = endpoints.shared_channel_id
-      WHERE channels.proposed_name = 'buzzrouter'
+      WHERE channels.mode = 'hub'
       ORDER BY endpoints.role
     `,
   );
-  const destination = endpoints.rows.find((row) => row.role === "destination");
-  const source = endpoints.rows.find((row) => row.role === "source");
-  expect(destination).toMatchObject({
+  const caller = endpoints.rows.find(
+    (row) => row.community_id === callerCommunityId,
+  );
+  expect(caller).toMatchObject({
     community_id: callerCommunityId,
-    state: "pending",
-  });
-  expect(source).toMatchObject({
-    local_channel_id: `buzzrouter:${callerCommunityId}`,
+    local_channel_id: "general",
+    role: "participant",
     state: "active",
   });
-
-  const confirmation = await pool.query<{ count: string }>(
+  const settings = await pool.query<{
+    filter_list: string[];
+    filter_mode: string;
+    receives: boolean;
+    sends: boolean;
+  }>(
     `
-      SELECT count(*)::text AS count
-      FROM shared_channel_confirmations
-      WHERE community_id = $1 AND state = 'pending'
+      SELECT endpoints.filter_list, endpoints.filter_mode,
+             endpoints.receives, endpoints.sends
+      FROM shared_channel_endpoints AS endpoints
+      WHERE endpoints.community_id = $1
     `,
     [callerCommunityId],
   );
-  expect(confirmation.rows[0].count).toBe("1");
+  expect(settings.rows[0]).toMatchObject({
+    filter_list: [featuredCommunityId],
+    filter_mode: "only_these",
+    receives: false,
+    sends: true,
+  });
+
 });
 
 function ownerKey(marker: number): string {
@@ -239,8 +252,6 @@ async function seedActiveConnection(
 async function resetDatabase(database: Pool): Promise<void> {
   await database.query(`
     TRUNCATE
-      shared_channel_audit_events,
-      shared_channel_confirmations,
       connection_owner_sessions,
       bridge_event_mappings,
       bridge_deliveries,

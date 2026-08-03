@@ -40,13 +40,14 @@ export function requireInstallToken(value: unknown): string {
 
 export async function readInstallerRequest(
   request: Request,
+  maxBytes = 1_024,
 ): Promise<Record<string, unknown>> {
   const contentLength = Number(request.headers.get("content-length") ?? 0);
-  if (contentLength > 1_024) {
+  if (contentLength > maxBytes) {
     throw new ApiError("invalid_input", "Request body is too large.", 413);
   }
   const body = await request.text();
-  if (Buffer.byteLength(body, "utf8") > 1_024) {
+  if (Buffer.byteLength(body, "utf8") > maxBytes) {
     throw new ApiError("invalid_input", "Request body is too large.", 413);
   }
   try {

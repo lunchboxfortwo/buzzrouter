@@ -43,10 +43,9 @@ Three surfaces:
   community in Buzz.
 - **List** (`/submit`) — a community owner submits a relay, community URL, or
   invite for verification and listing.
-- **Link** (`/shared-channels`) — a community connects to the **open BuzzRouter
-  channel** (the default: one link, reach every opted-in community) or pairs
-  privately with one other community (the advanced case). BuzzRouter mirrors
-  messages with visible attribution.
+- **Link** (`/shared-channels`) — a community connects one local channel to the
+  **open BuzzRouter channel** and reaches every permitted hub community.
+  BuzzRouter mirrors messages with visible attribution.
 
 The MVP succeeds when a first-time visitor can understand what several communities
 do and make a confident join decision in a few minutes.
@@ -92,47 +91,7 @@ discarded before persistence. A submission enters the normal discovery and
 verification pipeline; it does not publish immediately.
 
 Operators submit listing context during intake. Directory metadata remains
-independent of Link authorization; linking uses an owner/admin invite and the
-roster-signed in-channel confirmation.
-
-## Link: Cross-Community Shared Channels
-
-Link (`/shared-channels`) lets two verified community owners pair one channel
-in their community with one channel in another, so members in each keep
-talking in their home community while BuzzRouter mirrors messages and threads
-between the two channels with visible attribution. It is deliberately not a
-managed inbox or a broadcast tool: BuzzRouter pairs exactly one channel per
-route, never impersonates a member, and never injects itself as a party to the
-conversation.
-
-Admission and pairing are a two-step flow (this replaced the v0.2 web-ceremony
-design in `docs/buzzrouter-cross-community-messaging-v0.2.md` — read the
-current code in `src/shared-channels/`, not that doc, for the shipped
-mechanics):
-
-1. **Admit the bridge.** The owner pastes an invite link from their Buzz app
-   into BuzzRouter (or admits the bridge by key or self-hosted connector
-   command); the bridge redeems it and joins the community as an ordinary
-   member, the same as any other member would.
-2. **Confirm the binding.** The owner arms a proposed channel pairing on
-   BuzzRouter's web UI, which mints a single-use code, then types that code as
-   an ordinary message in the chosen Buzz channel. The bridge only activates
-   the route once it observes that code posted by a pubkey the community's
-   relay-signed roster marks owner or admin — a forwarded or leaked
-   confirmation link grants nothing on its own, because the web step only
-   arms the pairing and never activates it.
-
-Each community gets its own generated bridge keypair per connection
-(`src/shared-channels/installer.ts`); messages are re-signed by that bridge
-identity with `br` tags carrying the source community, source event, and
-source actor so recipients can see whose message is being mirrored and from
-where. Delivery state, retries, and deduplication are tracked durably in
-PostgreSQL (`bridge_messages`/`bridge_deliveries`), reasoned about in
-`docs/hub-routing-analysis.md`.
-
-Shared channels are new and have not been proven at scale — they connect a
-small number of paired channels today, not a general message bus between
-communities.
+independent of Link authorization; linking uses an owner/admin invite.
 
 ## The Open BuzzRouter Channel
 
@@ -147,20 +106,25 @@ hub is also the only surface BuzzRouter controls end to end — we operate
 else. Everything currently blocking the product is blocked on Block; the hub is
 not.
 
-**Consent is the design, not a setting.** Linking is not consent to receive.
-Receiving is its own opt-in, off by default, or a directory quietly becomes a
-broadcast network. Each community controls: whether it sends, whether it
-receives, and which communities it will not accept.
+**Consent is the design, not a second ceremony.** Pasting an owner/admin invite
+and joining the open channel turns sending and receiving on. The link step says
+plainly that other hub communities' messages will appear in the chosen channel.
+Each community can later turn either direction off and choose one blocklist or
+allowlist that bounds which other hub communities it exchanges traffic with.
 
-**Bilateral stays** as the advanced option for two communities that want a
-private pair. It is not co-equal in the UI; the open channel is the default.
+There is no separate bilateral mechanism. A community that wants a private pair
+selects `only_these` and puts one community in its filter list. This
+deliberately gives up the old two-owner acceptance handshake in favor of the
+hub's disclosed, owner-invited, open-by-default model.
 
 ### Decisions (2026-08-02)
 
-- The hub is the default connection model. Bilateral is advanced.
+- The hub is the only connection model; a one-community allowlist is a private
+  pair without a second protocol.
 - Joining a community must land the joiner in a channel. We can guarantee this
   on our own relay and nowhere else (see `block/buzz#4307`).
-- Receive is opt-in and off by default. Send and receive are separate switches.
+- Send and receive are on by default after the disclosed owner-level link.
+  They remain separate switches.
 - Attribution is always visible on a mirrored message.
 
 ### Open questions
@@ -180,11 +144,11 @@ implementation detail:
 - **The bridge** (`src/shared-channels/`) exists only to carry Link traffic.
   It joins a community's relay only after being explicitly invited or
   admitted by an owner/admin, gets a freshly generated keypair per connection,
-  and subscribes to exactly one mapped channel per route (a `#h`-tag filter
+  and subscribes to exactly one hub-mapped channel (a `#h`-tag filter
   scoped to that channel's ID — see `src/shared-channels/connector.ts`). It
   runs no LLM and does not summarize, interpret, or act on what it reads; it
   mirrors message content verbatim, re-signed under its own identity with
-  attribution tags. It cannot see any channel it was not explicitly paired to,
+  attribution tags. It cannot see any channel not selected during Link,
   and it cannot see communities it was never admitted into at all.
 - **The presence agent** (`src/presence/`, plus the jobs in
   `src/jobs/auto-join-communities.ts`, `harvest-invites.ts`, and
@@ -289,9 +253,9 @@ Implemented:
 - Invite-driven Link enrollment for verified communities.
 - Internal evidence review and operational tooling.
 - Self-hosted continuous deployment to `buzzrouter.com`.
-- Link: bridge admission by invite link, key, or connector command;
-  two-step channel pairing confirmed by an owner/admin-signed roster; verbatim
-  attributed message mirroring between exactly one channel per route.
+- Link: owner-invite bridge admission, one selected channel per community,
+  hub-wide fan-out with per-community send/receive filtering, durable delivery
+  outcomes, and human-name-first attributed message mirroring.
 - The presence agent: scheduled auto-join of joinable directory communities
   and LLM-derived activity summaries that feed Discover's focus and activity
   signals.

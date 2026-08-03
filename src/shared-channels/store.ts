@@ -16,10 +16,6 @@ const CONNECTOR_KEY_BYTES = 32;
 const WRAPPING_KEY_BYTES = 32;
 const GCM_NONCE_BYTES = 12;
 const GCM_TAG_BYTES = 16;
-const CONFIRMATION_CODE_LENGTH = 8;
-// Crockford-ish alphabet: no 0/O/1/I so a code is easy to read and retype.
-const CONFIRMATION_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const CONFIRMATION_TTL_MS = 15 * 60_000;
 
 export interface EncryptedConnectorKey {
   authTag: Buffer;
@@ -43,34 +39,19 @@ export interface CommunityConnectionRecord {
   wrappingKeyVersion: number;
 }
 
-export interface SharedChannelRecord {
-  createdAt: string;
-  id: string;
-  proposedByCommunityId: string;
-  proposedName: string;
-  purpose: string;
-  state: "proposed" | "active" | "rejected" | "disconnected";
-}
-
 export interface SharedChannelEndpointRecord {
   communityId: string;
   connectionId: string | null;
   id: string;
   localChannelId: string | null;
   localChannelName: string | null;
-  role: "source" | "destination";
+  role: "participant";
+  sends: boolean;
+  receives: boolean;
+  filterMode: HubFilterMode;
+  filterList: string[];
   sharedChannelId: string;
-  state: "pending" | "active" | "paused" | "disconnected";
-}
-
-export interface SharedChannelCommunitySummary {
-  connectionHealth: CommunityConnectionRecord["health"] | null;
-  connectionState: CommunityConnectionRecord["state"] | null;
-  displayName: string;
-  featured: boolean;
-  id: string;
-  relayUrl: string;
-  slug: string | null;
+  state: "active";
 }
 
 /**
@@ -82,24 +63,6 @@ export function homeCommunityHost(): string {
   return (
     process.env.BUZZROUTER_HOME_COMMUNITY_HOST ?? "relay.buzzrouter.com"
   );
-}
-
-export interface SharedChannelAdminRecord extends SharedChannelRecord {
-  ownCommunityId: string;
-  ownEndpointId: string;
-  ownEndpointState: SharedChannelEndpointRecord["state"];
-  ownLocalChannelId: string | null;
-  ownLocalChannelName: string | null;
-  peerCommunityId: string;
-  peerDisplayName: string;
-  peerEndpointState: SharedChannelEndpointRecord["state"];
-  peerSlug: string | null;
-}
-
-export interface SharedChannelAdminWorkspace {
-  channels: SharedChannelAdminRecord[];
-  communities: SharedChannelCommunitySummary[];
-  destinations: SharedChannelCommunitySummary[];
 }
 
 export interface BeginCommunityConnectionInstallInput {
@@ -125,54 +88,6 @@ export interface CommunityConnectionInstallContext
   tokenId: string;
 }
 
-export interface CreateSharedChannelInput {
-  destinationCommunityId: string;
-  expiresAt?: Date;
-  idempotencyKey: string;
-  ownerPubkey: string;
-  proposedName: string;
-  purpose: string;
-  sourceChannelId: string;
-  sourceChannelName: string;
-  sourceCommunityId: string;
-}
-
-export interface ArmSharedChannelConfirmationInput {
-  communityId: string;
-  idempotencyKey: string;
-  localChannelId: string;
-  localChannelName: string;
-  ownerPubkey: string;
-  sharedChannelId: string;
-}
-
-export interface ArmSharedChannelConfirmationResult {
-  code: string;
-  expiresAt: string;
-  localChannelId: string;
-  localChannelName: string;
-  sharedChannelId: string;
-}
-
-export interface ConfirmSharedChannelBindingInput {
-  actorCreatedAt: number;
-  actorEventId: string;
-  actorPubkey: string;
-  confirmationId: string;
-}
-
-export interface ConfirmSharedChannelBindingResult {
-  activated: boolean;
-  sharedChannelId?: string;
-}
-
-export interface ChangeEndpointStateInput {
-  communityId: string;
-  idempotencyKey: string;
-  ownerPubkey: string;
-  sharedChannelId: string;
-}
-
 export interface IngestBridgeMessageInput {
   body: string;
   bodySha256: string;
@@ -181,6 +96,7 @@ export interface IngestBridgeMessageInput {
   sharedChannelId: string;
   signedEvent: unknown;
   sourceActorPubkey: string;
+  sourceActorName?: string;
   sourceCreatedAt: number;
   sourceEndpointId: string;
   sourceEventId: string;
@@ -190,7 +106,54 @@ export interface IngestBridgeMessageInput {
 export interface IngestBridgeMessageResult {
   created: boolean;
   deliveryId: string;
+  deliveryIds: string[];
   messageId: string;
+}
+
+export type HubFilterMode = "everyone_except" | "only_these";
+
+export interface HubMemberSummary {
+  communityId: string;
+  displayName: string;
+}
+
+export interface HubMembership {
+  communityId: string;
+  endpointId: string;
+  filterList: string[];
+  filterMode: HubFilterMode;
+  localChannelId: string;
+  localChannelName: string;
+  members: HubMemberSummary[];
+  recentOutcomes: HubDeliveryOutcome[];
+  receives: boolean;
+  sends: boolean;
+  sharedChannelId: string;
+}
+
+export interface HubDeliveryOutcome {
+  communityId: string;
+  communityName: string;
+  errorCode: string | null;
+  messageId: string;
+  state: BridgeDeliveryContext["state"];
+  updatedAt: string;
+}
+
+export interface JoinOpenHubInput {
+  communityId: string;
+  localChannelId: string;
+  localChannelName: string;
+  ownerPubkey: string;
+}
+
+export interface UpdateHubSettingsInput {
+  communityId: string;
+  filterList: string[];
+  filterMode: HubFilterMode;
+  ownerPubkey: string;
+  receives: boolean;
+  sends: boolean;
 }
 
 export interface ConnectorRouteConfig {
@@ -200,19 +163,9 @@ export interface ConnectorRouteConfig {
   sourceEndpointId: string;
 }
 
-export interface PendingConfirmationConfig {
-  code: string;
-  confirmationId: string;
-  endpointId: string;
-  localChannelId: string;
-  sharedChannelId: string;
-  since: number;
-}
-
 export interface ActiveConnectorConfig
   extends CommunityConnectionRecord,
     EncryptedConnectorKey {
-  pendingConfirmations: PendingConfirmationConfig[];
   routes: ConnectorRouteConfig[];
 }
 
@@ -229,6 +182,7 @@ export interface BridgeDeliveryContext {
   routeActive: boolean;
   sharedChannelId: string;
   sourceActorPubkey: string;
+  sourceActorName: string | null;
   sourceCommunityId: string;
   sourceCommunityName: string;
   sourceEventId: string;
@@ -242,22 +196,16 @@ export interface BridgeDeliveryContext {
     | "cancelled";
 }
 
-interface SharedChannelRow {
-  created_at: Date;
-  expires_at: Date | null;
-  id: string;
-  proposed_by_community_id: string;
-  proposed_name: string;
-  purpose: string;
-  state: SharedChannelRecord["state"];
-}
-
 interface SharedChannelEndpointRow {
   community_id: string;
   connection_id: string | null;
   id: string;
+  filter_list?: string[];
+  filter_mode?: HubFilterMode;
   local_channel_id: string | null;
   local_channel_name_snapshot: string | null;
+  receives?: boolean;
+  sends?: boolean;
   role: SharedChannelEndpointRecord["role"];
   shared_channel_id: string;
   state: SharedChannelEndpointRecord["state"];
@@ -684,550 +632,6 @@ export async function getOwnedCommunityConnection(
   };
 }
 
-export async function createSharedChannel(
-  pool: Pool,
-  input: CreateSharedChannelInput,
-): Promise<SharedChannelRecord> {
-  if (input.sourceCommunityId === input.destinationCommunityId) {
-    throw new ApiError(
-      "invalid_input",
-      "A shared channel requires two communities.",
-    );
-  }
-  assertText(input.proposedName, 1, 80, "Proposed channel name");
-  assertText(input.purpose, 1, 500, "Purpose");
-  assertText(input.sourceChannelId, 1, 200, "Source channel");
-  assertText(input.sourceChannelName, 1, 80, "Source channel name");
-  assertIdempotencyKey(input.idempotencyKey);
-
-  return withTransaction(pool, async (client) => {
-    await lockIdempotencyKey(
-      client,
-      input.ownerPubkey,
-      input.idempotencyKey,
-    );
-    const prior = await getIdempotentSharedChannel(
-      client,
-      input.ownerPubkey,
-      input.idempotencyKey,
-      "shared_channel.proposed",
-    );
-    if (prior) return prior;
-
-    await requireVerifiedOwner(
-      client,
-      input.sourceCommunityId,
-      input.ownerPubkey,
-    );
-    await requireVerifiedCommunity(
-      client,
-      input.destinationCommunityId,
-    );
-    const sourceConnection = await requireActiveConnection(
-      client,
-      input.sourceCommunityId,
-    );
-    await assertChannelNotRouted(
-      client,
-      input.sourceCommunityId,
-      input.sourceChannelId,
-    );
-
-    const channelResult = await client.query<SharedChannelRow>(
-      `
-        INSERT INTO shared_channels (
-          proposed_by_community_id,
-          proposed_name,
-          purpose,
-          created_by,
-          expires_at
-        )
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING
-          id,
-          proposed_by_community_id,
-          proposed_name,
-          purpose,
-          state,
-          created_at,
-          expires_at
-      `,
-      [
-        input.sourceCommunityId,
-        input.proposedName,
-        input.purpose,
-        input.ownerPubkey,
-        input.expiresAt ?? null,
-      ],
-    );
-    const channel = channelResult.rows[0];
-
-    await client.query(
-      `
-        INSERT INTO shared_channel_endpoints (
-          shared_channel_id,
-          community_id,
-          connection_id,
-          role,
-          state,
-          relay_url_snapshot,
-          local_channel_id,
-          local_channel_name_snapshot,
-          last_event_created_at,
-          accepted_by,
-          accepted_at
-        )
-        VALUES
-          (
-            $1,
-            $2,
-            $3,
-            'source',
-            'active',
-            $4,
-            $5,
-            $6,
-            floor(extract(epoch FROM now()))::bigint,
-            $7,
-            now()
-          ),
-          (
-            $1,
-            $8,
-            NULL,
-            'destination',
-            'pending',
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL
-          )
-      `,
-      [
-        channel.id,
-        input.sourceCommunityId,
-        sourceConnection.id,
-        sourceConnection.relayUrl,
-        input.sourceChannelId,
-        input.sourceChannelName,
-        input.ownerPubkey,
-        input.destinationCommunityId,
-      ],
-    );
-    await insertAuditEvent(client, {
-      action: "shared_channel.proposed",
-      actorPubkey: input.ownerPubkey,
-      communityId: input.sourceCommunityId,
-      idempotencyKey: input.idempotencyKey,
-      nextState: "proposed",
-      sharedChannelId: channel.id,
-      targetId: channel.id,
-    });
-
-    return mapSharedChannel(channel);
-  });
-}
-
-/**
- * Arm a pending destination endpoint for chat-proof binding: pin the chosen
- * local channel onto the still-pending endpoint (so the already-admitted bridge
- * can subscribe to it) and mint a single-use code the owner types into that
- * channel. Clicking accept in the web UI only gets you here — the code is NOT
- * authority. The route stays proposed until the bridge hears the code from a
- * roster owner/admin ({@link confirmSharedChannelBinding}).
- */
-export async function armSharedChannelConfirmation(
-  pool: Pool,
-  input: ArmSharedChannelConfirmationInput,
-): Promise<ArmSharedChannelConfirmationResult> {
-  assertText(input.localChannelId, 1, 200, "Local channel");
-  assertText(input.localChannelName, 1, 80, "Local channel name");
-  assertIdempotencyKey(input.idempotencyKey);
-
-  return withTransaction(pool, async (client) => {
-    await requireVerifiedOwner(client, input.communityId, input.ownerPubkey);
-
-    const target = await client.query<{
-      channel_expires_at: Date | null;
-      channel_state: SharedChannelRecord["state"];
-      endpoint_id: string;
-      endpoint_state: SharedChannelEndpointRecord["state"];
-    }>(
-      `
-        SELECT
-          channels.state AS channel_state,
-          channels.expires_at AS channel_expires_at,
-          endpoints.id AS endpoint_id,
-          endpoints.state AS endpoint_state
-        FROM shared_channels AS channels
-        JOIN shared_channel_endpoints AS endpoints
-          ON endpoints.shared_channel_id = channels.id
-        WHERE channels.id = $1
-          AND endpoints.community_id = $2
-          AND endpoints.role = 'destination'
-        FOR UPDATE OF channels, endpoints
-      `,
-      [input.sharedChannelId, input.communityId],
-    );
-    const row = target.rows[0];
-    if (!row) {
-      throw new ApiError(
-        "invitation_not_found",
-        "The invitation is unavailable.",
-        404,
-      );
-    }
-    if (row.channel_state !== "proposed" || row.endpoint_state !== "pending") {
-      throw invalidChannelState();
-    }
-    if (
-      row.channel_expires_at &&
-      row.channel_expires_at.getTime() <= Date.now()
-    ) {
-      throw new ApiError(
-        "invitation_expired",
-        "The shared-channel invitation has expired.",
-        409,
-      );
-    }
-
-    const connection = await requireActiveConnection(
-      client,
-      input.communityId,
-    );
-    await assertChannelNotRouted(
-      client,
-      input.communityId,
-      input.localChannelId,
-    );
-
-    await client.query(
-      `
-        UPDATE shared_channel_endpoints
-        SET connection_id = $2,
-            relay_url_snapshot = $3,
-            local_channel_id = $4,
-            local_channel_name_snapshot = $5,
-            updated_at = now()
-        WHERE id = $1
-          AND role = 'destination'
-          AND state = 'pending'
-      `,
-      [
-        row.endpoint_id,
-        connection.id,
-        connection.relayUrl,
-        input.localChannelId,
-        input.localChannelName,
-      ],
-    );
-
-    // Re-arming replaces any prior live code for this endpoint.
-    await client.query(
-      `
-        DELETE FROM shared_channel_confirmations
-        WHERE endpoint_id = $1
-          AND state = 'pending'
-      `,
-      [row.endpoint_id],
-    );
-
-    const code = generateConfirmationCode();
-    const inserted = await client.query<{ expires_at: Date }>(
-      `
-        INSERT INTO shared_channel_confirmations (
-          shared_channel_id,
-          endpoint_id,
-          community_id,
-          connection_id,
-          local_channel_id,
-          local_channel_name_snapshot,
-          code,
-          expires_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(secs => $8))
-        RETURNING expires_at
-      `,
-      [
-        input.sharedChannelId,
-        row.endpoint_id,
-        input.communityId,
-        connection.id,
-        input.localChannelId,
-        input.localChannelName,
-        code,
-        Math.floor(CONFIRMATION_TTL_MS / 1_000),
-      ],
-    );
-
-    await insertAuditEvent(client, {
-      action: "shared_channel.confirmation_armed",
-      actorPubkey: input.ownerPubkey,
-      communityId: input.communityId,
-      idempotencyKey: input.idempotencyKey,
-      nextState: "proposed",
-      previousState: "proposed",
-      sharedChannelId: input.sharedChannelId,
-      targetId: input.sharedChannelId,
-    });
-
-    return {
-      code,
-      expiresAt: inserted.rows[0].expires_at.toISOString(),
-      localChannelId: input.localChannelId,
-      localChannelName: input.localChannelName,
-      sharedChannelId: input.sharedChannelId,
-    };
-  });
-}
-
-/**
- * Consume a confirmation code and activate the destination endpoint + channel.
- * The caller (the connector) has ALREADY verified, against the relay-signed
- * roster, that the typing pubkey is an owner/admin — this only does the atomic
- * single-use consume + activation. A replayed or expired code matches no pending
- * row and returns `{ activated: false }`.
- */
-export async function confirmSharedChannelBinding(
-  pool: Pool,
-  input: ConfirmSharedChannelBindingInput,
-): Promise<ConfirmSharedChannelBindingResult> {
-  assertHex(input.actorPubkey, 64, "Confirmation author");
-  assertHex(input.actorEventId, 64, "Confirmation event ID");
-
-  return withTransaction(pool, async (client) => {
-    const consumed = await client.query<{
-      community_id: string;
-      endpoint_id: string;
-      shared_channel_id: string;
-    }>(
-      `
-        UPDATE shared_channel_confirmations
-        SET state = 'consumed',
-            consumed_at = now(),
-            consumed_by_pubkey = $2,
-            consumed_event_id = $3,
-            updated_at = now()
-        WHERE id = $1
-          AND state = 'pending'
-          AND expires_at > now()
-        RETURNING endpoint_id, shared_channel_id, community_id
-      `,
-      [input.confirmationId, input.actorPubkey, input.actorEventId],
-    );
-    const row = consumed.rows[0];
-    if (!row) {
-      return { activated: false };
-    }
-
-    const endpoint = await client.query<{ id: string }>(
-      `
-        UPDATE shared_channel_endpoints
-        SET state = 'active',
-            accepted_by = $2,
-            accepted_at = now(),
-            last_event_created_at = GREATEST(
-              COALESCE(last_event_created_at, 0),
-              $3
-            ),
-            updated_at = now()
-        WHERE id = $1
-          AND role = 'destination'
-          AND state = 'pending'
-        RETURNING id
-      `,
-      [row.endpoint_id, input.actorPubkey, input.actorCreatedAt],
-    );
-    if (!endpoint.rows[0]) {
-      throw invalidChannelState();
-    }
-
-    const channel = await client.query<{ id: string }>(
-      `
-        UPDATE shared_channels
-        SET state = 'active',
-            updated_at = now()
-        WHERE id = $1
-          AND state = 'proposed'
-          AND (expires_at IS NULL OR expires_at > now())
-        RETURNING id
-      `,
-      [row.shared_channel_id],
-    );
-    if (!channel.rows[0]) {
-      throw invalidChannelState();
-    }
-
-    await insertAuditEvent(client, {
-      action: "shared_channel.accepted",
-      actorPubkey: input.actorPubkey,
-      communityId: row.community_id,
-      idempotencyKey: `confirm:${input.confirmationId}`,
-      nextState: "active",
-      previousState: "proposed",
-      sharedChannelId: row.shared_channel_id,
-      targetId: row.shared_channel_id,
-    });
-
-    return { activated: true, sharedChannelId: row.shared_channel_id };
-  });
-}
-
-export async function rejectSharedChannel(
-  pool: Pool,
-  input: ChangeEndpointStateInput,
-): Promise<SharedChannelRecord> {
-  return mutateSharedChannel(
-    pool,
-    {
-      action: "shared_channel.rejected",
-      ...input,
-    },
-    async (client, channel) => {
-      if (channel.state !== "proposed") {
-        throw invalidChannelState();
-      }
-      const destination = await client.query<{ id: string }>(
-        `
-          SELECT id
-          FROM shared_channel_endpoints
-          WHERE shared_channel_id = $1
-            AND community_id = $2
-            AND role = 'destination'
-          FOR UPDATE
-        `,
-        [input.sharedChannelId, input.communityId],
-      );
-      if (!destination.rows[0]) {
-        throw new ApiError(
-          "invitation_not_found",
-          "The invitation is unavailable.",
-          404,
-        );
-      }
-
-      await client.query(
-        `
-          UPDATE shared_channel_endpoints
-          SET state = 'disconnected',
-              updated_at = now()
-          WHERE shared_channel_id = $1
-        `,
-        [input.sharedChannelId],
-      );
-      const result = await client.query<SharedChannelRow>(
-        `
-          UPDATE shared_channels
-          SET state = 'rejected',
-              rejected_by = $2,
-              rejected_at = now(),
-              updated_at = now()
-          WHERE id = $1
-          RETURNING
-            id,
-            proposed_by_community_id,
-            proposed_name,
-            purpose,
-            state,
-            created_at,
-            expires_at
-        `,
-        [input.sharedChannelId, input.ownerPubkey],
-      );
-      return result.rows[0];
-    },
-  );
-}
-
-export async function pauseSharedChannelEndpoint(
-  pool: Pool,
-  input: ChangeEndpointStateInput,
-): Promise<SharedChannelRecord> {
-  return changeEndpointState(
-    pool,
-    input,
-    "active",
-    "paused",
-    "shared_channel.paused",
-  );
-}
-
-export async function resumeSharedChannelEndpoint(
-  pool: Pool,
-  input: ChangeEndpointStateInput,
-): Promise<SharedChannelRecord> {
-  return changeEndpointState(
-    pool,
-    input,
-    "paused",
-    "active",
-    "shared_channel.resumed",
-  );
-}
-
-export async function disconnectSharedChannel(
-  pool: Pool,
-  input: ChangeEndpointStateInput,
-): Promise<SharedChannelRecord> {
-  return mutateSharedChannel(
-    pool,
-    {
-      action: "shared_channel.disconnected",
-      ...input,
-    },
-    async (client, channel) => {
-      if (channel.state !== "active") {
-        throw invalidChannelState();
-      }
-
-      await client.query(
-        `
-          UPDATE shared_channel_endpoints
-          SET state = 'disconnected',
-              updated_at = now()
-          WHERE shared_channel_id = $1
-        `,
-        [input.sharedChannelId],
-      );
-      await client.query(
-        `
-          UPDATE bridge_deliveries AS deliveries
-          SET state = 'cancelled',
-              terminal_error_code = 'route_disconnected',
-              updated_at = now()
-          FROM bridge_messages AS messages
-          WHERE deliveries.bridge_message_id = messages.id
-            AND messages.shared_channel_id = $1
-            AND deliveries.state IN ('queued', 'delivering', 'retry')
-        `,
-        [input.sharedChannelId],
-      );
-      const result = await client.query<SharedChannelRow>(
-        `
-          UPDATE shared_channels
-          SET state = 'disconnected',
-              disconnected_by = $2,
-              disconnected_at = now(),
-              updated_at = now()
-          WHERE id = $1
-          RETURNING
-            id,
-            proposed_by_community_id,
-            proposed_name,
-            purpose,
-            state,
-            created_at,
-            expires_at
-        `,
-        [input.sharedChannelId, input.ownerPubkey],
-      );
-      return result.rows[0];
-    },
-  );
-}
-
 export async function ingestBridgeMessage(
   pool: Pool,
   boss: PgBoss,
@@ -1257,6 +661,7 @@ export async function ingestBridgeMessage(
           WHERE endpoints.id = $1
             AND endpoints.shared_channel_id = $2
             AND endpoints.state = 'active'
+            AND endpoints.sends = true
             AND channels.state = 'active'
           FOR SHARE OF endpoints, channels
         `,
@@ -1274,24 +679,44 @@ export async function ingestBridgeMessage(
       await client.query<SharedChannelEndpointRow>(
         `
           SELECT
-            id,
-            shared_channel_id,
-            community_id,
-            connection_id,
-            role,
-            state,
-            local_channel_id,
-            local_channel_name_snapshot
-          FROM shared_channel_endpoints
-          WHERE shared_channel_id = $1
-            AND id <> $2
-            AND state = 'active'
+            destination.id,
+            destination.shared_channel_id,
+            destination.community_id,
+            destination.connection_id,
+            destination.role,
+            destination.state,
+            destination.local_channel_id,
+            destination.local_channel_name_snapshot
+          FROM shared_channel_endpoints AS destination
+          JOIN shared_channel_endpoints AS source ON source.id = $2
+          WHERE destination.shared_channel_id = $1
+            AND destination.id <> $2
+            AND destination.state = 'active'
+            AND destination.receives = true
+            AND (
+              (destination.filter_mode = 'everyone_except'
+                AND NOT ($3::uuid = ANY(destination.filter_list)))
+              OR
+              (destination.filter_mode = 'only_these'
+                AND $3::uuid = ANY(destination.filter_list))
+            )
+            AND (
+              (source.filter_mode = 'everyone_except'
+                AND NOT (destination.community_id = ANY(source.filter_list)))
+              OR
+              (source.filter_mode = 'only_these'
+                AND destination.community_id = ANY(source.filter_list))
+            )
           FOR SHARE
         `,
-        [input.sharedChannelId, input.sourceEndpointId],
+        [
+          input.sharedChannelId,
+          input.sourceEndpointId,
+          endpointResult.rows[0].community_id,
+        ],
       );
-    const destination = destinationResult.rows[0];
-    if (!destination) {
+    const destinations = destinationResult.rows;
+    if (destinations.length === 0) {
       throw new ApiError(
         "route_inactive",
         "The destination endpoint is not active.",
@@ -1307,6 +732,7 @@ export async function ingestBridgeMessage(
           source_endpoint_id,
           source_event_id,
           source_actor_pubkey,
+          source_actor_name,
           source_created_at,
           source_signed_event,
           source_parent_event_id,
@@ -1314,7 +740,7 @@ export async function ingestBridgeMessage(
           body,
           body_sha256
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (
           shared_channel_id,
           source_endpoint_id,
@@ -1328,6 +754,7 @@ export async function ingestBridgeMessage(
         input.sourceEndpointId,
         input.sourceEventId,
         input.sourceActorPubkey,
+        input.sourceActorName ?? null,
         input.sourceCreatedAt,
         input.signedEvent,
         input.sourceParentEventId ?? null,
@@ -1369,6 +796,7 @@ export async function ingestBridgeMessage(
       return {
         created: false,
         deliveryId: row.delivery_id,
+        deliveryIds: existing.rows.map((delivery) => delivery.delivery_id),
         messageId: row.message_id,
       };
     }
@@ -1411,218 +839,47 @@ export async function ingestBridgeMessage(
           bridge_message_id,
           destination_endpoint_id
         )
-        VALUES ($1, $2)
+        SELECT $1, destination_id
+        FROM unnest($2::uuid[]) AS destination_id
         RETURNING id
       `,
-      [input.messageId, destination.id],
+      [input.messageId, destinations.map((destination) => destination.id)],
     );
-    const deliveryId = deliveryResult.rows[0].id;
+    const deliveryIds = deliveryResult.rows.map((delivery) => delivery.id);
+    const deliveryId = deliveryIds[0];
     const transactionDb = {
       executeSql: async (text: string, values?: unknown[]) => {
         const result = await client.query(text, values);
         return { rows: result.rows };
       },
     };
-    const jobId = await boss.send(
-      BRIDGE_DELIVERY_QUEUE,
-      { deliveryId },
-      {
-        db: transactionDb,
-        id: input.messageId,
-      },
-    );
-    if (!jobId) {
-      throw new ApiError(
-        "message_enqueue_failed",
-        "The message could not be queued.",
-        500,
+    for (const [index, queuedDeliveryId] of deliveryIds.entries()) {
+      const jobId = await boss.send(
+        BRIDGE_DELIVERY_QUEUE,
+        { deliveryId: queuedDeliveryId },
+        {
+          db: transactionDb,
+          id: index === 0
+            ? input.messageId
+            : queuedDeliveryId,
+        },
       );
+      if (!jobId) {
+        throw new ApiError(
+          "message_enqueue_failed",
+          "The message could not be queued.",
+          500,
+        );
+      }
     }
 
     return {
       created: true,
       deliveryId,
+      deliveryIds,
       messageId: input.messageId,
     };
   });
-}
-
-export async function listSharedChannelEndpoints(
-  pool: Pool,
-  sharedChannelId: string,
-): Promise<SharedChannelEndpointRecord[]> {
-  const result = await pool.query<SharedChannelEndpointRow>(
-    `
-      SELECT
-        id,
-        shared_channel_id,
-        community_id,
-        connection_id,
-        role,
-        state,
-        local_channel_id,
-        local_channel_name_snapshot
-      FROM shared_channel_endpoints
-      WHERE shared_channel_id = $1
-      ORDER BY role DESC
-    `,
-    [sharedChannelId],
-  );
-  return result.rows.map(mapEndpoint);
-}
-
-export async function getSharedChannelAdminWorkspace(
-  pool: Pool,
-  ownerPubkey: string,
-): Promise<SharedChannelAdminWorkspace> {
-  assertHex(ownerPubkey, 64, "Owner public key");
-
-  const communities = await pool.query<{
-    connection_health: CommunityConnectionRecord["health"] | null;
-    connection_state: CommunityConnectionRecord["state"] | null;
-    display_name: string;
-    id: string;
-    relay_url: string;
-    slug: string | null;
-  }>(
-    `
-      SELECT
-        communities.id,
-        COALESCE(
-          communities.display_name,
-          communities.slug,
-          candidates.host
-        ) AS display_name,
-        communities.slug,
-        candidates.canonical_relay_url AS relay_url,
-        connections.state AS connection_state,
-        connections.health AS connection_health
-      FROM communities
-      JOIN community_candidates AS candidates
-        ON candidates.id = communities.candidate_id
-      LEFT JOIN community_connections AS connections
-        ON connections.community_id = communities.id
-      WHERE communities.owner_pubkey = $1
-        AND candidates.state = 'verified_buzz'
-      ORDER BY display_name, communities.id
-    `,
-    [ownerPubkey],
-  );
-  const owned = communities.rows.map(mapCommunitySummary);
-  if (owned.length === 0) {
-    return { channels: [], communities: [], destinations: [] };
-  }
-
-  const destinations = await pool.query<{
-    connection_health: CommunityConnectionRecord["health"] | null;
-    connection_state: CommunityConnectionRecord["state"] | null;
-    display_name: string;
-    featured: boolean;
-    id: string;
-    relay_url: string;
-    slug: string | null;
-  }>(
-    `
-      SELECT
-        communities.id,
-        COALESCE(
-          communities.display_name,
-          communities.slug,
-          candidates.host
-        ) AS display_name,
-        communities.slug,
-        candidates.canonical_relay_url AS relay_url,
-        candidates.host = $1 AS featured,
-        connections.state AS connection_state,
-        connections.health AS connection_health
-      FROM communities
-      JOIN community_candidates AS candidates
-        ON candidates.id = communities.candidate_id
-      JOIN community_connections AS connections
-        ON connections.community_id = communities.id
-      WHERE candidates.state = 'verified_buzz'
-        AND connections.state = 'active'
-      ORDER BY featured DESC, display_name, communities.id
-    `,
-    [homeCommunityHost()],
-  );
-
-  const channels = await pool.query<{
-    created_at: Date;
-    id: string;
-    own_community_id: string;
-    own_endpoint_id: string;
-    own_endpoint_state: SharedChannelEndpointRecord["state"];
-    own_local_channel_id: string | null;
-    own_local_channel_name: string | null;
-    peer_community_id: string;
-    peer_display_name: string;
-    peer_endpoint_state: SharedChannelEndpointRecord["state"];
-    peer_slug: string | null;
-    proposed_by_community_id: string;
-    proposed_name: string;
-    purpose: string;
-    state: SharedChannelRecord["state"];
-  }>(
-    `
-      SELECT
-        channels.id,
-        channels.proposed_by_community_id,
-        channels.proposed_name,
-        channels.purpose,
-        channels.state,
-        channels.created_at,
-        own_endpoint.id AS own_endpoint_id,
-        own_endpoint.community_id AS own_community_id,
-        own_endpoint.state AS own_endpoint_state,
-        own_endpoint.local_channel_id AS own_local_channel_id,
-        own_endpoint.local_channel_name_snapshot
-          AS own_local_channel_name,
-        peer_endpoint.community_id AS peer_community_id,
-        peer_endpoint.state AS peer_endpoint_state,
-        COALESCE(
-          peer_community.display_name,
-          peer_community.slug,
-          peer_candidate.host
-        ) AS peer_display_name,
-        peer_community.slug AS peer_slug
-      FROM shared_channels AS channels
-      JOIN shared_channel_endpoints AS own_endpoint
-        ON own_endpoint.shared_channel_id = channels.id
-      JOIN shared_channel_endpoints AS peer_endpoint
-        ON peer_endpoint.shared_channel_id = channels.id
-        AND peer_endpoint.id <> own_endpoint.id
-      JOIN communities AS peer_community
-        ON peer_community.id = peer_endpoint.community_id
-      JOIN community_candidates AS peer_candidate
-        ON peer_candidate.id = peer_community.candidate_id
-      WHERE own_endpoint.community_id = ANY($1::uuid[])
-      ORDER BY channels.created_at DESC, channels.id
-    `,
-    [owned.map((community) => community.id)],
-  );
-
-  return {
-    channels: channels.rows.map((row) => ({
-      createdAt: row.created_at.toISOString(),
-      id: row.id,
-      ownCommunityId: row.own_community_id,
-      ownEndpointId: row.own_endpoint_id,
-      ownEndpointState: row.own_endpoint_state,
-      ownLocalChannelId: row.own_local_channel_id,
-      ownLocalChannelName: row.own_local_channel_name,
-      peerCommunityId: row.peer_community_id,
-      peerDisplayName: row.peer_display_name,
-      peerEndpointState: row.peer_endpoint_state,
-      peerSlug: row.peer_slug,
-      proposedByCommunityId: row.proposed_by_community_id,
-      proposedName: row.proposed_name,
-      purpose: row.purpose,
-      state: row.state,
-    })),
-    communities: owned,
-    destinations: destinations.rows.map(mapCommunitySummary),
-  };
 }
 
 export interface VerifiedCommunityIdentity {
@@ -1738,81 +995,304 @@ export async function enrollVerifiedCommunityFromInvite(
   };
 }
 
-export interface ConnectFeaturedInput {
-  communityId: string;
-  idempotencyKey: string;
-  localChannelId: string;
-  localChannelName: string;
-  ownerPubkey: string;
+/**
+ * Add one bidirectional participant endpoint to the single open hub. Every
+ * connection uses this shared-channel row and the ordinary delivery pipeline.
+ * Pasting an owner/admin invite is the authorization, so there is deliberately
+ * no proposal, acceptance, or chat confirmation ceremony here.
+ */
+export async function joinOpenHub(
+  pool: Pool,
+  input: JoinOpenHubInput,
+): Promise<HubMembership> {
+  assertText(input.localChannelId, 1, 200, "Local channel");
+  assertText(input.localChannelName, 1, 80, "Local channel name");
+
+  await withTransaction(pool, async (client) => {
+    const owner = await requireVerifiedOwner(
+      client,
+      input.communityId,
+      input.ownerPubkey,
+    );
+    const connection = await requireActiveConnection(client, input.communityId);
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtextextended('open-buzzrouter-hub', 0))",
+    );
+
+    const existingMembership = await client.query<{ id: string }>(
+      `
+        SELECT endpoints.id
+        FROM shared_channel_endpoints AS endpoints
+        JOIN shared_channels AS channels
+          ON channels.id = endpoints.shared_channel_id
+        WHERE channels.mode = 'hub'
+          AND endpoints.community_id = $1
+          AND endpoints.state <> 'disconnected'
+      `,
+      [input.communityId],
+    );
+    if (existingMembership.rows[0]) return;
+
+    await assertChannelNotRouted(client, input.communityId, input.localChannelId);
+
+    let hub = await client.query<{ id: string }>(
+      "SELECT id FROM shared_channels WHERE mode = 'hub' FOR UPDATE",
+    );
+    if (!hub.rows[0]) {
+      const home = await client.query<{
+        community_id: string;
+        connection_id: string;
+        relay_url: string;
+      }>(
+        `
+          SELECT communities.id AS community_id,
+                 connections.id AS connection_id,
+                 connections.relay_url_snapshot AS relay_url
+          FROM communities
+          JOIN community_candidates AS candidates
+            ON candidates.id = communities.candidate_id
+          JOIN community_connections AS connections
+            ON connections.community_id = communities.id
+          WHERE candidates.host = $1
+            AND candidates.state = 'verified_buzz'
+            AND connections.state = 'active'
+            AND communities.owner_pubkey IS NOT NULL
+          ORDER BY communities.id
+          LIMIT 1
+        `,
+        [homeCommunityHost()],
+      );
+      const featured = home.rows[0];
+      if (!featured) {
+        throw new ApiError(
+          "featured_unavailable",
+          "The open BuzzRouter channel is not accepting links right now.",
+          503,
+        );
+      }
+      const created = await client.query<{ id: string }>(
+        `
+          INSERT INTO shared_channels (state, mode)
+          VALUES ('active', 'hub')
+          RETURNING id
+        `,
+      );
+      hub = created;
+      await client.query(
+        `
+          INSERT INTO shared_channel_endpoints (
+            shared_channel_id, community_id, connection_id, role, state,
+            relay_url_snapshot, local_channel_id,
+            local_channel_name_snapshot, last_event_created_at, sends, receives
+          )
+          VALUES ($1, $2, $3, 'participant', 'active', $4, 'general',
+                  'general', floor(extract(epoch FROM now()))::bigint,
+                  true, true)
+        `,
+        [
+          created.rows[0].id,
+          featured.community_id,
+          featured.connection_id,
+          featured.relay_url,
+        ],
+      );
+      if (featured.community_id === input.communityId) return;
+    }
+
+    await client.query(
+      `
+        INSERT INTO shared_channel_endpoints (
+          shared_channel_id, community_id, connection_id, role, state,
+          relay_url_snapshot, local_channel_id,
+          local_channel_name_snapshot, last_event_created_at, sends, receives,
+          filter_mode, filter_list
+        )
+        VALUES ($1, $2, $3, 'participant', 'active', $4, $5, $6,
+                floor(extract(epoch FROM now()))::bigint,
+                true, true, 'everyone_except', '{}')
+      `,
+      [
+        hub.rows[0].id,
+        input.communityId,
+        connection.id,
+        owner.relayUrl,
+        input.localChannelId,
+        input.localChannelName,
+      ],
+    );
+  });
+
+  return getOpenHubMembership(pool, input.communityId, input.ownerPubkey);
 }
 
-/**
- * One-press "Connect with the BuzzRouter community" for the signer-free flow.
- * BuzzRouter's own community proposes the shared channel (so the caller's
- * community is the DESTINATION and reuses the unchanged, roster-gated
- * arm→code→confirm accept path); the caller then types the returned code into
- * their chosen channel to finish. BuzzRouter's source endpoint uses a channel id
- * scoped to the partner community so the per-community unique index is never hit.
- */
-export async function connectFeaturedCommunity(
+export async function getOpenHubMembership(
   pool: Pool,
-  input: ConnectFeaturedInput,
-): Promise<ArmSharedChannelConfirmationResult> {
-  const featured = await pool.query<{
-    id: string;
-    owner_pubkey: string;
+  communityId: string,
+  ownerPubkey: string,
+): Promise<HubMembership> {
+  assertHex(ownerPubkey, 64, "Owner public key");
+  const result = await pool.query<{
+    endpoint_id: string;
+    filter_list: string[];
+    filter_mode: HubFilterMode;
+    local_channel_id: string;
+    local_channel_name: string;
+    receives: boolean;
+    sends: boolean;
+    shared_channel_id: string;
   }>(
     `
-      SELECT communities.id, communities.owner_pubkey
-      FROM communities
+      SELECT endpoints.id AS endpoint_id, endpoints.shared_channel_id,
+             endpoints.local_channel_id,
+             endpoints.local_channel_name_snapshot AS local_channel_name,
+             endpoints.sends, endpoints.receives,
+             endpoints.filter_mode, endpoints.filter_list
+      FROM shared_channel_endpoints AS endpoints
+      JOIN shared_channels AS channels
+        ON channels.id = endpoints.shared_channel_id
+      JOIN communities ON communities.id = endpoints.community_id
+      WHERE channels.mode = 'hub'
+        AND endpoints.community_id = $1
+        AND endpoints.state = 'active'
+        AND communities.owner_pubkey = $2
+    `,
+    [communityId, ownerPubkey],
+  );
+  const membership = result.rows[0];
+  if (!membership) {
+    throw new ApiError(
+      "hub_membership_not_found",
+      "This community is not linked to the open BuzzRouter channel.",
+      404,
+    );
+  }
+  const members = await pool.query<HubMemberSummary & { community_id: string; display_name: string }>(
+    `
+      SELECT endpoints.community_id,
+             COALESCE(communities.display_name, communities.slug, candidates.host)
+               AS display_name
+      FROM shared_channel_endpoints AS endpoints
+      JOIN communities ON communities.id = endpoints.community_id
       JOIN community_candidates AS candidates
         ON candidates.id = communities.candidate_id
-      JOIN community_connections AS connections
-        ON connections.community_id = communities.id
-      WHERE candidates.host = $1
-        AND communities.owner_pubkey IS NOT NULL
-        AND candidates.state = 'verified_buzz'
-        AND connections.state = 'active'
-      ORDER BY communities.id
-      LIMIT 1
+      WHERE endpoints.shared_channel_id = $1
+        AND endpoints.state = 'active'
+        AND endpoints.community_id <> $2
+      ORDER BY display_name, endpoints.community_id
     `,
-    [homeCommunityHost()],
+    [membership.shared_channel_id, communityId],
   );
-  const home = featured.rows[0];
-  if (!home) {
-    throw new ApiError(
-      "featured_unavailable",
-      "The BuzzRouter community is not accepting links right now.",
-      503,
-    );
-  }
-  if (home.id === input.communityId) {
-    throw new ApiError(
-      "featured_is_self",
-      "This is the BuzzRouter community — link it with someone else.",
-      409,
-    );
-  }
+  const outcomes = await pool.query<{
+    community_id: string;
+    community_name: string;
+    message_id: string;
+    state: BridgeDeliveryContext["state"];
+    terminal_error_code: string | null;
+    updated_at: Date;
+  }>(
+    `
+      SELECT destination.community_id,
+             COALESCE(communities.display_name, communities.slug, candidates.host)
+               AS community_name,
+             deliveries.bridge_message_id AS message_id,
+             deliveries.state, deliveries.terminal_error_code,
+             deliveries.updated_at
+      FROM bridge_messages AS messages
+      JOIN bridge_deliveries AS deliveries
+        ON deliveries.bridge_message_id = messages.id
+      JOIN shared_channel_endpoints AS destination
+        ON destination.id = deliveries.destination_endpoint_id
+      JOIN communities ON communities.id = destination.community_id
+      JOIN community_candidates AS candidates
+        ON candidates.id = communities.candidate_id
+      WHERE messages.source_endpoint_id = $1
+      ORDER BY deliveries.updated_at DESC, deliveries.id
+      LIMIT 50
+    `,
+    [membership.endpoint_id],
+  );
+  return {
+    communityId,
+    endpointId: membership.endpoint_id,
+    filterList: membership.filter_list,
+    filterMode: membership.filter_mode,
+    localChannelId: membership.local_channel_id,
+    localChannelName: membership.local_channel_name,
+    members: members.rows.map((row) => ({
+      communityId: row.community_id,
+      displayName: row.display_name,
+    })),
+    receives: membership.receives,
+    recentOutcomes: outcomes.rows.map((row) => ({
+      communityId: row.community_id,
+      communityName: row.community_name,
+      errorCode: row.terminal_error_code,
+      messageId: row.message_id,
+      state: row.state,
+      updatedAt: row.updated_at.toISOString(),
+    })),
+    sends: membership.sends,
+    sharedChannelId: membership.shared_channel_id,
+  };
+}
 
-  const channel = await createSharedChannel(pool, {
-    destinationCommunityId: input.communityId,
-    idempotencyKey: `featured-connect:${input.communityId}`,
-    ownerPubkey: home.owner_pubkey,
-    proposedName: "buzzrouter",
-    purpose: "Connect with the BuzzRouter community.",
-    sourceChannelId: `buzzrouter:${input.communityId}`,
-    sourceChannelName: "BuzzRouter",
-    sourceCommunityId: home.id,
+export async function updateOpenHubSettings(
+  pool: Pool,
+  input: UpdateHubSettingsInput,
+): Promise<HubMembership> {
+  if (input.filterMode !== "everyone_except" && input.filterMode !== "only_these") {
+    throw new ApiError("invalid_input", "The filter mode is invalid.");
+  }
+  const filterList = [...new Set(input.filterList)];
+  for (const communityId of filterList) assertUuid(communityId, "Filter community");
+  await withTransaction(pool, async (client) => {
+    await requireVerifiedOwner(client, input.communityId, input.ownerPubkey);
+    const valid = await client.query<{ id: string }>(
+      `
+        SELECT endpoints.community_id AS id
+        FROM shared_channel_endpoints AS own
+        JOIN shared_channels AS channels ON channels.id = own.shared_channel_id
+        JOIN shared_channel_endpoints AS endpoints
+          ON endpoints.shared_channel_id = own.shared_channel_id
+        WHERE channels.mode = 'hub'
+          AND own.community_id = $1
+          AND own.state = 'active'
+          AND endpoints.state = 'active'
+          AND endpoints.community_id = ANY($2::uuid[])
+      `,
+      [input.communityId, filterList],
+    );
+    if (valid.rows.length !== filterList.length || filterList.includes(input.communityId)) {
+      throw new ApiError(
+        "hub_filter_invalid",
+        "The filter can only contain other active hub communities.",
+      );
+    }
+    const updated = await client.query(
+      `
+        UPDATE shared_channel_endpoints AS endpoints
+        SET sends = $2, receives = $3, filter_mode = $4,
+            filter_list = $5::uuid[], updated_at = now()
+        FROM shared_channels AS channels
+        WHERE endpoints.shared_channel_id = channels.id
+          AND channels.mode = 'hub'
+          AND endpoints.community_id = $1
+          AND endpoints.state = 'active'
+        RETURNING endpoints.id
+      `,
+      [
+        input.communityId,
+        input.sends,
+        input.receives,
+        input.filterMode,
+        filterList,
+      ],
+    );
+    if (!updated.rows[0]) {
+      throw new ApiError("hub_membership_not_found", "Hub membership was not found.", 404);
+    }
   });
-
-  return armSharedChannelConfirmation(pool, {
-    communityId: input.communityId,
-    idempotencyKey: input.idempotencyKey,
-    localChannelId: input.localChannelId,
-    localChannelName: input.localChannelName,
-    ownerPubkey: input.ownerPubkey,
-    sharedChannelId: channel.id,
-  });
+  return getOpenHubMembership(pool, input.communityId, input.ownerPubkey);
 }
 
 export async function listActiveConnectorConfigs(
@@ -1863,13 +1343,9 @@ export async function listActiveConnectorConfigs(
         ON channels.id = endpoints.shared_channel_id
       WHERE endpoints.connection_id = ANY($1::uuid[])
         AND endpoints.state = 'active'
+        AND endpoints.sends = true
         AND channels.state = 'active'
-        AND NOT EXISTS (
-          SELECT 1
-          FROM shared_channel_endpoints AS peer
-          WHERE peer.shared_channel_id = endpoints.shared_channel_id
-            AND peer.state <> 'active'
-        )
+        AND channels.mode = 'hub'
       ORDER BY endpoints.connection_id, endpoints.id
     `,
     [connections.rows.map((row) => row.id)],
@@ -1887,56 +1363,11 @@ export async function listActiveConnectorConfigs(
     routesByConnection.set(route.connection_id, connectionRoutes);
   }
 
-  const confirmations = await pool.query<{
-    code: string;
-    confirmation_id: string;
-    connection_id: string;
-    endpoint_id: string;
-    local_channel_id: string;
-    shared_channel_id: string;
-    since: string | number | null;
-  }>(
-    `
-      SELECT
-        id AS confirmation_id,
-        connection_id,
-        endpoint_id,
-        shared_channel_id,
-        local_channel_id,
-        code,
-        floor(extract(epoch FROM created_at))::bigint AS since
-      FROM shared_channel_confirmations
-      WHERE connection_id = ANY($1::uuid[])
-        AND state = 'pending'
-        AND expires_at > now()
-      ORDER BY connection_id, created_at
-    `,
-    [connections.rows.map((row) => row.id)],
-  );
-  const confirmationsByConnection = new Map<
-    string,
-    PendingConfirmationConfig[]
-  >();
-  for (const confirmation of confirmations.rows) {
-    const list =
-      confirmationsByConnection.get(confirmation.connection_id) ?? [];
-    list.push({
-      code: confirmation.code,
-      confirmationId: confirmation.confirmation_id,
-      endpointId: confirmation.endpoint_id,
-      localChannelId: confirmation.local_channel_id,
-      sharedChannelId: confirmation.shared_channel_id,
-      since: Number(confirmation.since ?? 0),
-    });
-    confirmationsByConnection.set(confirmation.connection_id, list);
-  }
-
   return connections.rows.map((row) => ({
     ...mapConnection(row),
     authTag: row.private_key_auth_tag,
     ciphertext: row.encrypted_private_key,
     nonce: row.private_key_nonce,
-    pendingConfirmations: confirmationsByConnection.get(row.id) ?? [],
     routes: routesByConnection.get(row.id) ?? [],
   }));
 }
@@ -1976,14 +1407,18 @@ export async function getBridgeDeliveryContext(
     destination_state: SharedChannelEndpointRecord["state"];
     local_parent_event_id: string | null;
     message_id: string;
-    route_state: SharedChannelRecord["state"];
+    route_state: "active";
     shared_channel_id: string;
     source_actor_pubkey: string;
+    source_actor_name: string | null;
     source_community_id: string;
     source_community_name: string;
     source_event_id: string;
     source_parent_event_id: string | null;
+    source_sends: boolean;
     source_state: SharedChannelEndpointRecord["state"];
+    destination_receives: boolean;
+    filter_allows: boolean;
     state: BridgeDeliveryContext["state"];
   }>(
     `
@@ -1995,11 +1430,13 @@ export async function getBridgeDeliveryContext(
         messages.id AS message_id,
         messages.shared_channel_id,
         messages.source_actor_pubkey,
+        messages.source_actor_name,
         messages.source_event_id,
         messages.source_parent_event_id,
         messages.body,
         source_endpoint.community_id AS source_community_id,
         source_endpoint.state AS source_state,
+        source_endpoint.sends AS source_sends,
         COALESCE(
           source_community.display_name,
           source_community.slug,
@@ -2009,6 +1446,20 @@ export async function getBridgeDeliveryContext(
         destination_endpoint.connection_id AS destination_connection_id,
         destination_endpoint.local_channel_id AS destination_channel_id,
         destination_endpoint.state AS destination_state,
+        destination_endpoint.receives AS destination_receives,
+        (
+          (destination_endpoint.filter_mode = 'everyone_except'
+            AND NOT (source_endpoint.community_id = ANY(destination_endpoint.filter_list)))
+          OR
+          (destination_endpoint.filter_mode = 'only_these'
+            AND source_endpoint.community_id = ANY(destination_endpoint.filter_list))
+        ) AND (
+          (source_endpoint.filter_mode = 'everyone_except'
+            AND NOT (destination_endpoint.community_id = ANY(source_endpoint.filter_list)))
+          OR
+          (source_endpoint.filter_mode = 'only_these'
+            AND destination_endpoint.community_id = ANY(source_endpoint.filter_list))
+        ) AS filter_allows,
         channels.state AS route_state,
         destination_parent.local_event_id AS local_parent_event_id
       FROM bridge_deliveries AS deliveries
@@ -2064,9 +1515,13 @@ export async function getBridgeDeliveryContext(
     routeActive:
       row.route_state === "active" &&
       row.source_state === "active" &&
-      row.destination_state === "active",
+      row.destination_state === "active" &&
+      row.source_sends &&
+      row.destination_receives &&
+      row.filter_allows,
     sharedChannelId: row.shared_channel_id,
     sourceActorPubkey: row.source_actor_pubkey,
+    sourceActorName: row.source_actor_name,
     sourceCommunityId: row.source_community_id,
     sourceCommunityName: row.source_community_name,
     sourceEventId: row.source_event_id,
@@ -2103,7 +1558,22 @@ export async function isBridgeDeliveryRouteActive(
       SELECT (
         channels.state = 'active' AND
         source_endpoint.state = 'active' AND
-        destination_endpoint.state = 'active'
+        source_endpoint.sends = true AND
+        destination_endpoint.state = 'active' AND
+        destination_endpoint.receives = true AND
+        (
+          (destination_endpoint.filter_mode = 'everyone_except'
+            AND NOT (source_endpoint.community_id = ANY(destination_endpoint.filter_list)))
+          OR
+          (destination_endpoint.filter_mode = 'only_these'
+            AND source_endpoint.community_id = ANY(destination_endpoint.filter_list))
+        ) AND (
+          (source_endpoint.filter_mode = 'everyone_except'
+            AND NOT (destination_endpoint.community_id = ANY(source_endpoint.filter_list)))
+          OR
+          (source_endpoint.filter_mode = 'only_these'
+            AND destination_endpoint.community_id = ANY(source_endpoint.filter_list))
+        )
       ) AS active
       FROM bridge_deliveries AS deliveries
       JOIN bridge_messages AS messages
@@ -2279,137 +1749,6 @@ export async function cancelBridgeDelivery(
   );
 }
 
-async function changeEndpointState(
-  pool: Pool,
-  input: ChangeEndpointStateInput,
-  expectedState: SharedChannelEndpointRecord["state"],
-  nextState: SharedChannelEndpointRecord["state"],
-  action: string,
-): Promise<SharedChannelRecord> {
-  return mutateSharedChannel(
-    pool,
-    { action, ...input },
-    async (client, channel) => {
-      if (channel.state !== "active") {
-        throw invalidChannelState();
-      }
-      const result = await client.query<{ id: string }>(
-        `
-          UPDATE shared_channel_endpoints
-          SET state = $4,
-              updated_at = now()
-          WHERE shared_channel_id = $1
-            AND community_id = $2
-            AND state = $3
-          RETURNING id
-        `,
-        [
-          input.sharedChannelId,
-          input.communityId,
-          expectedState,
-          nextState,
-        ],
-      );
-      if (!result.rows[0]) {
-        throw invalidChannelState();
-      }
-      return channel;
-    },
-    {
-      nextState,
-      previousState: expectedState,
-    },
-  );
-}
-
-async function mutateSharedChannel(
-  pool: Pool,
-  input: ChangeEndpointStateInput & { action: string },
-  mutation: (
-    client: PoolClient,
-    channel: SharedChannelRow,
-  ) => Promise<SharedChannelRow>,
-  auditState?: {
-    nextState: string;
-    previousState: string;
-  },
-): Promise<SharedChannelRecord> {
-  assertIdempotencyKey(input.idempotencyKey);
-
-  return withTransaction(pool, async (client) => {
-    await lockIdempotencyKey(
-      client,
-      input.ownerPubkey,
-      input.idempotencyKey,
-    );
-    const prior = await getIdempotentSharedChannel(
-      client,
-      input.ownerPubkey,
-      input.idempotencyKey,
-      input.action,
-    );
-    if (prior) return prior;
-
-    await requireVerifiedOwner(
-      client,
-      input.communityId,
-      input.ownerPubkey,
-    );
-    const channel = await requireOwnedEndpointChannel(
-      client,
-      input.sharedChannelId,
-      input.communityId,
-    );
-    const updated = await mutation(client, channel);
-    await insertAuditEvent(client, {
-      action: input.action,
-      actorPubkey: input.ownerPubkey,
-      communityId: input.communityId,
-      idempotencyKey: input.idempotencyKey,
-      nextState: auditState?.nextState ?? updated.state,
-      previousState: auditState?.previousState ?? channel.state,
-      sharedChannelId: input.sharedChannelId,
-      targetId: input.sharedChannelId,
-    });
-    return mapSharedChannel(updated);
-  });
-}
-
-async function requireOwnedEndpointChannel(
-  client: PoolClient,
-  sharedChannelId: string,
-  communityId: string,
-): Promise<SharedChannelRow> {
-  const result = await client.query<SharedChannelRow>(
-    `
-      SELECT
-        channels.id,
-        channels.proposed_by_community_id,
-        channels.proposed_name,
-        channels.purpose,
-        channels.state,
-        channels.created_at,
-        channels.expires_at
-      FROM shared_channels AS channels
-      JOIN shared_channel_endpoints AS endpoints
-        ON endpoints.shared_channel_id = channels.id
-      WHERE channels.id = $1
-        AND endpoints.community_id = $2
-      FOR UPDATE OF channels
-    `,
-    [sharedChannelId, communityId],
-  );
-  const channel = result.rows[0];
-  if (!channel) {
-    throw new ApiError(
-      "shared_channel_not_found",
-      "The shared channel is unavailable.",
-      404,
-    );
-  }
-  return channel;
-}
-
 async function requireVerifiedOwner(
   client: PoolClient,
   communityId: string,
@@ -2495,12 +1834,8 @@ async function requireActiveConnection(
 }
 
 /**
- * A local channel may back exactly one active/paused shared channel per
- * community — enforced by `shared_channel_endpoints_local_channel_idx`. Reject a
- * reuse with a clear product error here (409) instead of letting the insert trip
- * a raw Postgres unique-violation (23505 → 500). The DEFAULT link flow now
- * creates a fresh channel per link, so this only bites when someone hand-picks a
- * channel that is already routed.
+ * A local channel may back only one active hub endpoint per community. Reject a
+ * duplicate with a product error instead of surfacing Postgres 23505.
  */
 async function assertChannelNotRouted(
   client: PoolClient,
@@ -2521,104 +1856,10 @@ async function assertChannelNotRouted(
   if (result.rows.length > 0) {
     throw new ApiError(
       "channel_already_routed",
-      "That channel is already connected to another shared channel. Pick a different channel or create a new one.",
+      "That channel is already linked to the hub. Pick a different channel.",
       409,
     );
   }
-}
-
-async function lockIdempotencyKey(
-  client: PoolClient,
-  actorPubkey: string,
-  idempotencyKey: string,
-): Promise<void> {
-  await client.query(
-    `
-      SELECT pg_advisory_xact_lock(
-        hashtextextended($1 || ':' || $2, 0)
-      )
-    `,
-    [actorPubkey, idempotencyKey],
-  );
-}
-
-async function getIdempotentSharedChannel(
-  client: PoolClient,
-  actorPubkey: string,
-  idempotencyKey: string,
-  expectedAction: string,
-): Promise<SharedChannelRecord | null> {
-  const result = await client.query<
-    SharedChannelRow & { action: string }
-  >(
-    `
-      SELECT
-        audit.action,
-        channels.id,
-        channels.proposed_by_community_id,
-        channels.proposed_name,
-        channels.purpose,
-        channels.state,
-        channels.created_at,
-        channels.expires_at
-      FROM shared_channel_audit_events AS audit
-      JOIN shared_channels AS channels
-        ON channels.id = audit.target_id
-      WHERE audit.actor_pubkey = $1
-        AND audit.idempotency_key = $2
-    `,
-    [actorPubkey, idempotencyKey],
-  );
-  const row = result.rows[0];
-  if (!row) return null;
-  if (row.action !== expectedAction) {
-    throw new ApiError(
-      "idempotency_conflict",
-      "The idempotency key was used for another action.",
-      409,
-    );
-  }
-  return mapSharedChannel(row);
-}
-
-async function insertAuditEvent(
-  client: PoolClient,
-  input: {
-    action: string;
-    actorPubkey: string;
-    communityId: string;
-    idempotencyKey: string;
-    nextState?: string;
-    previousState?: string;
-    sharedChannelId: string;
-    targetId: string;
-  },
-): Promise<void> {
-  await client.query(
-    `
-      INSERT INTO shared_channel_audit_events (
-        shared_channel_id,
-        community_id,
-        actor_pubkey,
-        action,
-        target_id,
-        previous_state,
-        next_state,
-        idempotency_key
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `,
-    [
-      input.sharedChannelId,
-      input.communityId,
-      input.actorPubkey,
-      input.action,
-      input.targetId,
-      input.previousState ?? null,
-      input.nextState ?? null,
-      input.idempotencyKey,
-    ],
-  );
 }
 
 async function withTransaction<T>(
@@ -2639,13 +1880,10 @@ async function withTransaction<T>(
   }
 }
 
-function generateConfirmationCode(): string {
-  const bytes = randomBytes(CONFIRMATION_CODE_LENGTH);
-  let code = "";
-  for (const byte of bytes) {
-    code += CONFIRMATION_CODE_ALPHABET[byte % CONFIRMATION_CODE_ALPHABET.length];
+function assertUuid(value: string, label: string): void {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new ApiError("invalid_input", `${label} is invalid.`);
   }
-  return code;
 }
 
 function mapConnection(
@@ -2659,52 +1897,6 @@ function mapConnection(
     relayUrl: row.relay_url_snapshot,
     state: row.state,
     wrappingKeyVersion: row.wrapping_key_version,
-  };
-}
-
-function mapSharedChannel(row: SharedChannelRow): SharedChannelRecord {
-  return {
-    createdAt: row.created_at.toISOString(),
-    id: row.id,
-    proposedByCommunityId: row.proposed_by_community_id,
-    proposedName: row.proposed_name,
-    purpose: row.purpose,
-    state: row.state,
-  };
-}
-
-function mapEndpoint(
-  row: SharedChannelEndpointRow,
-): SharedChannelEndpointRecord {
-  return {
-    communityId: row.community_id,
-    connectionId: row.connection_id,
-    id: row.id,
-    localChannelId: row.local_channel_id,
-    localChannelName: row.local_channel_name_snapshot,
-    role: row.role,
-    sharedChannelId: row.shared_channel_id,
-    state: row.state,
-  };
-}
-
-function mapCommunitySummary(row: {
-  connection_health: CommunityConnectionRecord["health"] | null;
-  connection_state: CommunityConnectionRecord["state"] | null;
-  display_name: string;
-  featured?: boolean;
-  id: string;
-  relay_url: string;
-  slug: string | null;
-}): SharedChannelCommunitySummary {
-  return {
-    connectionHealth: row.connection_health,
-    connectionState: row.connection_state,
-    displayName: row.display_name,
-    featured: row.featured ?? false,
-    id: row.id,
-    relayUrl: row.relay_url,
-    slug: row.slug,
   };
 }
 
@@ -2742,10 +1934,6 @@ function assertHex(
   }
 }
 
-function assertIdempotencyKey(value: string): void {
-  assertText(value, 8, 200, "Idempotency key");
-}
-
 function assertText(
   value: string,
   minimum: number,
@@ -2765,12 +1953,4 @@ function assertText(
   ) {
     throw new ApiError("invalid_input", `${label} is invalid.`);
   }
-}
-
-function invalidChannelState(): ApiError {
-  return new ApiError(
-    "shared_channel_state_conflict",
-    "The shared channel state has changed.",
-    409,
-  );
 }

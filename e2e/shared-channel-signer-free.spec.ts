@@ -12,7 +12,7 @@ import { Pool } from "pg";
 import { startFakeRelay, type FakeRelay } from "./support/fake-relay";
 
 /**
- * The signer-free "Link" journey: a phone with NO browser extension pastes an
+ * The signer-free "Connect" journey: a phone with NO browser extension pastes an
  * invite link, admits the bridge, and connects to the BuzzRouter community in
  * one step — authorized by the pasted owner/admin invite and the
  * community-scoped session it mints, never a NIP-07 signature or a second
@@ -73,16 +73,16 @@ test.afterAll(async () => {
   await relay?.close();
 });
 
-test("a phone with no extension links to BuzzRouter from an invite link", async ({
+test("a phone with no extension connects to BuzzRouter from an invite link", async ({
   page,
 }) => {
   // The page leads with the signer-free flow — no extension wall gating it.
   await page.goto("/shared-channels");
   await expect(
-    page.getByText("Link one channel to the open BuzzRouter channel."),
+    page.getByText("Connect one channel to the open BuzzRouter hub."),
   ).toBeVisible();
   const flow = page.getByRole("figure", {
-    name: "One link. Every hub community.",
+    name: "One connection. Every hub community.",
   });
   await expect(flow).toBeVisible();
   await expect(flow.getByText("Paste invite")).toBeVisible();
@@ -116,7 +116,7 @@ test("a phone with no extension links to BuzzRouter from an invite link", async 
   // The admitted connector lists real channels before the hub can be joined.
   await page.getByLabel("Channel for hub messages").selectOption("general");
   await page
-    .getByRole("button", { name: "Join the open BuzzRouter channel" })
+    .getByRole("button", { name: "Connect channel to hub" })
     .click();
 
   await expect(

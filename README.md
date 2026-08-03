@@ -2,7 +2,7 @@
 
 BuzzRouter is a discovery and ranking directory for Buzz communities. The
 current product surface includes the safe technical index, automatic discovery
-sources, internal review, public listing foundations, and invite-driven Link
+sources, internal review, public listing foundations, and invite-driven Connect
 flow.
 
 - Live prototype: [buzzrouter.com](https://buzzrouter.com)
@@ -28,7 +28,7 @@ npm run typecheck
 npm run build
 ```
 
-The directory, Link, submission, and internal review routes require PostgreSQL
+The directory, Connect, submission, and internal review routes require PostgreSQL
 and the environment described in the operations guides:
 
 ```bash
@@ -123,7 +123,7 @@ Implemented:
 - Independent-source listing eligibility evaluation
 - Basic-auth protected candidate review with evidence and probe history
 - NIP-98 request authentication with one-use replay protection
-- Invite-driven community admission for shared-channel linking
+- Invite-driven community admission to the open BuzzRouter hub
 - Database-backed community detail pages
 - Adversarial unit and PostgreSQL integration verification
 

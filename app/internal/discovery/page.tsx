@@ -149,7 +149,7 @@ export default async function DiscoveryReviewPage() {
                       <div className={styles.details}>
                         <p>
                           <a href="/shared-channels#invite-link">
-                            Link this community with an owner invite
+                            Connect this community with an owner invite
                           </a>
                         </p>
                         <DetailSources sources={candidate.sources} />

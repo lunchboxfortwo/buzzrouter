@@ -75,7 +75,7 @@ export function SiteMasthead({
             className={styles.navLink}
             href="/shared-channels"
           >
-            Link
+            Connect
           </Link>
           <Link
             aria-current={current === "submit" ? "page" : undefined}

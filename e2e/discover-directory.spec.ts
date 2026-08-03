@@ -23,6 +23,7 @@ test.beforeAll(async () => {
 
   // Joinable: has an invite code, never probed restricted.
   await seedCommunity(pool, {
+    connected: true,
     description: "Everyone welcome, come on in.",
     displayName: "Discover Open Community",
     host: "discover-open.e2e.invalid",
@@ -32,6 +33,7 @@ test.beforeAll(async () => {
   // Restricted: same invite code shape, but a probe proved admission is
   // owner-only, so the directory must NOT offer a dead-end join button.
   await seedCommunity(pool, {
+    admitted: true,
     description: "Admission is by approval only.",
     displayName: "Discover Locked Community",
     host: "discover-locked.e2e.invalid",
@@ -83,6 +85,31 @@ test("lists communities and shows the right way in for each", async ({
   await expect(
     page.getByRole("button", { name: "Join Discover Locked Community" }),
   ).toHaveCount(0);
+});
+
+test("shows active hub connection status without ranking the community", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const connectedRow = results(page)
+    .getByRole("listitem")
+    .filter({ hasText: "Discover Open Community" });
+  await expect(connectedRow.getByText("Connected", { exact: true })).toBeVisible();
+
+  await connectedRow
+    .getByRole("link", { name: "View Discover Open Community" })
+    .click();
+  await expect(page.getByText("Connected to hub", { exact: true })).toBeVisible();
+
+  await page
+    .getByRole("link", { name: "View Discover Locked Community" })
+    .click();
+  await expect(page.getByText("Not connected to hub", { exact: true })).toBeVisible();
+  const admittedRow = results(page)
+    .getByRole("listitem")
+    .filter({ hasText: "Discover Locked Community" });
+  await expect(admittedRow.getByText("Connected", { exact: true })).toHaveCount(0);
 });
 
 test("search narrows the directory to the matching community", async ({
@@ -140,7 +167,7 @@ test("mobile navigation stays on one line and search stays on Discover", async (
   await page.goto("/");
 
   const navLinks = page.getByRole("navigation").getByRole("link");
-  await expect(navLinks).toHaveText(["Discover", "Link", "List"]);
+  await expect(navLinks).toHaveText(["Discover", "Connect", "List"]);
   const linkTops = await navLinks.evaluateAll((links) =>
     links.map((link) => Math.round(link.getBoundingClientRect().top)),
   );
@@ -162,6 +189,11 @@ test("mobile navigation stays on one line and search stays on Discover", async (
   ).toBeVisible();
 
   await page.goto("/submit");
+  await expect(
+    page.getByPlaceholder("Search communities or topics"),
+  ).toHaveCount(0);
+
+  await page.goto("/shared-channels");
   await expect(
     page.getByPlaceholder("Search communities or topics"),
   ).toHaveCount(0);
@@ -238,6 +270,8 @@ test("selecting a joinable community keeps its join action obvious on mobile", a
 async function seedCommunity(
   database: Pool,
   input: {
+    admitted?: boolean;
+    connected?: boolean;
     description: string;
     displayName: string;
     host: string;
@@ -294,12 +328,63 @@ async function seedCommunity(
       [candidateId, input.inviteCode, input.probeStatus],
     );
   }
+
+  if (input.admitted || input.connected) {
+    const community = await database.query<{ id: string }>(
+      `
+        INSERT INTO communities (candidate_id)
+        VALUES ($1)
+        RETURNING id
+      `,
+      [candidateId],
+    );
+    const communityId = community.rows[0].id;
+    const connection = await database.query<{ id: string }>(
+      `
+        INSERT INTO community_connections (
+          community_id, relay_url_snapshot, bridge_pubkey,
+          encrypted_private_key, private_key_nonce, private_key_auth_tag,
+          wrapping_key_version, state
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 1, 'active')
+        RETURNING id
+      `,
+      [
+        communityId,
+        canonicalRelayUrl,
+        "a".repeat(64),
+        Buffer.from("encrypted"),
+        Buffer.alloc(12),
+        Buffer.alloc(16),
+      ],
+    );
+    if (input.connected) {
+      const hub = await database.query<{ id: string }>(
+        `
+          INSERT INTO shared_channels (state, mode)
+          VALUES ('active', 'hub')
+          RETURNING id
+        `,
+      );
+      await database.query(
+        `
+          INSERT INTO shared_channel_endpoints (
+            shared_channel_id, community_id, connection_id, role, state,
+            relay_url_snapshot, local_channel_id, local_channel_name_snapshot
+          )
+          VALUES ($1, $2, $3, 'participant', 'active', $4, 'general-id', 'general')
+        `,
+        [hub.rows[0].id, communityId, connection.rows[0].id, canonicalRelayUrl],
+      );
+    }
+  }
 }
 
 async function resetDatabase(database: Pool): Promise<void> {
   await database.query(`
     TRUNCATE
       community_join_probes,
+      shared_channels,
       community_sources,
       probe_snapshots,
       communities,

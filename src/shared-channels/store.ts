@@ -686,7 +686,7 @@ export async function ingestBridgeMessage(
     if (!endpointResult.rows[0]) {
       throw new ApiError(
         "route_inactive",
-        "The shared channel is not active.",
+        "The hub connection is not active.",
         409,
       );
     }
@@ -1179,7 +1179,7 @@ export async function getOpenHubMembership(
   if (!membership) {
     throw new ApiError(
       "hub_membership_not_found",
-      "This community is not linked to the open BuzzRouter channel.",
+      "This community is not connected to the open BuzzRouter hub.",
       404,
     );
   }
@@ -1873,7 +1873,7 @@ async function assertChannelNotRouted(
   if (result.rows.length > 0) {
     throw new ApiError(
       "channel_already_routed",
-      "That channel is already linked to the hub. Pick a different channel.",
+      "That channel is already connected to the hub. Pick a different channel.",
       409,
     );
   }

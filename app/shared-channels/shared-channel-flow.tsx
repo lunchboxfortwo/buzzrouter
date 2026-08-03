@@ -17,7 +17,7 @@ export function SharedChannelFlow() {
       className={styles.flow}
     >
       <figcaption className={styles.flowHeading}>
-        <h2 id="shared-channel-flow-title">One link. Every hub community.</h2>
+        <h2 id="shared-channel-flow-title">One connection. Every hub community.</h2>
         <span>No proposal, acceptance, or confirmation code.</span>
       </figcaption>
 
@@ -76,7 +76,7 @@ export function SharedChannelFlow() {
           name="Orange Magic"
         >
           <div className={styles.channelName}># launch-collab</div>
-          <div className={styles.codeBubble}><span>Hub</span>Linked</div>
+          <div className={styles.codeBubble}><span>Hub</span>Connected</div>
           <div className={`${styles.chatMessage} ${styles.replyMessage}`}>
             <strong>Franz</strong>
             Sure, give me a couple of hours

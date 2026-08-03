@@ -98,10 +98,10 @@ async function sessionRequest<T>(
  * through the short-lived owner session minted by that admission.
  */
 export function SharedChannelsClient() {
-  return <SignerFreeLink />;
+  return <SignerFreeConnect />;
 }
 
-function SignerFreeLink() {
+function SignerFreeConnect() {
   const [invite, setInvite] = useState("");
   const [admitting, setAdmitting] = useState(false);
   const [error, setError] = useState("");
@@ -216,7 +216,7 @@ function SignerFreeLink() {
             onClick={connectHub}
             type="button"
           >
-            {connecting ? "Joining…" : "Join the open BuzzRouter channel"}
+            {connecting ? "Connecting…" : "Connect channel to hub"}
           </button>
           {error ? <p className={styles.notice}>{error}</p> : null}
         </section>
@@ -242,7 +242,7 @@ function SignerFreeLink() {
           works on your phone.
         </p>
         <p className={styles.consentNote}>
-          Linking turns sending and receiving on. Messages from other
+          Connecting turns sending and receiving on. Messages from other
           communities in the hub will appear in the channel you choose next.
         </p>
         <button
@@ -421,7 +421,7 @@ function HubSettings({
             </label>
           ))}
           {membership.members.length === 0 ? (
-            <p>You are the first linked community.</p>
+            <p>You are the first connected community.</p>
           ) : null}
         </div>
       </fieldset>

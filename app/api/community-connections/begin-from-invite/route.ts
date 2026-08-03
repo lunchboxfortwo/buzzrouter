@@ -8,7 +8,7 @@ import { beginConnectionFromInvite } from "../../../../src/shared-channels/insta
 
 export const runtime = "nodejs";
 
-// Signer-free entry for the mobile "Link" flow: no NIP-98 signature. The pasted
+// Signer-free entry for the mobile Connect flow: no NIP-98 signature. The pasted
 // invite link identifies the community and the bridge redeems it to prove
 // admission; we return a short-lived, community-scoped owner session the page
 // uses in place of a browser signer.

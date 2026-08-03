@@ -24,6 +24,7 @@ describe("listDirectoryCommunities", () => {
           canonical_relay_url: "wss://builders.example",
           categories: ["Builders"],
           claimed: false,
+          connected_to_hub: true,
           description: "A public relay description.",
           display_name: "Builders",
           evidence_count: "2",
@@ -77,6 +78,7 @@ describe("listDirectoryCommunities", () => {
         canonicalRelayUrl: "wss://builders.example",
         categories: ["Builders"],
         claimed: false,
+        connectedToHub: true,
         description: "A public relay description.",
         displayName: "Builders",
         evidenceCount: 2,
@@ -111,6 +113,10 @@ describe("listDirectoryCommunities", () => {
       "relay_host ILIKE",
     );
     expect(query.mock.calls[0]?.[0]).toContain("unnest(categories)");
+    expect(query.mock.calls[0]?.[0]).toContain(
+      "endpoint.state = 'active'",
+    );
+    expect(query.mock.calls[0]?.[0]).toContain("channel.mode = 'hub'");
   });
 
   it.each([0, 201, 1.5])("rejects unsafe limit %s", async (limit) => {

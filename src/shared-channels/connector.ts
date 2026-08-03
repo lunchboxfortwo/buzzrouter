@@ -57,10 +57,12 @@ const MAX_WEBSOCKET_MESSAGE_BYTES = 512 * 1_024;
  * usefulness, and comfortably inside typical NAT/proxy idle timeouts.
  */
 const RELAY_HEARTBEAT_INTERVAL_MS = 30_000;
-/** How long a session may receive nothing before we make it prove it is alive. */
-const RELAY_IDLE_PROBE_AFTER_MS = 60_000;
-/** A live relay answers a no-match REQ with EOSE well inside this. */
-const RELAY_PROBE_TIMEOUT_MS = 5_000;
+/**
+ * How long a session may receive nothing before its subscription is rebuilt.
+ * Bounds how long the hub can be deaf; with few connected communities the
+ * reconnect cost is negligible.
+ */
+const RELAY_IDLE_RECYCLE_AFTER_MS = 60_000;
 const AUTH_REQUIRED_PATTERN = /auth-required/i;
 
 /**
@@ -134,7 +136,6 @@ export interface RelayConnection {
   readRoster(): Promise<Set<string> | null>;
   readRosterRoles(): Promise<CommunityRoster | null>;
   getProfileName?(pubkey: string): Promise<string | null>;
-  probe?(): Promise<boolean>;
   publish(event: Event): Promise<void>;
   subscribe(
     routes: ConnectorRouteConfig[],
@@ -227,7 +228,7 @@ export class ConnectorSupervisor {
       const fingerprint = connectionFingerprint(config);
       const current = this.sessions.get(config.id);
       if (current?.fingerprint === fingerprint) {
-        if (!(await this.hasGoneDeaf(current))) {
+        if (!this.isStale(current)) {
           this.scheduleHomeMembershipReconciliation(current);
           continue;
         }
@@ -235,12 +236,8 @@ export class ConnectorSupervisor {
         // keeps reporting healthy while receiving nothing.
         this.sessions.delete(config.id);
         closeSession(current);
-        await recordConnectionHealth(
-          this.pool,
-          config.id,
-          "degraded",
-          "relay stopped answering",
-        );
+        // Not an error: a scheduled refresh of a subscription we cannot
+        // otherwise trust. Health is restored by startConnection below.
       } else if (current) {
         this.sessions.delete(config.id);
         closeSession(current);
@@ -253,26 +250,22 @@ export class ConnectorSupervisor {
   }
 
   /**
-   * True when a quiet connection also fails to answer a direct question.
+   * True when a session has been silent long enough that it must be rebuilt.
    *
-   * Quiet alone proves nothing — a channel with no traffic is quiet. So only
-   * an idle session is probed, and only a probe that goes unanswered condemns
-   * it. This is checked at the layer that matters: the socket looked open and
-   * the relay logged no close while every message was being missed.
+   * Three liveness checks failed before this one, each because they asked the
+   * wrong thing. The socket stays OPEN, the relay logs no close, and a fresh
+   * REQ is answered normally — measured, all three — while the long-lived
+   * subscription delivers nothing. nostr-tools reconnects the transport
+   * underneath and does not restore subscriptions, so the connection is
+   * genuinely healthy and the subscription is orphaned. Nothing observable
+   * about the connection can distinguish that from an idle channel.
+   *
+   * So stop interrogating and just recycle. Rebuilding a subscription costs
+   * one reconnect per idle interval, which is cheap and, unlike every check
+   * that came before, cannot silently be wrong.
    */
-  private async hasGoneDeaf(session: ConnectorSession): Promise<boolean> {
-    if (Date.now() - session.lastInboundAt < RELAY_IDLE_PROBE_AFTER_MS) {
-      return false;
-    }
-    if (!session.relay.probe) return false;
-    let alive = false;
-    try {
-      alive = await session.relay.probe();
-    } catch {
-      alive = false;
-    }
-    if (alive) session.lastInboundAt = Date.now();
-    return !alive;
+  private isStale(session: ConnectorSession): boolean {
+    return Date.now() - session.lastInboundAt >= RELAY_IDLE_RECYCLE_AFTER_MS;
   }
 
   async deliver(
@@ -821,48 +814,6 @@ export class NostrRelayConnection implements RelayConnection {
     this.relay.close();
   }
 
-  /**
-   * Prove the relay still answers us, at the layer we actually depend on.
-   *
-   * A socket-level ping was not enough: Cloudflare sits in front of both
-   * relays, and when it drops the client leg the origin keeps its own leg open
-   * — the relay logs no close, our socket looks fine, and events simply stop.
-   * Measured live: the BuzzRouter bridge authenticated at 19:26:23, received
-   * its backlog, then silently missed every subsequent message while the
-   * connection still reported `healthy`.
-   *
-   * So ask a question and require an answer. A REQ that matches nothing still
-   * gets an EOSE from a live relay; silence means the path is dead no matter
-   * what the socket claims.
-   */
-  async probe(): Promise<boolean> {
-    return new Promise((resolve) => {
-      let settled = false;
-      let subscription: Subscription | undefined;
-      const finish = (alive: boolean) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        subscription?.close("probe complete");
-        resolve(alive);
-      };
-      const timeout = setTimeout(() => finish(false), RELAY_PROBE_TIMEOUT_MS);
-      try {
-        subscription = this.relay.subscribe(
-          // `since` in the future matches nothing, so this costs the relay a
-          // lookup and returns no events — only the EOSE we care about.
-          [{ kinds: [GROUP_METADATA_KIND], since: 2_000_000_000, limit: 1 }],
-          {
-            onclose: () => finish(false),
-            oneose: () => finish(true),
-            onevent: () => undefined,
-          },
-        );
-      } catch {
-        finish(false);
-      }
-    });
-  }
 
   /**
    * Enumerate the relay's NIP-29 groups (its channels) from their kind-39000

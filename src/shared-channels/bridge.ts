@@ -7,6 +7,7 @@ import {
 } from "nostr-tools/pure";
 
 import { ApiError } from "../http/api-error";
+import { parseMessageAddress } from "./addressing";
 
 export const BUZZ_MESSAGE_KIND = 9;
 export const MAX_BRIDGE_BODY_BYTES = 16 * 1_024;
@@ -23,6 +24,8 @@ export interface SourceRoute {
 export interface CanonicalSourceMessage {
   body: string;
   bodySha256: string;
+  /** Destination community handle the author addressed, without the `@[]`. */
+  destinationSlug: string;
   sharedChannelId: string;
   signedEvent: Event;
   sourceActorPubkey: string;
@@ -81,11 +84,25 @@ export function canonicalizeSourceEvent(
     );
   }
 
+  // Routing is opt-in per message. An unaddressed message is ordinary local
+  // conversation that merely happens to sit in a channel the bridge can read,
+  // and must never leave the community — so it is dropped here, exactly like
+  // the bridge's own echoes above, rather than treated as an error.
+  const address = parseMessageAddress(event.content);
+  if (!address) return null;
+
+  // The address is a routing header, not content: strip it so the destination
+  // reads the message. An addressed user becomes a plain mention in the body —
+  // it needs to survive to delivery time, and a column on bridge_messages would
+  // be a schema change earning nothing that a leading `@name` does not.
+  const routedBody = address.user
+    ? `@${address.user} ${address.body}`
+    : address.body;
+
   return {
-    body: event.content,
-    bodySha256: createHash("sha256")
-      .update(event.content)
-      .digest("hex"),
+    body: routedBody,
+    bodySha256: createHash("sha256").update(routedBody).digest("hex"),
+    destinationSlug: address.slug,
     sharedChannelId: route.sharedChannelId,
     signedEvent: event,
     sourceActorPubkey: event.pubkey,
@@ -104,8 +121,13 @@ export function createDestinationProjection(
   const actorLabel =
     input.sourceActorName?.replace(/[\r\n\t]+/g, " ").trim().slice(0, 80) ||
     input.sourceActorPubkey.slice(0, 12);
-  const attribution = `${actorLabel} · ${input.sourceCommunityName} [via BuzzRouter]`;
-  const attributionShape = /^.{1,80} · .{1,120} \[via BuzzRouter\]$/u;
+  // One header line, then the message. The old form repeated the community
+  // name and appended "[via BuzzRouter]" to a line that already said it, so a
+  // mirrored message read as `BuzzRouter Test · BuzzRouter [via BuzzRouter]`.
+  const attribution = `↳ @${actorLabel} · ${input.sourceCommunityName}`;
+  // Names are user-controlled, so a body line that imitates this header must be
+  // escaped or anyone could forge an attribution inside their own message.
+  const attributionShape = /^↳ @.{1,80} · .{1,120}$/u;
   const escapedBody = input.body
     .split("\n")
     .map((line) => (attributionShape.test(line) ? `\\${line}` : line))

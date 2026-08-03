@@ -16,6 +16,7 @@ import { WebSocket as NodeWebSocket } from "ws";
 import { ApiError } from "../http/api-error";
 import { BRIDGE_DELIVERY_QUEUE } from "../jobs/queues";
 import {
+  BUZZ_MESSAGE_KIND,
   canonicalizeSourceEvent,
   createDestinationProjection,
 } from "./bridge";
@@ -23,6 +24,7 @@ import {
   cancelBridgeDelivery,
   completeBridgeDelivery,
   decryptConnectorPrivateKey,
+  findRoutableCommunityBySlug,
   getBridgeDeliveryContext,
   ingestBridgeMessage,
   isBridgeDeliveryRouteActive,
@@ -432,6 +434,35 @@ export class ConnectorSupervisor {
     this.membershipReconciliations.set(session.config.id, next);
   }
 
+  /**
+   * Tell the sender, in their own channel, that nothing was delivered.
+   *
+   * Deliberately not a bridge_deliveries row: nothing was routed, so there is
+   * no delivery to retry or report on. Failure to post the notice is swallowed
+   * — a bounce that throws would mark an otherwise healthy connection degraded.
+   */
+  private async reportUndeliverable(
+    session: ConnectorSession,
+    localChannelId: string,
+    slug: string,
+  ): Promise<void> {
+    try {
+      await session.relay.publish(
+        finalizeEvent(
+          {
+            content: `↳ BuzzRouter: no community named "${slug}" is connected here, so that message was not delivered.`,
+            created_at: Math.floor(Date.now() / 1_000),
+            kind: BUZZ_MESSAGE_KIND,
+            tags: [["h", localChannelId], ["br", "notice", "unknown-destination"]],
+          },
+          session.privateKey,
+        ),
+      );
+    } catch {
+      // Best effort only.
+    }
+  }
+
   private async handleSourceEvent(
     session: ConnectorSession,
     event: Event,
@@ -452,9 +483,28 @@ export class ConnectorSupervisor {
         sourceEndpointId: route.sourceEndpointId,
       });
       if (!canonical) return;
+
+      const destination = await findRoutableCommunityBySlug(
+        this.pool,
+        canonical.sharedChannelId,
+        canonical.destinationSlug,
+      );
+      if (!destination) {
+        // The author addressed something real to them. Dropping it silently
+        // would look identical to the router being broken, so say so in the
+        // channel they are standing in.
+        await this.reportUndeliverable(
+          session,
+          route.localChannelId,
+          canonical.destinationSlug,
+        );
+        return;
+      }
+
       const sourceActorName = await session.relay.getProfileName?.(event.pubkey);
       await ingestBridgeMessage(this.pool, this.boss, {
         ...canonical,
+        destinationCommunityId: destination.communityId,
         messageId: randomUUID(),
         sourceActorName: sourceActorName ?? undefined,
       });

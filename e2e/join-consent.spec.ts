@@ -102,7 +102,7 @@ test("shows the real policy and mints a receipt only after a genuine consent tic
   await expect(buzzFallback).toBeVisible();
   await expect(buzzFallback).toHaveAttribute(
     "href",
-    `https://${new URL(relayUrl).host}/invite/e2e-invite-code`,
+    `https://${new URL(relayUrl).host}/invite/v2.e2e-invite-code`,
   );
   await expect(
     page.getByRole("button", { name: /Join without Buzz/i }),
@@ -143,7 +143,7 @@ test("shows the real policy and mints a receipt only after a genuine consent tic
   const body = await receiptResponse.json();
   expect(body.receipt).toBe("e2e-receipt-token");
   expect(body.relayUrl).toBe(relayUrl);
-  expect(body.code).toBe("e2e-invite-code");
+  expect(body.code).toBe("v2.e2e-invite-code");
 });
 
 test("does not expose the removed managed-identity API", async ({ request }) => {

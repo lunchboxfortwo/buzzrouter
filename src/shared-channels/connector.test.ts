@@ -499,12 +499,11 @@ describe("ConnectorSupervisor operated-community routing", () => {
     );
     const state = {
       connectCalls: 0,
-      probeCalls: 0,
-      probeAlive: true,
       lockCalls: 0,
       readRosterCalls: 0,
       subscriptions: [] as Array<{
         onClose: (reason: string) => void;
+        onEvent: (event: Event) => void;
         watchRoster: boolean;
       }>,
     };
@@ -555,12 +554,8 @@ describe("ConnectorSupervisor operated-community routing", () => {
             return new Set();
           },
           async readRosterRoles() { return new Map(); },
-          async probe() {
-            state.probeCalls += 1;
-            return state.probeAlive;
-          },
-          subscribe(_routes, watchRoster, _onEvent, onClose) {
-            state.subscriptions.push({ onClose, watchRoster });
+          subscribe(_routes, watchRoster, onEvent, onClose) {
+            state.subscriptions.push({ onClose, onEvent, watchRoster });
           },
         };
         return relay;
@@ -575,35 +570,41 @@ describe("ConnectorSupervisor operated-community routing", () => {
     return { state, supervisor };
   }
 
-  // Production sat deaf while the socket looked open and the relay logged no
-  // close, so the supervisor kept a session that received nothing and reported
-  // healthy. Quiet alone must not condemn a session; quiet plus an unanswered
-  // probe must.
-  it("rebuilds a session that goes quiet and stops answering", async () => {
+  // Measured in production: the socket stays OPEN, the relay logs no close,
+  // and a fresh REQ is answered normally, all while the long-lived
+  // subscription delivers nothing. No observable property of the connection
+  // separates that from an idle channel, so silence alone triggers a rebuild.
+  it("rebuilds a subscription that has been silent too long", async () => {
     const { state, supervisor } = supervisorHarness("wss://third-party.example");
     await supervisor.start();
     expect(state.connectCalls).toBe(1);
 
-    // Quiet but still answering: keep it.
-    state.probeAlive = true;
-    vi.setSystemTime(Date.now() + 120_000);
+    // Still inside the window: left alone.
     await supervisor.reconcile();
-    expect(state.probeCalls).toBeGreaterThan(0);
     expect(state.connectCalls).toBe(1);
 
-    // Quiet and no longer answering: replace it.
-    state.probeAlive = false;
     vi.setSystemTime(Date.now() + 120_000);
     await supervisor.reconcile();
     expect(state.connectCalls).toBe(2);
+    expect(state.subscriptions).toHaveLength(2);
     await supervisor.stop();
   });
 
-  it("does not probe a session that is still receiving events", async () => {
+  it("leaves a session alone while events are still arriving", async () => {
     const { state, supervisor } = supervisorHarness("wss://third-party.example");
     await supervisor.start();
+    vi.setSystemTime(Date.now() + 120_000);
+    // An inbound event resets the idle clock, so this must NOT recycle.
+    state.subscriptions[0].onEvent({
+      content: "",
+      created_at: 0,
+      id: "a".repeat(64),
+      kind: 9,
+      pubkey: "b".repeat(64),
+      sig: "c".repeat(128),
+      tags: [],
+    });
     await supervisor.reconcile();
-    expect(state.probeCalls).toBe(0);
     expect(state.connectCalls).toBe(1);
     await supervisor.stop();
   });

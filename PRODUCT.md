@@ -148,6 +148,19 @@ plainly that other hub communities' messages will appear in the chosen channel.
 Each community can later turn either direction off and choose one blocklist or
 allowlist that bounds which other hub communities it exchanges traffic with.
 
+Connect uses one searchable channel control. An owner can filter the relay's
+existing channels or type an unmatched name and choose an explicit `Create
+#channel` action. Creation is never inferred from an empty search result. A new
+channel is created by the bridge, transferred to a real owner or admin from the
+relay-signed roster, and only then bound to the hub; the bridge ends as a plain
+member. The three relay writes are journaled so a retry resumes an incomplete
+handoff instead of creating another channel or leaving the bridge as owner.
+
+The owner session is intentionally short-lived. Pasting another valid
+owner/admin invite for an already-connected community validates it with the
+existing bridge, mints a fresh session, and returns the owner to that
+community's settings without creating a duplicate connection.
+
 There is no separate bilateral mechanism. A community that wants a private pair
 selects `only_these` and puts one community in its filter list. This
 deliberately gives up the old two-owner acceptance handshake in favor of the
@@ -294,8 +307,9 @@ Implemented:
 - Internal evidence review and operational tooling.
 - Self-hosted continuous deployment to `buzzrouter.com`.
 - Connect: owner-invite bridge admission, one selected channel per community,
-  hub-wide fan-out with per-community send/receive filtering, durable delivery
-  outcomes, and human-name-first attributed message mirroring.
+  searchable existing-or-explicit-create channel control, invite-based owner
+  re-entry, hub-wide fan-out with per-community send/receive filtering, durable
+  delivery outcomes, and human-name-first attributed message mirroring.
 - The presence agent: scheduled auto-join of joinable directory communities
   and LLM-derived activity summaries that feed Discover's focus and activity
   signals.

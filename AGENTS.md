@@ -111,10 +111,22 @@ Key routing rules:
   bridge, activates the connector, and mints a short-lived owner session. Invite
   claim URLs remain pinned to the community's on-record relay; never weaken that
   SSRF boundary or log the bearer invite code.
+- For an already-active connector, the same endpoint validates the fresh invite
+  with the existing bridge and mints a new owner session. Re-entry must reuse the
+  connector identity and existing hub endpoint; an expired browser session is
+  not a reason to create another community connection.
 - After activation, `GET /api/shared-channels/local-channels` lists the
-  community's actual relay channels. `POST /api/shared-channels/hub` binds the
-  selected channel immediately with sends/receives on. The link-step copy is the
-  disclosure and the owner-level invite is the consent.
+  community's actual relay channels. The single combobox filters that list and
+  offers channel creation only as an explicit second action for an unmatched
+  name. `POST /api/shared-channels/hub` binds the selected channel immediately
+  with sends/receives on, and `PATCH` can change the binding later.
+- `POST /api/shared-channels/create-channel` uses
+  `src/shared-channels/channel-handoff.ts`: kind 9007 creates, kind 9000 promotes
+  a real owner/admin from the relay-signed roster, then kind 9000 demotes the
+  bridge to member. Progress is journaled in `bridge_channel_handoffs` by
+  idempotency key so retries resume. Never replace this with an unjournaled 9007
+  publish or let a successful request return while the bridge still owns the
+  channel.
 - The hub is one `shared_channels` row with N `participant` endpoints. Each
   endpoint owns `sends`, `receives`, one `filter_mode`, and one UUID
   `filter_list`. Fan-out creates one ordinary `bridge_deliveries` row/job per

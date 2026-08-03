@@ -6,9 +6,9 @@ Date: 2026-07-29
 
 > **Current product note (2026-08-01):** Ownership claiming and directory
 > listing editing were removed. Operators provide listing context at submission,
-> while Link admission starts with an owner/admin invite and ends with a
-> roster-authorized confirmation in Buzz. The discovery and probe design below
-> remains authoritative; claim-specific sections have been updated accordingly.
+> while Connect admission and later session re-entry use an owner/admin invite.
+> The discovery and probe design below remains authoritative; claim-specific
+> sections have been updated accordingly.
 
 ## Executive recommendation
 
@@ -341,23 +341,27 @@ Ratings store one current rating per Nostr pubkey per community plus its signed
 envelope. Daily metrics store unique views, saves, outbound community opens,
 rating counts, and probe uptime.
 
-## Listing intake and Link admission
+## Listing intake and Connect admission
 
 Listing context comes from `app/submit/` and is stored as attributed submission
 source data. It does not create an ownership record or unlock a listing editor,
 and it cannot replace the independent discovery and probe evidence required for
 publication.
 
-Link uses a separate authority path:
+Connect uses a separate authority path:
 
-1. A cold owner searches verified communities by name or relay host.
-2. Selecting a result returns focus to the primary invite field.
-3. The owner pastes an owner/admin invite; the bridge redeems it against the
-   candidate's on-record relay, then activates and receives a scoped session.
-4. A channel binding becomes active only after an owner/admin named by the
-   relay-signed roster types the one-time confirmation in Buzz.
+1. The owner pastes an owner/admin invite for a verified community.
+2. The bridge redeems it against the candidate's on-record relay, activates the
+   connector, and returns a scoped session. If the connector is already active,
+   a fresh valid invite mints a replacement session without creating another
+   connection.
+3. The owner filters the relay's existing channels in one combobox and binds a
+   selection, or explicitly creates an unmatched name.
+4. New-channel creation is a journaled create, promote-owner, demote-bridge
+   handoff; a retry resumes the same channel and success never leaves the bridge
+   as channel owner.
 
-The invite is admission to Link, not permission to edit directory metadata.
+The invite is admission to Connect, not permission to edit directory metadata.
 
 ## Ratings and ranking
 
@@ -474,16 +478,17 @@ private address ranges.
 Exit condition: new publicly referenced Buzz relays appear in the internal index
 within 6 hours, with source provenance and classifier evidence.
 
-### Phase 3: Public listings and invite-first Link
+### Phase 3: Public listings and invite-first Connect
 
 - Publish database-backed community details from verified discovery data.
 - Accept attributed listing context through submission intake.
-- Search verified communities by relay host or name on the Link page.
 - Admit the bridge with an owner/admin invite and activate it by relay round trip.
-- Require the roster-authorized in-channel confirmation before binding a route.
+- Select an existing local channel or explicitly create one, then bind it to the
+  open hub.
 
-Exit condition: an owner arriving cold can find a verified community and link it
-without a browser signer, ownership claim, or editable directory listing.
+Exit condition: an owner arriving cold can connect a verified community, regain
+settings later with a fresh invite, and bind a local channel without a browser
+signer, ownership claim, or editable directory listing.
 
 ### Phase 4: Ratings and launch ranking, days 11-14
 
@@ -518,7 +523,7 @@ has a freshness timestamp.
 - Scraping messages, channels, members, agents, repos, or workflows.
 - Estimating private community activity.
 - Crawling every possible hosted subdomain.
-- Discovery jobs mirroring or redeeming invites; Link redeems only an invite
+- Discovery jobs mirroring or redeeming invites; Connect redeems only an invite
   explicitly pasted by an owner/admin.
 - Replacing Buzz's planned native naming or directory work.
 - Building a general-purpose Nostr relay directory.

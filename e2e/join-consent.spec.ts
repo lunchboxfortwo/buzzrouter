@@ -65,7 +65,7 @@ test.beforeAll(async () => {
          source_invite_code)
       VALUES ($1, 'harvest', $2, now(), $3)
     `,
-    [candidateId, randomUUID(), "e2e-invite-code"],
+    [candidateId, randomUUID(), "v2.e2e-invite-code"],
   );
 });
 

@@ -51,14 +51,61 @@ const GROUP_MEMBERS_KIND = 39_002;
 const COMMUNITY_ROSTER_KIND = 13_534;
 const PUT_USER_KIND = 9_000;
 const MAX_WEBSOCKET_MESSAGE_BYTES = 512 * 1_024;
+/**
+ * Ping cadence. A dead socket is detected within two intervals, so this bounds
+ * how long the hub can be deaf; it must stay well under the reconcile loop's
+ * usefulness, and comfortably inside typical NAT/proxy idle timeouts.
+ */
+const RELAY_HEARTBEAT_INTERVAL_MS = 30_000;
 const AUTH_REQUIRED_PATTERN = /auth-required/i;
 
-class ConnectorWebSocket extends NodeWebSocket {
+/**
+ * A relay socket that proves it is still alive.
+ *
+ * The supervisor already tears down and rebuilds a session when the relay
+ * subscription closes — but that only helps if a close is actually observed.
+ * A half-open TCP connection emits no close frame and no error: the socket
+ * stays `OPEN`, events silently stop arriving, and the connection keeps
+ * reporting `healthy`. Production went deaf this way for three hours, and the
+ * only tell was that `last_health_at` (written on every ingest) had frozen.
+ *
+ * So probe rather than wait. An unanswered ping terminates the socket, which
+ * finally produces the close event the existing recovery path needs.
+ */
+export class ConnectorWebSocket extends NodeWebSocket {
   constructor(address: string | URL, protocols?: string | string[]) {
     super(address, protocols, {
       maxPayload: MAX_WEBSOCKET_MESSAGE_BYTES,
       perMessageDeflate: false,
     });
+
+    let awaitingPong = false;
+    const heartbeat = setInterval(() => {
+      if (this.readyState !== NodeWebSocket.OPEN) return;
+      if (awaitingPong) {
+        // A full interval passed with no pong. `terminate`, not `close`: a peer
+        // that ignored a ping will not complete a closing handshake either.
+        this.terminate();
+        return;
+      }
+      awaitingPong = true;
+      try {
+        this.ping();
+      } catch {
+        this.terminate();
+      }
+    }, RELAY_HEARTBEAT_INTERVAL_MS);
+    heartbeat.unref?.();
+
+    this.on("pong", () => {
+      awaitingPong = false;
+    });
+    // Any inbound traffic is equally good proof of life, and costs nothing.
+    this.on("message", () => {
+      awaitingPong = false;
+    });
+    this.on("close", () => clearInterval(heartbeat));
+    this.on("error", () => clearInterval(heartbeat));
   }
 }
 

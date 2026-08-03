@@ -67,6 +67,28 @@ npm run discovery:reconcile
 
 The command only enqueues jobs. A worker must be running to process them.
 
+Audit the current GitHub source cohort without changing the database:
+
+```bash
+npm run discovery:github:audit-invites
+```
+
+The audit prints aggregate row and yield counts only. To make one live join
+claim with a fresh throwaway key, first obtain explicit acceptance of the
+relay's terms and age confirmation, then run exactly once:
+
+```bash
+BUZZROUTER_VERIFY_GITHUB_INVITE_LIVE=1 \
+VERIFY_AGE_CONFIRMED=true \
+npm run discovery:github:verify-invite
+```
+
+The verifier selects one supported, non-expired harvested invite, completes
+the relay policy handshake when required, and makes one claim. It never prints
+the relay host, invite code, private key, policy receipt, or source locator. Do
+not loop it: a failed claim is a finding to investigate, not permission to try
+another community.
+
 Self-hosted production can instead run NIP-66 as a disposable one-shot
 container:
 
@@ -85,15 +107,21 @@ one-shot exits successfully with a `source_locked` result.
 ## Evidence handling
 
 - GitHub stores a public repository file locator and one current evidence row
-  per repository path.
+  per repository path. It fetches the corresponding raw file with redirects
+  disabled and a 1 MB response limit.
 - NIP-66 stores one current evidence row per signing monitor pubkey.
 - NIP-65 stores one current evidence row per signing author pubkey.
 - Nostr evidence freshness comes from the signed event `created_at`, not the
   time BuzzRouter happened to read or reread it.
-- Extracted URLs are normalized before persistence. Credentials are rejected;
-  paths, queries, fragments, and invite capabilities are discarded.
+- Extracted URLs are normalized before persistence. Credentials are rejected,
+  and paths, queries, and fragments are discarded from source locators. A
+  supported invite code may be stored on the candidate only when it appears
+  near a relay URL whose host matches that candidate's canonical relay host.
+  Supported codes are opaque `v2.` tokens and legacy tokens with a decodable
+  expiry; other code shapes are ignored.
 - Raw source bodies, GitHub fragments, Nostr event content, and remote error
-  messages are not persisted.
+  messages are not persisted. Invite codes are bearer credentials and never
+  appear in logs or audit output.
 - Candidate probe jobs contain only database UUIDs.
 
 NIP-66 events are accepted only when signed by an allowlisted monitor and their
@@ -166,7 +194,8 @@ past potentially omitted evidence.
 
 - TypeScript compilation and production Next.js build
 - Signed NIP-65 and NIP-66 parser tests
-- GitHub extraction, redaction-boundary, and cursor-boundary tests
+- GitHub extraction, host-binding, raw-fetch, redaction-boundary, and
+  cursor-boundary tests
 - Source configuration, state, eligibility, authentication, and queue tests
 - Per-relay Nostr EOSE, failure, and timeout tests
 - PostgreSQL migration and database-backed source ingestion

@@ -18,7 +18,8 @@ that guesses community names.
 BuzzRouter should:
 
 1. Collect candidate relay origins from public, attributable sources.
-2. Strip invite codes and all URL paths before persistence.
+2. Strip URL paths from source locators, while retaining only validated invite
+   codes published near a relay URL with the same canonical host.
 3. Verify candidates using public NIP-11 metadata and a bounded WebSocket
    handshake.
 4. Classify a relay as Buzz only when its public metadata strongly identifies
@@ -31,7 +32,7 @@ BuzzRouter should:
    content.
 
 This gives BuzzRouter useful automatic coverage without probing private
-channels, enumerating hosted tenants, or turning expiring invite links into a
+channels, enumerating hosted tenants, or exposing expiring invite links as a
 public dataset.
 
 ## What the research established
@@ -95,8 +96,10 @@ These counts are discovery-source coverage, not a count of distinct
 communities. Results include documentation, test fixtures, duplicate references,
 and URLs that may contain capability-bearing invite codes.
 
-The production crawler must extract only the relay origin and discard invite
-paths and codes before data reaches logs, queues, analytics, or storage.
+The production crawler stores only the canonical relay origin as the source
+locator. It may attach a supported invite code to that candidate when the code
+appears near a relay URL with the same canonical host; codes must never reach
+logs, queues, or analytics.
 
 ## Product boundary
 
@@ -186,7 +189,7 @@ retries, leases, deduplication, and observable failure states.
 | Source | Role | Trust | MVP behavior |
 | --- | --- | --- | --- |
 | NIP-66 monitor events | Broad relay discovery and health hints | Medium; require multiple monitors and direct probe | Ingest normalized `d` relay origins and monitor identity |
-| GitHub code/issues | Find publicly referenced Buzz hosts | Medium; public provenance but noisy | Search allowlisted queries, redact paths immediately |
+| GitHub code/issues | Find publicly referenced Buzz hosts | Medium; public provenance but noisy | Search allowlisted queries, redact paths, and retain only supported host-matched invite codes |
 | NIP-65 relay lists | Find user-endorsed relay origins | Low to medium; signed but not Buzz-specific | Candidate hint only, never sufficient to publish |
 | Hosting-provider feed | Obtain public/listable tenants directly | High when authenticated and contractually scoped | Publish after direct probe |
 | Manual URL | Recovery path and owner workflow | High after verification | Keep, but do not depend on it for coverage |
@@ -435,7 +438,9 @@ pagination engine to the MVP.
   is reviewed.
 - Source-level denylist for spam domains and poisoned monitor keys.
 - No wildcard-domain crawling.
-- No invite token storage, screenshots, or cached source bodies.
+- No invite tokens in logs, screenshots, analytics, or cached source bodies;
+  stored host-matched tokens remain bearer credentials governed by probe and
+  freshness decay.
 - Evidence from at least two independent monitors before monitoring data affects
   public uptime.
 - Signed ratings, one per pubkey, with anomaly detection for new-key bursts.
@@ -455,7 +460,8 @@ pagination engine to the MVP.
 - Seed from a reviewed static list and public GitHub references.
 
 Exit condition: at least 20 known candidates can be processed repeatedly with
-zero stored invite paths and zero network requests to private address ranges.
+zero invite paths in source locators or logs and zero network requests to
+private address ranges.
 
 ### Phase 2: Automatic sources, days 5-7
 
@@ -497,7 +503,8 @@ has a freshness timestamp.
 - Probe success: at least 95 percent of reachable candidates classified in one
   cycle.
 - False-positive rate: under 1 percent among publicly listed relays.
-- Secret handling: zero invite paths or codes in database and application logs.
+- Secret handling: zero invite paths in source locators and zero invite codes in
+  application logs; stored host-matched codes remain confined to the database.
 - Freshness: 95 percent of public listings probed within the previous 24 hours.
 - Coverage: at least 50 verified Buzz relays or 80 percent of a manually
   maintained benchmark set, whichever is smaller.
@@ -522,7 +529,8 @@ has a freshness timestamp.
 - Automatic technical indexing is allowed; public listing needs public evidence
   and a current successful probe. Submission intake cannot bypass either.
 - Exact Block Buzz `software` metadata is the primary classifier.
-- Invite URLs are capabilities and are never a discovery source of record.
+- Invite URLs are capabilities, never independent discovery evidence, and may
+  be retained only as host-matched candidate credentials.
 - Ratings measure BuzzRouter user opinion, not relay health.
 - Relay health is a separate operational signal.
 - PostgreSQL plus `pg-boss` is the MVP queue and scheduler.

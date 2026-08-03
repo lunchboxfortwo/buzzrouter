@@ -116,7 +116,8 @@ Implemented:
 - Bounded NIP-11 fetch and no-auth WebSocket handshake
 - Strict verified/probable/rejected Buzz classifier
 - Interactive reviewed intake, database doctor, aggregate status, and seed tools
-- Cursor-backed GitHub code search with immediate invite-path redaction
+- Cursor-backed GitHub code search that harvests validated, relay-host-matched
+  invite codes while keeping invite paths out of source locators and logs
 - Signed NIP-66 monitor ingestion and signed NIP-65 relay-list hints
 - Per-source health state, bounded schedules, and manual reconciliation
 - Independent-source listing eligibility evaluation

@@ -209,6 +209,7 @@ export interface BridgeDeliveryContext {
   sourceActorName: string | null;
   sourceCommunityId: string;
   sourceCommunityName: string;
+  sourceCommunitySlug: string;
   sourceEventId: string;
   sourceParentEventId: string | null;
   state:
@@ -1500,6 +1501,7 @@ export async function getBridgeDeliveryContext(
     source_actor_name: string | null;
     source_community_id: string;
     source_community_name: string;
+    source_community_slug: string;
     source_event_id: string;
     source_parent_event_id: string | null;
     source_sends: boolean;
@@ -1529,6 +1531,10 @@ export async function getBridgeDeliveryContext(
           source_community.slug,
           source_candidate.host
         ) AS source_community_name,
+        -- The addressable handle, so a delivered message is tagged with the
+        -- same grammar an author types to reply to it.
+        COALESCE(source_community.slug, source_candidate.host)
+          AS source_community_slug,
         destination_endpoint.id AS destination_endpoint_id,
         destination_endpoint.connection_id AS destination_connection_id,
         destination_endpoint.local_channel_id AS destination_channel_id,
@@ -1611,6 +1617,7 @@ export async function getBridgeDeliveryContext(
     sourceActorName: row.source_actor_name,
     sourceCommunityId: row.source_community_id,
     sourceCommunityName: row.source_community_name,
+    sourceCommunitySlug: row.source_community_slug,
     sourceEventId: row.source_event_id,
     sourceParentEventId: row.source_parent_event_id,
     state: row.state,

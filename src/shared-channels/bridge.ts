@@ -45,7 +45,7 @@ export interface DestinationProjectionInput {
   sourceActorPubkey: string;
   sourceActorName?: string | null;
   sourceCommunityId: string;
-  sourceCommunityName: string;
+  sourceCommunitySlug: string;
   sourceEventId: string;
 }
 
@@ -124,13 +124,15 @@ export function createDestinationProjection(
   const actorLabel =
     input.sourceActorName?.replace(/[\r\n\t]+/g, " ").trim().slice(0, 80) ||
     input.sourceActorPubkey.slice(0, 12);
-  // One header line, then the message. The old form repeated the community
-  // name and appended "[via BuzzRouter]" to a line that already said it, so a
-  // mirrored message read as `BuzzRouter Test · BuzzRouter [via BuzzRouter]`.
-  const attribution = `↳ @${actorLabel} · ${input.sourceCommunityName}`;
+  // Sending and receiving share one grammar: a message addressed with
+  // `@community/user` arrives tagged `@community/user`, so what you read is
+  // what you would type to reply. The previous form invented a third syntax
+  // (`↳ @name · community`) that carried the same information and did not
+  // round-trip.
+  const attribution = `@${input.sourceCommunitySlug}/${actorLabel}`;
   // Names are user-controlled, so a body line that imitates this header must be
   // escaped or anyone could forge an attribution inside their own message.
-  const attributionShape = /^↳ @.{1,80} · .{1,120}$/u;
+  const attributionShape = /^@[a-z0-9-]{2,40}\/.{1,80}$/u;
   const escapedBody = input.body
     .split("\n")
     .map((line) => (attributionShape.test(line) ? `\\${line}` : line))

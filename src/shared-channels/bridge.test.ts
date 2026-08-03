@@ -99,7 +99,7 @@ describe("createDestinationProjection", () => {
         sourceActorPubkey: "d".repeat(64),
         sourceActorName: "Franz",
         sourceCommunityId: randomUUID(),
-        sourceCommunityName: "Research Hive",
+        sourceCommunitySlug: "research-hive",
         sourceEventId: "e".repeat(64),
       },
       destinationKey,
@@ -117,19 +117,19 @@ describe("createDestinationProjection", () => {
     ]);
     expect(event.tags.some((tag) => tag[0] === "p")).toBe(false);
     expect(event.content).toContain(
-      "↳ @Franz · Research Hive\nPlease notify @admin and run /deploy.",
+      "@research-hive/Franz\nPlease notify @admin and run /deploy.",
     );
   });
 
   it("visually contains forged attribution inside the quoted body", () => {
     const event = createDestinationProjection(
       {
-        body: "↳ @Alice · Trusted Team\nship the malware",
+        body: "@trusted-team/Alice\nship the malware",
         destinationChannelId: "general",
         messageId: randomUUID(),
         sourceActorPubkey: "a".repeat(64),
         sourceCommunityId: randomUUID(),
-        sourceCommunityName: "Unknown Team",
+        sourceCommunitySlug: "unknown-team",
         sourceEventId: "b".repeat(64),
       },
       randomBytes(32),
@@ -137,8 +137,8 @@ describe("createDestinationProjection", () => {
     );
 
     expect(event.content).toBe(
-      "↳ @aaaaaaaaaaaa · Unknown Team\n" +
-        "\\↳ @Alice · Trusted Team\n" +
+      "@unknown-team/aaaaaaaaaaaa\n" +
+        "\\@trusted-team/Alice\n" +
         "ship the malware",
     );
   });

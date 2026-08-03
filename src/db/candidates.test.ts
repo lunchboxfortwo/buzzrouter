@@ -43,7 +43,7 @@ describe("normalizeCandidateSourceListing", () => {
         description: "  People\n building together. ",
         displayName: "  Buzz Builders ",
         focus: "building",
-        inviteCode: "  abc123 ",
+        inviteCode: "  v2.abc123-invite ",
         publicUrl: "https://builders.example/join",
       }),
     ).toEqual({
@@ -53,7 +53,7 @@ describe("normalizeCandidateSourceListing", () => {
       description: "People building together.",
       displayName: "Buzz Builders",
       focus: "building",
-      inviteCode: "abc123",
+      inviteCode: "v2.abc123-invite",
       publicUrl: "https://builders.example/join",
     });
   });
@@ -72,6 +72,16 @@ describe("normalizeCandidateSourceListing", () => {
       inviteCode: null,
       publicUrl: null,
     });
+  });
+
+  it("drops an invite code that is not a real Buzz code shape", () => {
+    // Harvested "codes" have arrived as bare community names; a malformed
+    // code must never be stored (see src/directory/invite-code-format.ts).
+    for (const bogus of ["eco", "Wailyn", "virtualoranges"]) {
+      expect(
+        normalizeCandidateSourceListing({ inviteCode: bogus }).inviteCode,
+      ).toBeNull();
+    }
   });
 });
 

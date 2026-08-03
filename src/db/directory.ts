@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 
+import { BUZZ_INVITE_CODE_SQL_RE } from "../directory/invite-code-format";
 import type { JoinStatus } from "../directory/joinability";
 
 export const DIRECTORY_SORTS = ["evidence", "recent", "reliable", "new"] as const;
@@ -286,10 +287,15 @@ export async function listDirectoryCommunities(
         LEFT JOIN LATERAL (
           SELECT
             (
+              -- Newest REAL code only: harvested rows have carried bare
+              -- names/slugs as "codes", and a malformed code must never render
+              -- a join button (see src/directory/invite-code-format.ts). The
+              -- format predicate also lets an older valid code win over a
+              -- newer bogus row instead of both being hidden.
               SELECT source_invite_code
               FROM community_sources
               WHERE candidate_id = candidates.id
-                AND source_invite_code IS NOT NULL
+                AND source_invite_code ~ '${BUZZ_INVITE_CODE_SQL_RE}'
               ORDER BY source_observed_at DESC
               LIMIT 1
             ) AS invite_code,

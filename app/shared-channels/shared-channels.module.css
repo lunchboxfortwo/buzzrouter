@@ -174,7 +174,7 @@
 .comboboxEmpty,
 .channelPickerNote {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 16px;
   line-height: 1.5;
   margin: 0;
 }

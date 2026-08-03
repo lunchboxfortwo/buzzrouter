@@ -226,6 +226,54 @@ describeDatabase("open-hub PostgreSQL integration", () => {
     expect(new Set(duplicate.deliveryIds)).toEqual(new Set(result.deliveryIds));
   });
 
+  // This is the case that shipped broken. Unit tests covered the parser and
+  // the projection, so both were green while the thing the user typed went
+  // nowhere. Only an ingest-to-delivery assertion catches that.
+  it("delivers an addressed message to exactly the addressed community", async () => {
+    await createConnectedCommunity(pool, "home", homeHost);
+    const source = await createConnectedCommunity(pool, "source");
+    const wanted = await createConnectedCommunity(pool, "wanted");
+    const bystander = await createConnectedCommunity(pool, "bystander");
+    const sourceMembership = await join(source, "source-general");
+    await join(wanted, "wanted-general");
+    await join(bystander, "bystander-general");
+
+    // Joining assigns the handle an author would address, derived from host.
+    const slug = await pool.query<{ slug: string }>(
+      "SELECT slug FROM communities WHERE id = $1",
+      [wanted.communityId],
+    );
+    expect(slug.rows[0]?.slug).toBe("wanted");
+
+    const sourceEventId = randomBytes(32).toString("hex");
+    const result = await ingestBridgeMessage(pool, boss, {
+      body: "routed payload",
+      bodySha256: sha256("routed payload"),
+      destinationCommunityId: wanted.communityId,
+      messageId: randomUUID(),
+      sharedChannelId: sourceMembership.sharedChannelId,
+      signedEvent: { id: sourceEventId, kind: 9 },
+      sourceActorPubkey: randomBytes(32).toString("hex"),
+      sourceCreatedAt: Math.floor(Date.now() / 1_000),
+      sourceEndpointId: sourceMembership.endpointId,
+      sourceEventId,
+    });
+
+    // One delivery, not one per participant: routing, not broadcast.
+    expect(result.deliveryIds).toHaveLength(1);
+    const destination = await pool.query<{ community_id: string }>(
+      `
+        SELECT endpoints.community_id
+        FROM bridge_deliveries AS deliveries
+        JOIN shared_channel_endpoints AS endpoints
+          ON endpoints.id = deliveries.destination_endpoint_id
+        WHERE deliveries.id = $1
+      `,
+      [result.deliveryIds[0]],
+    );
+    expect(destination.rows[0]?.community_id).toBe(wanted.communityId);
+  });
+
   it("removes a sends-off endpoint from connector subscriptions", async () => {
     await createConnectedCommunity(pool, "home", homeHost);
     const member = await createConnectedCommunity(pool, "member");

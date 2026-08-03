@@ -107,6 +107,12 @@ export interface CommunityConnectionInstallContext
 export interface IngestBridgeMessageInput {
   body: string;
   bodySha256: string;
+  /**
+   * The single community the author addressed. Routing is point-to-point: a
+   * message goes where it is sent, never to every participant. Omit only for
+   * callers that predate addressing (tests), which keep the old fan-out.
+   */
+  destinationCommunityId?: string;
   messageId: string;
   parentBridgeMessageId?: string;
   sharedChannelId: string;
@@ -711,6 +717,7 @@ export async function ingestBridgeMessage(
             AND destination.id <> $2
             AND destination.state = 'active'
             AND destination.receives = true
+            AND ($4::uuid IS NULL OR destination.community_id = $4)
             AND (
               (destination.filter_mode = 'everyone_except'
                 AND NOT ($3::uuid = ANY(destination.filter_list)))
@@ -731,6 +738,7 @@ export async function ingestBridgeMessage(
           input.sharedChannelId,
           input.sourceEndpointId,
           endpointResult.rows[0].community_id,
+          input.destinationCommunityId ?? null,
         ],
       );
     const destinations = destinationResult.rows;
@@ -1041,6 +1049,9 @@ export async function joinOpenHub(
       input.ownerPubkey,
     );
     const connection = await requireActiveConnection(client, input.communityId);
+    // Without a handle a participant is unaddressable, so joining the hub and
+    // getting one are the same event.
+    await ensureCommunitySlug(client, input.communityId);
     await client.query(
       "SELECT pg_advisory_xact_lock(hashtextextended('open-buzzrouter-hub', 0))",
     );
@@ -2031,4 +2042,87 @@ function assertText(
   ) {
     throw new ApiError("invalid_input", `${label} is invalid.`);
   }
+}
+
+/**
+ * Resolve an addressed community handle to a routable participant.
+ *
+ * Scoped to the shared channel on purpose: a slug that exists in the directory
+ * but has not joined the hub, or has switched receiving off, is NOT a valid
+ * destination and must read as unknown rather than silently dropping the
+ * message into nowhere.
+ */
+export async function findRoutableCommunityBySlug(
+  pool: Pool,
+  sharedChannelId: string,
+  slug: string,
+): Promise<{ communityId: string; slug: string } | null> {
+  const result = await pool.query<{ community_id: string; slug: string }>(
+    `
+      SELECT communities.id AS community_id, communities.slug
+      FROM communities
+      JOIN shared_channel_endpoints AS endpoints
+        ON endpoints.community_id = communities.id
+      WHERE lower(communities.slug) = lower($2)
+        AND endpoints.shared_channel_id = $1
+        AND endpoints.state = 'active'
+        AND endpoints.receives = true
+      LIMIT 1
+    `,
+    [sharedChannelId, slug],
+  );
+  const row = result.rows[0];
+  return row ? { communityId: row.community_id, slug: row.slug } : null;
+}
+
+/**
+ * Give a community an addressable handle if it does not already have one.
+ *
+ * Addressing is by slug (`@[handle]`), so a hub participant without one cannot
+ * be reached at all. Derived from the relay host's first label because that is
+ * what an author would guess; a collision gets a numeric suffix rather than
+ * stealing a handle another community already answers to.
+ */
+export async function ensureCommunitySlug(
+  client: PoolClient,
+  communityId: string,
+): Promise<string> {
+  const current = await client.query<{ slug: string | null; host: string }>(
+    `
+      SELECT communities.slug, candidates.host
+      FROM communities
+      JOIN community_candidates AS candidates
+        ON candidates.id = communities.candidate_id
+      WHERE communities.id = $1
+      FOR UPDATE OF communities
+    `,
+    [communityId],
+  );
+  const row = current.rows[0];
+  if (!row) throw new ApiError("invalid_input", "Unknown community.", 404);
+  if (row.slug && row.slug.trim()) return row.slug;
+
+  const base =
+    row.host
+      .split(".")[0]!
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "community";
+  const stem = base.length >= 2 ? base : `${base}-community`;
+
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const candidate = attempt === 0 ? stem : `${stem}-${attempt + 1}`.slice(0, 40);
+    const taken = await client.query(
+      "SELECT 1 FROM communities WHERE lower(slug) = lower($1) AND id <> $2",
+      [candidate, communityId],
+    );
+    if (taken.rows[0]) continue;
+    await client.query(
+      "UPDATE communities SET slug = $2, updated_at = now() WHERE id = $1",
+      [communityId, candidate],
+    );
+    return candidate;
+  }
+  throw new ApiError("invalid_input", "Could not assign a community handle.");
 }

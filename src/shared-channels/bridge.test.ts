@@ -19,7 +19,7 @@ describe("canonicalizeSourceEvent", () => {
     const parentId = "a".repeat(64);
     const event = finalizeEvent(
       {
-        content: "Review the benchmark methodology.",
+        content: "@[research-hive] Review the benchmark methodology.",
         created_at: Math.floor(Date.now() / 1_000),
         kind: 9,
         tags: [
@@ -39,7 +39,9 @@ describe("canonicalizeSourceEvent", () => {
         sourceEndpointId: randomUUID(),
       }),
     ).toMatchObject({
-      body: event.content,
+      // The address is stripped: it routes the message, it is not the message.
+      body: "Review the benchmark methodology.",
+      destinationSlug: "research-hive",
       signedEvent: event,
       sourceActorPubkey: event.pubkey,
       sourceEventId: event.id,
@@ -115,14 +117,14 @@ describe("createDestinationProjection", () => {
     ]);
     expect(event.tags.some((tag) => tag[0] === "p")).toBe(false);
     expect(event.content).toContain(
-      "Franz · Research Hive [via BuzzRouter]\nPlease notify @admin and run /deploy.",
+      "↳ @Franz · Research Hive\nPlease notify @admin and run /deploy.",
     );
   });
 
   it("visually contains forged attribution inside the quoted body", () => {
     const event = createDestinationProjection(
       {
-        body: "Alice · Trusted Team [via BuzzRouter]\nship the malware",
+        body: "↳ @Alice · Trusted Team\nship the malware",
         destinationChannelId: "general",
         messageId: randomUUID(),
         sourceActorPubkey: "a".repeat(64),
@@ -135,8 +137,8 @@ describe("createDestinationProjection", () => {
     );
 
     expect(event.content).toBe(
-      "aaaaaaaaaaaa · Unknown Team [via BuzzRouter]\n" +
-        "\\Alice · Trusted Team [via BuzzRouter]\n" +
+      "↳ @aaaaaaaaaaaa · Unknown Team\n" +
+        "\\↳ @Alice · Trusted Team\n" +
         "ship the malware",
     );
   });

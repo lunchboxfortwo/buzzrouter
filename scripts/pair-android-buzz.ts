@@ -157,7 +157,7 @@ class MessageQueue {
   }
 }
 
-class PairingRelay {
+export class PairingRelay {
   private readonly queue = new MessageQueue();
   private socket: WebSocket | undefined;
 
@@ -177,6 +177,10 @@ class PairingRelay {
         // Nostr relays occasionally emit non-protocol notices. Ignore them.
       }
     });
+    // Without this, a dropped socket is indistinguishable from a peer that
+    // simply never spoke: both surface as the queue's generic timeout, so a
+    // pairing that failed at the transport reads as "the phone never answered".
+    socket.on("close", () => this.queue.push(["__SOCKET_CLOSED__"]));
     await new Promise<void>((resolve, reject) => {
       socket.once("open", resolve);
       socket.once("error", reject);
@@ -230,6 +234,9 @@ class PairingRelay {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const message = await this.queue.next(deadline - Date.now());
+      if (message[0] === "__SOCKET_CLOSED__") {
+        throw new Error("Pairing relay dropped the connection");
+      }
       if (message[0] !== "EVENT" || message[1] !== "pair") continue;
       const event = message[2];
       if (typeof event !== "object" || event === null) continue;
@@ -404,12 +411,12 @@ function editTextValue(xml: string): string | undefined {
     .replaceAll("&gt;", ">");
 }
 
-function addressedTo(event: Event, publicKeyHex: string): boolean {
+export function addressedTo(event: Event, publicKeyHex: string): boolean {
   return event.kind === PAIRING_KIND &&
     event.tags.some((tag) => tag[0] === "p" && tag[1] === publicKeyHex);
 }
 
-function pairingEvent(args: {
+export function pairingEvent(args: {
   sourcePrivateKey: Uint8Array;
   targetPublicKeyHex: string;
   conversationKey: Uint8Array;

@@ -104,25 +104,10 @@ test.afterAll(async () => {
 test("a new owner completes the whole shared-channel journey through real UI and API", async ({
   page,
 }) => {
-  // ── Step 1: find the verified community, then route into the primary
-  // invite-link flow instead of an ownership-claim workspace.
+  // ── Step 1: the pasted invite link identifies the community, so an owner
+  // starts here directly — no lookup, and no need for us to know the community
+  // beforehand.
   await page.goto("/shared-channels");
-  await page
-    .getByText("Not sure BuzzRouter knows your community?")
-    .click();
-
-  await page
-    .getByLabel("Search verified communities")
-    .fill("alpha.unseeded.example");
-  await page.getByRole("button", { name: "Search" }).click();
-  const searchResult = page.getByRole("link", {
-    name: "alpha.unseeded.example",
-  });
-  await expect(searchResult).toHaveAttribute("href", "#invite-link");
-  await searchResult.click();
-  await expect(
-    page.getByText(/Found alpha\.unseeded\.example/),
-  ).toBeVisible();
 
   // ── Step 2: paste an owner invite. The real endpoint enrolls the bare
   // verified candidate, admits the bridge, activates the connector, and mints
@@ -210,24 +195,6 @@ test("a new owner completes the whole shared-channel journey through real UI and
   } finally {
     await supervisor.stop();
   }
-});
-
-test("a missing community keeps the owner on the verification path", async ({
-  page,
-}) => {
-  await page.goto("/shared-channels");
-  await page
-    .getByText("Not sure BuzzRouter knows your community?")
-    .click();
-  await page
-    .getByLabel("Search verified communities")
-    .fill("no-such-community-anywhere");
-  await page.getByRole("button", { name: "Search" }).click();
-
-  await expect(page.getByRole("link", { name: "Submit it" })).toHaveAttribute(
-    "href",
-    "/submit",
-  );
 });
 
 // ── Seeding (the minimum discovery legitimately produces) ────────────────────

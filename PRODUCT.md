@@ -25,9 +25,16 @@ technical evidence.
 
 ## Product Purpose
 
-BuzzRouter is the public discovery layer for Buzz communities, plus the
-surfaces an operator uses to get a community into that directory and connected
-to others. It has three surfaces:
+BuzzRouter is the connective tissue of the Buzz ecosystem: the place you
+discover Buzz communities, join them, and connect them to each other. Buzz
+spaces are independent relays that do not know about one another; BuzzRouter is
+what stitches them into one legible whole.
+
+It does NOT create communities. Buzz desktop already does that well, and
+Builderlab's auth only accepts a loopback callback, so a website structurally
+cannot. Removed 2026-08-02.
+
+Three surfaces:
 
 - **Discover** — the verified directory. Converts relay-based spaces into a
   legible directory where people can search by name, description, or
@@ -36,8 +43,10 @@ to others. It has three surfaces:
   community in Buzz.
 - **List** (`/submit`) — a community owner submits a relay, community URL, or
   invite for verification and listing.
-- **Link** (`/shared-channels`) — two verified communities pair one channel
-  each and BuzzRouter mirrors messages between them with visible attribution.
+- **Link** (`/shared-channels`) — a community connects to the **open BuzzRouter
+  channel** (the default: one link, reach every opted-in community) or pairs
+  privately with one other community (the advanced case). BuzzRouter mirrors
+  messages with visible attribution.
 
 The MVP succeeds when a first-time visitor can understand what several communities
 do and make a confident join decision in a few minutes.
@@ -124,6 +133,79 @@ PostgreSQL (`bridge_messages`/`bridge_deliveries`), reasoned about in
 Shared channels are new and have not been proven at scale — they connect a
 small number of paired channels today, not a general message bus between
 communities.
+
+## The Pitch: Shared Channels Are the Product
+
+One line: **discover, join, and connect with other Buzz communities.** The thing
+people need to understand is that BuzzRouter enables *shared channels* across the
+Buzz ecosystem. Discovery exists so you can find who to connect with.
+
+Longer horizon: this messaging layer is meant to be TCP for a productive economy
+built on Buzz. Guilds are workflows for human-AI and multi-agent collaboration,
+so a community should be able to post a request for digital work into another
+community and get it back.
+
+### The rule that follows: no semantics in the layer
+
+TCP's virtue is that it is dumb and refuses to care what it carries. So the
+transport must NOT learn what a "request for work" is. No request types, no job
+schemas, no work-order fields, no status enums, no reputation. The moment the
+layer understands one application, it stops being substrate and becomes one
+opinionated app everything else routes around. Semantics belong above.
+
+### Provenance is a committed interface, not an implementation detail
+
+A mirrored message is re-signed by the BuzzRouter bridge, so the sender's own
+signature does not survive to the destination. For chat that is acceptable. For
+work requests — who asked, who delivered — it is not.
+
+We therefore preserve the original provenance in tags on every projected event:
+
+- `["br", "source-community", <community id>]`
+- `["br", "source-event", <original event id>]`
+- `["br", "source-actor", <original author pubkey>]`
+
+That is enough for a layer above to verify independently: fetch the original
+event from the source relay and check its signature. **Treat these tags as a
+public contract.** Renaming or dropping them breaks every future thing built on
+this, even though nothing today reads them.
+
+## The Open BuzzRouter Channel
+
+The BuzzRouter community IS the product's connective tissue, not a demo of it.
+A community links once to the hub and reaches every community that opted in to
+receive, instead of negotiating a separate pair with each one.
+
+**Why the hub and not bilateral.** Bilateral has never been completed once:
+production has 1 community connection and 0 shared-channel endpoints, ever. The
+hub is also the only surface BuzzRouter controls end to end — we operate
+`relay.buzzrouter.com`, so we can fix things there that we cannot fix anywhere
+else. Everything currently blocking the product is blocked on Block; the hub is
+not.
+
+**Consent is the design, not a setting.** Linking is not consent to receive.
+Receiving is its own opt-in, off by default, or a directory quietly becomes a
+broadcast network. Each community controls: whether it sends, whether it
+receives, and which communities it will not accept.
+
+**Bilateral stays** as the advanced option for two communities that want a
+private pair. It is not co-equal in the UI; the open channel is the default.
+
+### Decisions (2026-08-02)
+
+- The hub is the default connection model. Bilateral is advanced.
+- Joining a community must land the joiner in a channel. We can guarantee this
+  on our own relay and nowhere else (see `block/buzz#4307`).
+- Receive is opt-in and off by default. Send and receive are separate switches.
+- Attribution is always visible on a mirrored message.
+
+### Open questions
+
+- Running the hub means operating a community: moderation, abuse, someone's
+  3am. Is that a business we want, or does the hub stay routing fabric that
+  nobody chats in?
+- Reach is bounded by communities we can actually join — 18 of 61 today, since
+  the rest publish no invite code.
 
 ## Agents
 

@@ -9,7 +9,6 @@ import {
 } from "react";
 
 import { signedRequest } from "../../src/http/nostr-client";
-import type { CommunitySearchMatch } from "../../src/shared-channels/community-search";
 import type { LocalChannelListing } from "../../src/shared-channels/local-channels";
 import type {
   SharedChannelAdminRecord,
@@ -183,12 +182,9 @@ async function sessionRequest<T>(
  * through the short-lived owner session minted by that admission.
  */
 export function SharedChannelsClient() {
-  const [selectedCommunity, setSelectedCommunity] =
-    useState<CommunitySearchMatch | null>(null);
-
   return (
     <div className={styles.stack}>
-      <SignerFreeLink selectedCommunity={selectedCommunity} />
+      <SignerFreeLink />
       <section className={styles.advanced}>
         <h2 className={styles.advancedHeading}>Command-line administration</h2>
         <p className={styles.advancedNote}>
@@ -202,20 +198,12 @@ export function SharedChannelsClient() {
           </a>
           .
         </p>
-        <details>
-          <summary>Not sure BuzzRouter knows your community?</summary>
-          <CommunityLookup onSelect={setSelectedCommunity} />
-        </details>
       </section>
     </div>
   );
 }
 
-function SignerFreeLink({
-  selectedCommunity,
-}: {
-  selectedCommunity: CommunitySearchMatch | null;
-}) {
+function SignerFreeLink() {
   const [invite, setInvite] = useState("");
   const [admitting, setAdmitting] = useState(false);
   const [error, setError] = useState("");
@@ -227,17 +215,6 @@ function SignerFreeLink({
   const [connecting, setConnecting] = useState(false);
   const [confirmation, setConfirmation] =
     useState<ArmConfirmationResponse | null>(null);
-  const inviteInput = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!selectedCommunity) return;
-    inviteInput.current?.focus();
-    document.getElementById("invite-link")?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
-  }, [selectedCommunity]);
-
   async function admit(event: FormEvent) {
     event.preventDefault();
     const trimmed = invite.trim();
@@ -362,17 +339,9 @@ function SignerFreeLink({
             aria-label="Invite link from your Buzz app"
             onChange={(event) => setInvite(event.target.value)}
             placeholder="https://your-relay/invite/…"
-            ref={inviteInput}
             value={invite}
           />
         </label>
-        {selectedCommunity ? (
-          <p className={styles.linkNote} role="status">
-            Found <strong>{selectedCommunity.displayName ?? selectedCommunity.host}</strong>.
-            Copy an owner/admin invite link from that community in Buzz and
-            paste it here.
-          </p>
-        ) : null}
         <p className={styles.linkNote}>
           Open your community&apos;s invite in Buzz, tap <strong>Copy
           link</strong>, and paste it here. No browser extension needed &mdash;
@@ -676,89 +645,6 @@ function OwnerTools({
       ) : null}
     </div>
   );
-}
-
-export function CommunityLookup({
-  onSelect,
-}: {
-  onSelect: (community: CommunitySearchMatch) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<CommunitySearchMatch[] | null>(
-    null,
-  );
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function search(event: FormEvent) {
-    event.preventDefault();
-    const trimmed = query.trim();
-    if (!trimmed) return;
-    setBusy(true);
-    setError("");
-    try {
-      setResults(await fetchVerifiedCommunities(trimmed));
-    } catch {
-      setError("Search failed. Try again.");
-      setResults(null);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className={styles.communityLookup}>
-      <p>Search by relay host or name, then continue with an invite link.</p>
-      <form className={styles.communitySearchForm} onSubmit={search}>
-        <input
-          aria-label="Search verified communities"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="communities.buzz.xyz or community name"
-          value={query}
-        />
-        <button disabled={busy || !query.trim()} type="submit">
-          {busy ? "Searching..." : "Search"}
-        </button>
-      </form>
-      {error ? <p className={styles.notice}>{error}</p> : null}
-      {results && results.length > 0 ? (
-        <ul className={styles.communitySearchResults}>
-          {results.map((candidate) => (
-            <li key={candidate.candidateId}>
-              <a
-                href="#invite-link"
-                onClick={() => onSelect(candidate)}
-              >
-                {candidate.displayName ?? candidate.host}
-              </a>
-              <span>{candidate.host}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {results && results.length === 0 ? (
-        <p className={styles.communitySearchEmpty}>
-          No matching verified community found.{" "}
-          <a href="/submit">Submit it</a> to start verification.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-export async function fetchVerifiedCommunities(
-  query: string,
-): Promise<CommunitySearchMatch[]> {
-  const response = await fetch(
-    `/api/community-search?q=${encodeURIComponent(query)}`,
-  );
-  if (!response.ok) {
-    throw new Error("Community search failed.");
-  }
-  const data = (await response.json()) as {
-    communities: CommunitySearchMatch[];
-  };
-  return data.communities;
 }
 
 function ConnectionStatus({

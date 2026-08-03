@@ -7,57 +7,9 @@
 }
 
 .page {
+  flex: 1;
   max-width: 100%;
   overflow-x: clip;
-  --canvas: #f4f5f7;
-  --surface: #ffffff;
-  --surface-muted: #f8f9fb;
-  --surface-selected: #f1f1ff;
-  --ink: #111318;
-  --ink-soft: #667085;
-  --ink-faint: #667085;
-  --line: #dfe2e8;
-  --line-strong: #c9ced8;
-  --accent: #5657f2;
-  --accent-strong: #4445d8;
-  --accent-soft: #ececff;
-  --positive: #087c5b;
-  --positive-soft: #e9f8f2;
-  --caution: #8a5b00;
-  --caution-soft: #fff5d6;
-  --focus: #7957ff;
-  --radius-sm: 7px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --duration: 180ms;
-  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  background-color: var(--canvas);
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E"),
-    radial-gradient(rgb(17 19 24 / 6.5%) 1px, transparent 1.1px);
-  background-size:
-    160px 160px,
-    22px 22px;
-  color: var(--ink);
-  display: flex;
-  flex-direction: column;
-  font-family:
-    "Instrument Sans", ui-sans-serif, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
-  min-height: 100vh;
-}
-
-.page *,
-.page *::before,
-.page *::after {
-  box-sizing: border-box;
 }
 
 .page :focus-visible {
@@ -230,7 +182,7 @@
   color: var(--ink-soft);
 }
 
-/* Premise band hero */
+/* Compact directory premise */
 
 .workspaceShell {
   margin-inline: auto;
@@ -239,70 +191,16 @@
 }
 
 .premiseBand {
-  align-items: center;
-  animation: rise-in 360ms var(--ease-out) backwards;
-  display: grid;
-  gap: var(--space-6);
-  grid-template-columns: minmax(0, 1fr) auto;
-  padding: 30px 4px 26px;
-  position: relative;
-  z-index: 0;
-}
-
-.premiseBand::before {
-  background:
-    radial-gradient(520px 260px at 16% 42%, rgb(86 87 242 / 15%), transparent 70%),
-    radial-gradient(420px 230px at 72% 55%, rgb(8 124 91 / 9%), transparent 72%),
-    radial-gradient(rgb(68 69 216 / 9%) 1.2px, transparent 1.3px);
-  background-size:
-    auto,
-    auto,
-    17px 17px;
-  content: "";
-  inset: -60px -120px -20px;
-  mask-image: radial-gradient(90% 100% at 40% 45%, var(--ink) 55%, transparent 100%);
-  pointer-events: none;
-  position: absolute;
-  z-index: -1;
+  padding: 24px 4px 20px;
 }
 
 .premiseHeading {
-  font-size: clamp(2.3rem, 4.2vw, 3.4rem);
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1.04;
+  font-size: 34px;
+  font-weight: 680;
+  letter-spacing: 0;
+  line-height: 1.12;
   margin: 0;
-  max-width: 17ch;
-  text-shadow: 5px 5px 0 rgb(86 87 242 / 13%);
-}
-
-.premiseMark {
-  color: var(--accent-strong);
-  display: inline-block;
-  font-style: normal;
-  position: relative;
-  white-space: nowrap;
-}
-
-.premiseUnderline {
-  bottom: -8px;
-  height: 10px;
-  left: 0;
-  overflow: visible;
-  position: absolute;
-  right: 0;
-  width: 100%;
-}
-
-.premiseUnderline path {
-  animation: underline-draw 700ms 300ms var(--ease-out) backwards;
-  fill: none;
-  opacity: 0.85;
-  stroke: var(--accent);
-  stroke-dasharray: 1;
-  stroke-dashoffset: 0;
-  stroke-linecap: round;
-  stroke-width: 3.5;
+  max-width: 30ch;
 }
 
 .premiseSub {
@@ -310,105 +208,6 @@
   font-size: 0.98rem;
   margin: 13px 0 0;
   max-width: 62ch;
-}
-
-.premiseSignal {
-  animation: rise-in 420ms 120ms var(--ease-out) backwards;
-  height: auto;
-  overflow: visible;
-  width: min(330px, 30vw);
-}
-
-.routeLine {
-  fill: none;
-  stroke: var(--line-strong);
-  stroke-dasharray: 2 7;
-  stroke-linecap: round;
-  stroke-width: 1.6;
-}
-
-.routePulse {
-  animation: route-travel 2.8s linear infinite;
-  fill: none;
-  stroke: var(--accent);
-  stroke-dasharray: 14 100;
-  stroke-dashoffset: 114;
-  stroke-linecap: round;
-  stroke-width: 2.2;
-}
-
-.signalRing {
-  animation: ring-pulse 2.8s var(--ease) infinite;
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.6;
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-.signalRingLate {
-  animation-delay: 1.4s;
-}
-
-.signalOrigin {
-  fill: var(--accent);
-}
-
-.signalRelay {
-  fill: var(--surface);
-  stroke: var(--line-strong);
-  stroke-width: 1.6;
-}
-
-.signalCheck {
-  fill: none;
-  stroke: var(--positive);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2.1;
-}
-
-.signalLabel {
-  fill: var(--ink-soft);
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 620;
-}
-
-.signalLabelRoute {
-  fill: var(--accent-strong);
-}
-
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-
-@keyframes underline-draw {
-  from {
-    stroke-dashoffset: 1;
-  }
-}
-
-@keyframes route-travel {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes ring-pulse {
-  0% {
-    opacity: 0.5;
-    transform: scale(0.55);
-  }
-
-  70%,
-  100% {
-    opacity: 0;
-    transform: scale(1.9);
-  }
 }
 
 /* Command bar + access rail */
@@ -793,7 +592,7 @@
 .indexRowJoin {
   background: var(--accent);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: #fff;
   cursor: pointer;
   font-size: 0.8rem;
@@ -831,8 +630,7 @@
 }
 
 .emptyIndex {
-  background-image: radial-gradient(rgb(17 19 24 / 4%) 1px, transparent 1.1px);
-  background-size: 18px 18px;
+  background: var(--surface-muted);
   display: grid;
   min-height: 360px;
   padding: var(--space-6);
@@ -872,8 +670,7 @@
 
 .inspectorPlaceholder {
   align-items: center;
-  background-image: radial-gradient(rgb(17 19 24 / 4%) 1px, transparent 1.1px);
-  background-size: 18px 18px;
+  background: var(--surface-muted);
   color: var(--ink-soft);
   display: grid;
   justify-items: center;
@@ -1270,8 +1067,6 @@
 
 .footer {
   background-color: var(--surface);
-  background-image: radial-gradient(rgb(17 19 24 / 3.5%) 1px, transparent 1.1px);
-  background-size: 18px 18px;
   border-top: 1px solid var(--line);
   margin-top: var(--space-6);
 
@@ -1391,10 +1186,6 @@
 
   .premiseBand {
     grid-template-columns: 1fr;
-  }
-
-  .premiseSignal {
-    display: none;
   }
 
   .workspaceGrid {
@@ -1531,10 +1322,6 @@
     margin-inline: auto;
     padding: 28px 0 20px;
     width: min(100% - 20px, 640px);
-  }
-
-  .premiseBand::before {
-    inset: -14px -40px 0;
   }
 
   .premiseHeading {

@@ -39,7 +39,7 @@ import {
   homeCommunityRelayUrl,
 } from "./store";
 
-const RECONCILE_INTERVAL_MS = 30_000;
+const RECONCILE_INTERVAL_MS = 5_000;
 const CONNECT_TIMEOUT_MS = 5_000;
 const EVENT_LOOKUP_TIMEOUT_MS = 3_000;
 const GROUP_LIST_TIMEOUT_MS = 4_000;
@@ -59,10 +59,18 @@ const MAX_WEBSOCKET_MESSAGE_BYTES = 512 * 1_024;
 const RELAY_HEARTBEAT_INTERVAL_MS = 30_000;
 /**
  * How long a session may receive nothing before its subscription is rebuilt.
- * Bounds how long the hub can be deaf; with few connected communities the
- * reconnect cost is negligible.
+ *
+ * Deliberately short. The subscription stops delivering while the connection
+ * stays healthy and the relay logs no close — cause still unknown — so the
+ * rebuild IS the delivery mechanism, and this value is the worst-case latency
+ * a message can sit unrouted. Combined with the reconcile tick that is ~20s,
+ * down from ~90s, which was slow enough that the owner repeatedly reported
+ * working messages as failures.
+ *
+ * The cost is one reconnect per idle interval per community. At current scale
+ * that is nothing; revisit if the hub grows to hundreds of participants.
  */
-const RELAY_IDLE_RECYCLE_AFTER_MS = 60_000;
+const RELAY_IDLE_RECYCLE_AFTER_MS = 15_000;
 const AUTH_REQUIRED_PATTERN = /auth-required/i;
 
 /**
@@ -337,7 +345,7 @@ export class ConnectorSupervisor {
           sourceActorPubkey: context.sourceActorPubkey,
           sourceActorName: context.sourceActorName,
           sourceCommunityId: context.sourceCommunityId,
-          sourceCommunityName: context.sourceCommunityName,
+          sourceCommunitySlug: context.sourceCommunitySlug,
           sourceEventId: context.sourceEventId,
         },
         session.privateKey,

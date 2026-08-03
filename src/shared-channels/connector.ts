@@ -756,9 +756,20 @@ export function parseWrappingKeyFile(contents: string): Map<number, Buffer> {
 export function createRelayConnectionFactory(): RelayConnectionFactory {
   return {
     async connect(relayUrl, privateKey) {
+      // enableReconnect is OFF deliberately. nostr-tools re-fires
+      // subscriptions the instant a reconnected socket opens — before the
+      // relay's AUTH challenge arrives, so the REQ lands on an unauthenticated
+      // connection. Buzz gates fan-out on `pubkey_for_conn`, skipping
+      // unauthenticated subscribers with `continue`: no CLOSED, no error, no
+      // log, events simply stop. That is the exact signature we chased for
+      // hours — socket open, pings answered, EOSE returned, nothing delivered.
+      //
+      // With it off, a dropped socket surfaces through onclose and the
+      // supervisor rebuilds through this factory, which authenticates BEFORE
+      // subscribing. Reconnection stays ours, and stays correctly ordered.
       const relay = new Relay(relayUrl, {
         enablePing: true,
-        enableReconnect: true,
+        enableReconnect: false,
         idleTimeout: 0,
       });
       relay.onauth = async (template: EventTemplate) =>

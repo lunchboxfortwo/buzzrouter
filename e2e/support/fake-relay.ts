@@ -9,9 +9,6 @@ import { finalizeEvent, generateSecretKey } from "nostr-tools/pure";
 import { WebSocketServer, type WebSocket } from "ws";
 
 const GROUP_METADATA_KIND = 39_000;
-const ROSTER_KIND = 13_534;
-const GROUP_CREATE_KIND = 9_007;
-const GROUP_PUT_USER_KIND = 9_000;
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "../fixtures");
 const tlsCert = readFileSync(join(fixturesDir, "fake-relay-cert.pem"));
@@ -20,11 +17,6 @@ const tlsKey = readFileSync(join(fixturesDir, "fake-relay-key.pem"));
 export interface FakeRelayGroup {
   id: string;
   name: string;
-}
-
-export interface FakeRosterMember {
-  pubkey: string;
-  role: string;
 }
 
 export interface FakeRelay {
@@ -37,22 +29,8 @@ export interface FakeRelay {
    * typing a message into a channel the connector is listening to.
    */
   injectEvent(event: Event): void;
-  /**
-   * Publish (or replace) the community's kind-13534 roster with inline member
-   * roles, so the connector's readRoster() can resolve who is owner/admin.
-   */
-  setRoster(members: FakeRosterMember[]): void;
-  /**
-   * The groups the relay currently knows — seeded plus any created live by a
-   * kind-9007. Lets a test assert the bridge really created a channel (and its
-   * name).
-   */
+  /** The groups the relay currently knows. */
   channels(): FakeRelayGroup[];
-  /**
-   * The community roster as it stands after any kind-9000 put-user events, so a
-   * test can assert ownership was transferred and the bot stepped down.
-   */
-  roster(): FakeRosterMember[];
 }
 
 interface RelayFilter {
@@ -67,22 +45,16 @@ interface RelayFilter {
 /**
  * A minimal in-process Nostr relay for the e2e harness. It is deliberately NOT
  * a production dependency: it only implements the slice of the protocol the
- * BuzzRouter connector actually exercises during install/activation, the
- * relay-backed channel picker, and the chat-proof confirmation flow —
+ * BuzzRouter connector actually exercises during install/activation and the
+ * relay-backed channel picker —
  *
  *   - accept EVENT, store it, ACK with `["OK", id, true]`
  *     (so connector activation's publish + hasEvent round trip succeeds against
  *     a real WebSocket rather than a stubbed relay factory);
  *   - answer REQ from stored events + EOSE, then KEEP the subscription open so
  *     later injected events reach it live
- *     (so hasEvent finds the just-published verification event, the picker's
- *     listGroups() finds the seeded kind-39000 group metadata, readRoster()
- *     finds the kind-13534 roster, and a confirmation kind-9 injected after the
- *     connector subscribes is actually delivered);
- *   - model NIP-29 group management: a kind-9007 makes a channel listable and a
- *     kind-9000 writes a role into the roster, so the bridge creating a
- *     dedicated channel and handing off ownership has visible effects, not just
- *     an ACK (see applyGroupManagement);
+ *     (so hasEvent finds the just-published verification event and the picker's
+ *     listGroups() finds the seeded kind-39000 group metadata);
  *   - never send an AUTH challenge, so the connector's `authenticate()` waits
  *     out its full settle deadline and then no-ops exactly as it does against
  *     a relay that genuinely doesn't require auth (tests that hit this path
@@ -117,19 +89,15 @@ export async function startFakeRelay(
   // subscriptionId -> filters, per connected socket, so injected events can be
   // pushed live to whatever the connector is currently listening for.
   const subscriptions = new Map<WebSocket, Map<string, RelayFilter[]>>();
-  // The relay signs its own metadata/roster; nostr-tools verifies signatures on
+  // The relay signs its own metadata; nostr-tools verifies signatures on
   // receipt, so these must be real events, not hand-built JSON.
   const relayKey = generateSecretKey();
-  // Live group + roster state so 9007/9000 are MODELLED (a created channel
-  // becomes listable; a granted role shows up in the roster), not just ACKed.
   const groupNames = new Map<string, string>();
-  const roster = new Map<string, string>();
   let bumps = 0;
   const groupEventIds = new Map<string, string>();
-  let rosterEventId: string | undefined;
 
   // The relay assigns strictly increasing created_at so the connector's
-  // "newest wins" roster/metadata resolution picks the latest write. Real time
+  // "newest wins" metadata resolution picks the latest write. Real time
   // is unavailable in some harnesses and would risk ties, so use a counter.
   const nextCreatedAt = () => 1_700_000_000 + bumps++;
 
@@ -151,22 +119,6 @@ export async function startFakeRelay(
     );
     stored.set(event.id, event);
     groupEventIds.set(id, event.id);
-    pushToSubscribers(event, subscriptions);
-  };
-
-  const writeRoster = (): void => {
-    if (rosterEventId) stored.delete(rosterEventId);
-    const event = finalizeEvent(
-      {
-        content: "",
-        created_at: nextCreatedAt(),
-        kind: ROSTER_KIND,
-        tags: [...roster].map(([pubkey, role]) => ["p", pubkey, role]),
-      },
-      relayKey,
-    );
-    stored.set(event.id, event);
-    rosterEventId = event.id;
     pushToSubscribers(event, subscriptions);
   };
 
@@ -238,11 +190,8 @@ export async function startFakeRelay(
     subscriptions.set(socket, new Map());
     socket.on("message", (raw) => {
       handleMessage(socket, raw.toString(), {
-        roster,
         stored,
         subscriptions,
-        upsertGroup,
-        writeRoster,
       });
     });
     socket.on("close", () => {
@@ -272,16 +221,8 @@ export async function startFakeRelay(
       stored.set(event.id, event);
       pushToSubscribers(event, subscriptions);
     },
-    setRoster(members: FakeRosterMember[]) {
-      roster.clear();
-      for (const member of members) roster.set(member.pubkey, member.role);
-      writeRoster();
-    },
     channels() {
       return [...groupNames].map(([id, name]) => ({ id, name }));
-    },
-    roster() {
-      return [...roster].map(([pubkey, role]) => ({ pubkey, role }));
     },
   };
 }
@@ -298,11 +239,8 @@ function safeJsonObject(text: string): Record<string, unknown> | null {
 }
 
 interface RelayContext {
-  roster: Map<string, string>;
   stored: Map<string, Event>;
   subscriptions: Map<WebSocket, Map<string, RelayFilter[]>>;
-  upsertGroup(id: string, name: string): void;
-  writeRoster(): void;
 }
 
 function handleMessage(
@@ -326,7 +264,6 @@ function handleMessage(
     const event = message[1] as Event;
     stored.set(event.id, event);
     socket.send(JSON.stringify(["OK", event.id, true, ""]));
-    applyGroupManagement(event, ctx);
     pushToSubscribers(event, subscriptions);
     return;
   }
@@ -347,33 +284,6 @@ function handleMessage(
     const subscriptionId = message[1] as string;
     subscriptions.get(socket)?.delete(subscriptionId);
     return;
-  }
-}
-
-/**
- * Model the two NIP-29 group-management kinds the bridge uses to stand up a
- * dedicated channel, so a test sees their EFFECTS rather than a bare ACK:
- *   - 9007 create-group -> the group becomes listable (kind-39000 metadata),
- *     named from the `name` tag (falling back to its id);
- *   - 9000 put-user -> the named pubkey's role lands in the community roster,
- *     so promoting the requester to owner and demoting the bot to member are
- *     both visible to readRoster().
- */
-function applyGroupManagement(event: Event, ctx: RelayContext): void {
-  const groupId = event.tags.find((tag) => tag[0] === "h")?.[1];
-  if (event.kind === GROUP_CREATE_KIND) {
-    if (!groupId) return;
-    const name = event.tags.find((tag) => tag[0] === "name")?.[1];
-    ctx.upsertGroup(groupId, name && name.trim() ? name.trim() : groupId);
-    return;
-  }
-  if (event.kind === GROUP_PUT_USER_KIND) {
-    const member = event.tags.find((tag) => tag[0] === "p");
-    const pubkey = member?.[1];
-    const role = member?.[2];
-    if (!pubkey || !role) return;
-    ctx.roster.set(pubkey, role.toLowerCase());
-    ctx.writeRoster();
   }
 }
 

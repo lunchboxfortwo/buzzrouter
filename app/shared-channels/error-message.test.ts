@@ -6,10 +6,6 @@ describe("errorMessage", () => {
   it.each([
     ["connection_required", "The community connector must be active first."],
     [
-      "destination_not_verified",
-      "The destination community is not verified.",
-    ],
-    [
       "connector_package_unavailable",
       "The connector package is temporarily unavailable. Try again shortly.",
     ],

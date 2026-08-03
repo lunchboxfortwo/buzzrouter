@@ -235,6 +235,10 @@ export class ConnectorSupervisor {
           this.scheduleHomeMembershipReconciliation(current);
           continue;
         }
+        console.log(
+          `connector: rebuilding idle session relay=${config.relayUrl} ` +
+            `silentFor=${Math.round((Date.now() - current.lastInboundAt) / 1000)}s`,
+        );
         // Fall through and rebuild, rather than leave a session in place that
         // keeps reporting healthy while receiving nothing.
         this.sessions.delete(config.id);
@@ -404,6 +408,10 @@ export class ConnectorSupervisor {
         config.routes,
         isOperatedCommunityRelay(config.relayUrl),
         (event) => {
+          const gap = Math.round((Date.now() - session.lastInboundAt) / 1000);
+          console.log(
+            `connector: event relay=${config.relayUrl} kind=${event.kind} afterGap=${gap}s`,
+          );
           session.lastInboundAt = Date.now();
           if (event.kind === COMMUNITY_ROSTER_KIND) {
             this.scheduleHomeMembershipReconciliation(session);
@@ -412,6 +420,9 @@ export class ConnectorSupervisor {
           }
         },
         (reason) => {
+          console.log(
+            `connector: subscription closed relay=${config.relayUrl} reason=${reason}`,
+          );
           if (this.sessions.get(config.id) === session) {
             this.sessions.delete(config.id);
             closeSession(session);
@@ -425,6 +436,7 @@ export class ConnectorSupervisor {
         },
       );
       if (this.sessions.get(config.id) !== session) return;
+      console.log(`connector: session established relay=${config.relayUrl}`);
       this.scheduleHomeMembershipReconciliation(session);
       await recordConnectionHealth(this.pool, config.id, "healthy");
     } catch (error) {

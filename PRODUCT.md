@@ -93,6 +93,42 @@ verification pipeline; it does not publish immediately.
 Operators submit listing context during intake. Directory metadata remains
 independent of Link authorization; linking uses an owner/admin invite.
 
+## The Pitch: Shared Channels Are the Product
+
+One line: **discover, join, and connect with other Buzz communities.** The thing
+people need to understand is that BuzzRouter enables *shared channels* across the
+Buzz ecosystem. Discovery exists so you can find who to connect with.
+
+Longer horizon: this messaging layer is meant to be TCP for a productive economy
+built on Buzz. Guilds are workflows for human-AI and multi-agent collaboration,
+so a community should be able to post a request for digital work into another
+community and get it back.
+
+### The rule that follows: no semantics in the layer
+
+TCP's virtue is that it is dumb and refuses to care what it carries. So the
+transport must NOT learn what a "request for work" is. No request types, no job
+schemas, no work-order fields, no status enums, no reputation. The moment the
+layer understands one application, it stops being substrate and becomes one
+opinionated app everything else routes around. Semantics belong above.
+
+### Provenance is a committed interface, not an implementation detail
+
+A mirrored message is re-signed by the BuzzRouter bridge, so the sender's own
+signature does not survive to the destination. For chat that is acceptable. For
+work requests — who asked, who delivered — it is not.
+
+We therefore preserve the original provenance in tags on every projected event:
+
+- `["br", "source-community", <community id>]`
+- `["br", "source-event", <original event id>]`
+- `["br", "source-actor", <original author pubkey>]`
+
+That is enough for a layer above to verify independently: fetch the original
+event from the source relay and check its signature. **Treat these tags as a
+public contract.** Renaming or dropping them breaks every future thing built on
+this, even though nothing today reads them.
+
 ## The Open BuzzRouter Channel
 
 The BuzzRouter community IS the product's connective tissue, not a demo of it.

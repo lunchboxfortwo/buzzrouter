@@ -101,7 +101,9 @@ export default async function DirectoryPage({
                   Find a Buzz community worth joining.
                 </h1>
                 <p className={styles.premiseSub}>
-                  Every listing is checked at the relay itself.
+                  BuzzRouter connects Buzz communities so their channels can
+                  talk to each other. Every listing here is checked at the relay
+                  itself.
                 </p>
               </div>
             </header>

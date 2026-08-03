@@ -3,10 +3,32 @@ import { describe, expect, it } from "vitest";
 import { parseMessageAddress } from "./addressing";
 
 describe("parseMessageAddress", () => {
+  // The bracket form is what the spec said. The bare form is what the first
+  // human to use it actually typed, so it has to work too.
+  it("accepts the bare form people actually type", () => {
+    expect(parseMessageAddress("@trustysquire/lunchbox test")).toEqual({
+      slug: "trustysquire",
+      user: "lunchbox",
+      body: "test",
+      explicit: false,
+    });
+    expect(parseMessageAddress("@trustysquire ship it")).toEqual({
+      slug: "trustysquire",
+      body: "ship it",
+      explicit: false,
+    });
+  });
+
+  it("marks a bare address as non-explicit so an unknown one stays quiet", () => {
+    expect(parseMessageAddress("@bob can you look")?.explicit).toBe(false);
+    expect(parseMessageAddress("@[bob] can you look")?.explicit).toBe(true);
+  });
+
   it("routes a community-addressed message and strips the address", () => {
     expect(parseMessageAddress("@[trustysquire] ship it")).toEqual({
       slug: "trustysquire",
       body: "ship it",
+      explicit: true,
     });
   });
 
@@ -15,6 +37,7 @@ describe("parseMessageAddress", () => {
       slug: "trustysquire",
       user: "alice",
       body: "ping",
+      explicit: true,
     });
   });
 
@@ -28,6 +51,7 @@ describe("parseMessageAddress", () => {
     expect(parseMessageAddress("  @[buzzrouter]   hello")).toEqual({
       slug: "buzzrouter",
       body: "hello",
+      explicit: true,
     });
   });
 
@@ -44,7 +68,6 @@ describe("parseMessageAddress", () => {
     ["a mid-body address", "see @[buzzrouter] for details"],
     ["an email-ish mention", "mail me at a@[b].com"],
     ["an empty address", "@[] hello"],
-    ["a bare @ mention", "@buzzrouter hello"],
   ])("does not route %s", (_label, body) => {
     expect(parseMessageAddress(body)).toBeNull();
   });

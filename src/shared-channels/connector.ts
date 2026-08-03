@@ -490,14 +490,16 @@ export class ConnectorSupervisor {
         canonical.destinationSlug,
       );
       if (!destination) {
-        // The author addressed something real to them. Dropping it silently
-        // would look identical to the router being broken, so say so in the
-        // channel they are standing in.
-        await this.reportUndeliverable(
-          session,
-          route.localChannelId,
-          canonical.destinationSlug,
-        );
+        // Only answer when the author unambiguously meant to route. A bare
+        // `@bob` that matches nobody is an ordinary mention, and replying "no
+        // such community" to it would turn every mention into router noise.
+        if (canonical.destinationExplicit) {
+          await this.reportUndeliverable(
+            session,
+            route.localChannelId,
+            canonical.destinationSlug,
+          );
+        }
         return;
       }
 

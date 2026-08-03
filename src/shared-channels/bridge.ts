@@ -26,6 +26,8 @@ export interface CanonicalSourceMessage {
   bodySha256: string;
   /** Destination community handle the author addressed, without the `@[]`. */
   destinationSlug: string;
+  /** True when the author used the bracket form, i.e. unambiguous intent. */
+  destinationExplicit: boolean;
   sharedChannelId: string;
   signedEvent: Event;
   sourceActorPubkey: string;
@@ -103,6 +105,7 @@ export function canonicalizeSourceEvent(
     body: routedBody,
     bodySha256: createHash("sha256").update(routedBody).digest("hex"),
     destinationSlug: address.slug,
+    destinationExplicit: address.explicit,
     sharedChannelId: route.sharedChannelId,
     signedEvent: event,
     sourceActorPubkey: event.pubkey,

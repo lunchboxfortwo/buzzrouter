@@ -14,6 +14,8 @@ import { SourceAdapterError } from "./errors";
 const SOURCE_KEY = "github";
 const RESULTS_PER_PAGE = 100;
 const MAX_PAGES_PER_RUN = 3;
+const MAX_SOURCE_BYTES = 1_000_000;
+const INVITE_NEAR_RELAY_BYTES = 512;
 const DEFAULT_QUERIES = [
   '"communities.buzz.xyz" -repo:block/buzz',
   "BUZZ_RELAY_URL -repo:block/buzz",
@@ -76,6 +78,7 @@ interface GitHubCodeSearchResponse {
 }
 
 export interface GitHubCodeSearchClient {
+  fetchSourceText(htmlUrl: string): Promise<string>;
   searchCode(
     query: string,
     page: number,
@@ -123,17 +126,28 @@ export async function runGitHubSource(
       result.pagesRead += 1;
 
       for (const item of page.items) {
+        let sourceText: string;
+        try {
+          sourceText = await client.fetchSourceText(item.htmlUrl);
+        } catch {
+          // Do not overwrite a previously harvested credential with null just
+          // because this raw fetch was transiently unavailable. The next
+          // discovery pass can retry the whole source row safely.
+          continue;
+        }
         const candidateUrls = new Set(
           item.fragments.flatMap(extractRelayUrls),
         );
 
         for (const relayUrl of candidateUrls) {
+          const inviteCode = extractInviteCode(sourceText, relayUrl);
           const ingestion = await ingestSourceCandidate(pool, boss, {
             relayUrl,
             source: {
               type: "github",
               locator: item.htmlUrl,
               evidenceId: item.evidenceId,
+              listing: { inviteCode },
             },
           });
           if (ingestion.accepted) {
@@ -193,6 +207,7 @@ export async function runGitHubSource(
 export function createGitHubSearchClient(
   token: string,
   baseUrl = "https://api.github.com",
+  fetchImpl: typeof fetch = fetch,
 ): GitHubCodeSearchClient {
   const octokit = new Octokit({
     baseUrl,
@@ -200,6 +215,9 @@ export function createGitHubSearchClient(
   });
 
   return {
+    async fetchSourceText(htmlUrl) {
+      return fetchGitHubSourceText(htmlUrl, fetchImpl);
+    },
     async searchCode(query, page, perPage) {
       const response = await octokit.rest.search.code({
         headers: {
@@ -229,6 +247,187 @@ export function createGitHubSearchClient(
       };
     },
   };
+}
+
+/** Rewrites GitHub's code-search blob URL onto GitHub's raw-content origin. */
+export function githubBlobToRawUrl(htmlUrl: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(htmlUrl);
+  } catch {
+    return null;
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname.toLowerCase() !== "github.com" ||
+    parsed.port ||
+    parsed.username ||
+    parsed.password
+  ) {
+    return null;
+  }
+
+  const parts = parsed.pathname.split("/").filter(Boolean);
+  if (parts.length < 5 || parts[2] !== "blob") return null;
+  const [owner, repository, , revision, ...path] = parts;
+  if (
+    !/^[A-Za-z0-9_.-]+$/u.test(owner) ||
+    !/^[A-Za-z0-9_.-]+$/u.test(repository) ||
+    !/^[A-Za-z0-9_.-]+$/u.test(revision) ||
+    path.some((segment) => !segment || segment === "." || segment === "..")
+  ) {
+    return null;
+  }
+
+  const raw = new URL("https://raw.githubusercontent.com/");
+  raw.pathname = [owner, repository, revision, ...path].join("/");
+  return raw.toString();
+}
+
+/** Fetches one public GitHub source file with a hard response-size ceiling. */
+export async function fetchGitHubSourceText(
+  htmlUrl: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  const rawUrl = githubBlobToRawUrl(htmlUrl);
+  if (!rawUrl) throw new Error("GitHub source URL is not a supported blob URL.");
+
+  const response = await fetchImpl(rawUrl, {
+    headers: { accept: "text/plain" },
+    method: "GET",
+    redirect: "error",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    throw new Error(`GitHub raw source returned HTTP ${response.status}.`);
+  }
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_SOURCE_BYTES) {
+    throw new Error("GitHub raw source exceeds the configured size limit.");
+  }
+  if (!response.body) return "";
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_SOURCE_BYTES) {
+      await reader.cancel();
+      throw new Error("GitHub raw source exceeds the configured size limit.");
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(body);
+}
+
+/**
+ * Extracts an invite only when the nearest relay URL in the untrusted file is
+ * the candidate being ingested. This binds relative/bare codes to their own
+ * community and prevents a multi-community file from crossing credentials.
+ */
+export function extractInviteCode(
+  sourceText: string,
+  canonicalRelayUrl: string,
+): string | null {
+  const targetHost = relayAuthority(canonicalRelayUrl);
+  if (!targetHost) return null;
+
+  const relayOccurrences = [...sourceText.matchAll(URL_PATTERN)].flatMap(
+    (match) => {
+      const relay = relayUrlIdentity(
+        match[0].replace(URL_TRAILING_PUNCTUATION, ""),
+      );
+      return relay && !isIgnoredGitHubHost(relay.hostname)
+        ? [{
+            end: (match.index ?? 0) + match[0].length,
+            host: relay.authority,
+            start: match.index ?? 0,
+          }]
+        : [];
+    },
+  );
+  const inviteOccurrences = [
+    ...sourceText.matchAll(/\/invite\/([A-Za-z0-9_.=-]{1,200})/gu),
+    ...sourceText.matchAll(/\b(v2\.[A-Za-z0-9_-]{16,196})\b/gu),
+    ...sourceText.matchAll(
+      /\b([A-Za-z0-9_-]{8,160}\.[A-Za-z0-9_-]{8,100})\b/gu,
+    ),
+  ].sort((left, right) => (left.index ?? 0) - (right.index ?? 0));
+
+  for (const occurrence of inviteOccurrences) {
+    const code = occurrence[1];
+    if (!isHarvestableInviteCode(code)) continue;
+    const codeIndex = (occurrence.index ?? 0) + occurrence[0].indexOf(code);
+    let nearest: (typeof relayOccurrences)[number] | undefined;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const relay of relayOccurrences) {
+      const distance =
+        codeIndex < relay.start
+          ? relay.start - codeIndex
+          : codeIndex > relay.end
+            ? codeIndex - relay.end
+            : 0;
+      if (distance < nearestDistance) {
+        nearest = relay;
+        nearestDistance = distance;
+      }
+    }
+    if (
+      nearest?.host === targetHost &&
+      nearestDistance <= INVITE_NEAR_RELAY_BYTES
+    ) {
+      return code;
+    }
+  }
+  return null;
+}
+
+/** Accepts opaque v2 tokens and expiry-bearing legacy JSON tokens only. */
+export function isHarvestableInviteCode(code: string): boolean {
+  if (code.length > 200) return false;
+  if (/^v2\.[A-Za-z0-9_-]{16,196}$/u.test(code)) return true;
+  const match =
+    /^([A-Za-z0-9_-]{8,160})\.([A-Za-z0-9_-]{8,100})$/u.exec(code);
+  if (!match) return false;
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(match[1], "base64url").toString("utf8"),
+    ) as { e?: unknown };
+    return (
+      typeof parsed.e === "number" &&
+      Number.isFinite(parsed.e) &&
+      parsed.e > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+function relayAuthority(value: string): string | null {
+  return relayUrlIdentity(value)?.authority ?? null;
+}
+
+function relayUrlIdentity(
+  value: string,
+): { authority: string; hostname: string } | null {
+  try {
+    const parsed = new URL(value);
+    return {
+      authority: parsed.host.toLowerCase(),
+      hostname: parsed.hostname.toLowerCase(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function parseGitHubCodeSearchResponse(

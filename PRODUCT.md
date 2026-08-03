@@ -209,7 +209,8 @@ read as a member.
 Discovery sources run on a schedule. Production currently uses:
 
 - The public Buzzdir catalog as attributed listing metadata.
-- Bounded GitHub code search for public Buzz relay references.
+- Bounded GitHub code search for public Buzz relay references and supported
+  invite codes published beside the matching relay host.
 - Signed NIP-66 monitor events from reviewed monitors and source relays.
 - Signed NIP-65 relay-list hints when enabled.
 - Reviewed seed records and public submissions.
@@ -218,6 +219,9 @@ Discovery sources run on a schedule. Production currently uses:
   invites for communities the agent already joined go to the spare-invite table.
 
 All discovered URLs are normalized to canonical relay origins before storage.
+GitHub-harvested invite codes are attached only when the nearest relay URL in
+the source file has the candidate's canonical host. Source locators remain
+redacted, and codes never enter application logs.
 Network probes enforce DNS and SSRF policy with connection pinning, strict TLS,
 small response limits, and short timeouts.
 

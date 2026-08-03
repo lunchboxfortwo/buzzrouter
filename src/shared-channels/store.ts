@@ -65,6 +65,22 @@ export function homeCommunityHost(): string {
   );
 }
 
+/** The one exact relay origin where BuzzRouter's bridge has an admin role. */
+export function homeCommunityRelayUrl(): string {
+  return (
+    process.env.BUZZROUTER_HOME_RELAY_URL?.trim() ||
+    `wss://${homeCommunityHost()}`
+  );
+}
+
+/**
+ * The NIP-29 id of BuzzRouter's operated `general` channel. Production sets
+ * the real UUID; `general` remains the local/fake-relay default.
+ */
+export function homeCommunityChannelId(): string {
+  return process.env.BUZZROUTER_HOME_CHANNEL_ID?.trim() || "general";
+}
+
 export interface BeginCommunityConnectionInstallInput {
   bridgePubkey: string;
   communityId: string;
@@ -1085,7 +1101,7 @@ export async function joinOpenHub(
             relay_url_snapshot, local_channel_id,
             local_channel_name_snapshot, last_event_created_at, sends, receives
           )
-          VALUES ($1, $2, $3, 'participant', 'active', $4, 'general',
+          VALUES ($1, $2, $3, 'participant', 'active', $4, $5,
                   'general', floor(extract(epoch FROM now()))::bigint,
                   true, true)
         `,
@@ -1094,6 +1110,7 @@ export async function joinOpenHub(
           featured.community_id,
           featured.connection_id,
           featured.relay_url,
+          homeCommunityChannelId(),
         ],
       );
       if (featured.community_id === input.communityId) return;

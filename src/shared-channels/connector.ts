@@ -3,14 +3,14 @@ import { randomUUID } from "node:crypto";
 
 import type { Event, EventTemplate, VerifiedEvent } from "nostr-tools/core";
 import type { Filter } from "nostr-tools/filter";
-import { finalizeEvent } from "nostr-tools/pure";
+import { finalizeEvent, verifyEvent } from "nostr-tools/pure";
 import {
   Relay,
   useWebSocketImplementation,
   type Subscription,
 } from "nostr-tools/relay";
 import type { JobWithMetadata, PgBoss } from "pg-boss";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { WebSocket as NodeWebSocket } from "ws";
 
 import { ApiError } from "../http/api-error";
@@ -33,14 +33,21 @@ import {
   recordConnectionHealth,
   type ActiveConnectorConfig,
   type ConnectorRouteConfig,
+  homeCommunityChannelId,
+  homeCommunityRelayUrl,
 } from "./store";
 
 const RECONCILE_INTERVAL_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 5_000;
 const EVENT_LOOKUP_TIMEOUT_MS = 3_000;
 const GROUP_LIST_TIMEOUT_MS = 4_000;
+const RELAY_STATE_TIMEOUT_MS = 4_000;
+const RELAY_INFO_TIMEOUT_MS = 4_000;
 const AUTH_SETTLE_TIMEOUT_MS = 5_000;
 const GROUP_METADATA_KIND = 39_000;
+const GROUP_MEMBERS_KIND = 39_002;
+const COMMUNITY_ROSTER_KIND = 13_534;
+const PUT_USER_KIND = 9_000;
 const MAX_WEBSOCKET_MESSAGE_BYTES = 512 * 1_024;
 const AUTH_REQUIRED_PATTERN = /auth-required/i;
 
@@ -68,10 +75,13 @@ export interface RelayConnection {
   close(): void;
   hasEvent(eventId: string): Promise<boolean>;
   listGroups(): Promise<RelayGroup[]>;
+  readGroupMembers(groupId: string): Promise<Set<string> | null>;
+  readRoster(): Promise<Set<string> | null>;
   getProfileName?(pubkey: string): Promise<string | null>;
   publish(event: Event): Promise<void>;
   subscribe(
     routes: ConnectorRouteConfig[],
+    watchCommunityRoster: boolean,
     onEvent: (event: Event) => void,
     onClose: (reason: string) => void,
   ): void;
@@ -103,6 +113,7 @@ export interface BridgeDeliveryJob {
 export class ConnectorSupervisor {
   private readonly sessions = new Map<string, ConnectorSession>();
   private readonly failures = new Map<string, FailedConnectionAttempt>();
+  private readonly membershipReconciliations = new Map<string, Promise<void>>();
   private reconcileTimer: NodeJS.Timeout | undefined;
   private stopped = true;
 
@@ -132,10 +143,12 @@ export class ConnectorSupervisor {
       clearInterval(this.reconcileTimer);
       this.reconcileTimer = undefined;
     }
-    for (const session of this.sessions.values()) {
+    const sessions = [...this.sessions.values()];
+    this.sessions.clear();
+    for (const session of sessions) {
       closeSession(session);
     }
-    this.sessions.clear();
+    await Promise.allSettled(this.membershipReconciliations.values());
   }
 
   async reconcile(): Promise<void> {
@@ -145,8 +158,8 @@ export class ConnectorSupervisor {
 
     for (const [connectionId, session] of this.sessions) {
       if (!activeIds.has(connectionId)) {
-        closeSession(session);
         this.sessions.delete(connectionId);
+        closeSession(session);
         this.failures.delete(connectionId);
       }
     }
@@ -154,10 +167,13 @@ export class ConnectorSupervisor {
     for (const config of configs) {
       const fingerprint = connectionFingerprint(config);
       const current = this.sessions.get(config.id);
-      if (current?.fingerprint === fingerprint) continue;
+      if (current?.fingerprint === fingerprint) {
+        this.scheduleHomeMembershipReconciliation(current);
+        continue;
+      }
       if (current) {
-        closeSession(current);
         this.sessions.delete(config.id);
+        closeSession(current);
       }
 
       const failed = this.failures.get(config.id);
@@ -296,22 +312,33 @@ export class ConnectorSupervisor {
       this.failures.delete(config.id);
       relay.subscribe(
         config.routes,
+        isOperatedCommunityRelay(config.relayUrl),
         (event) => {
-          void this.handleSourceEvent(session, event);
+          if (event.kind === COMMUNITY_ROSTER_KIND) {
+            this.scheduleHomeMembershipReconciliation(session);
+          } else {
+            void this.handleSourceEvent(session, event);
+          }
         },
         (reason) => {
-          void recordConnectionHealth(
-            this.pool,
-            config.id,
-            "degraded",
-            reason,
-          );
+          if (this.sessions.get(config.id) === session) {
+            this.sessions.delete(config.id);
+            closeSession(session);
+            void recordConnectionHealth(
+              this.pool,
+              config.id,
+              "degraded",
+              reason,
+            );
+          }
         },
       );
+      if (this.sessions.get(config.id) !== session) return;
+      this.scheduleHomeMembershipReconciliation(session);
       await recordConnectionHealth(this.pool, config.id, "healthy");
     } catch (error) {
-      relay?.close();
       this.sessions.delete(config.id);
+      relay?.close();
       privateKey?.fill(0);
       const previous = this.failures.get(config.id)?.attempts ?? 0;
       const attempts = previous + 1;
@@ -330,6 +357,76 @@ export class ConnectorSupervisor {
         safeErrorMessage(error),
       );
     }
+  }
+
+  private scheduleHomeMembershipReconciliation(
+    session: ConnectorSession,
+  ): void {
+    if (!isOperatedCommunityRelay(session.config.relayUrl)) return;
+
+    const previous =
+      this.membershipReconciliations.get(session.config.id) ??
+      Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(async () => {
+        if (this.sessions.get(session.config.id) !== session) return;
+        const privateKey = Buffer.from(session.privateKey);
+        let client: PoolClient | undefined;
+        let lockAcquired = false;
+        try {
+          client = await this.pool.connect();
+          const lock = await client.query<{ acquired: boolean }>(
+            "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired",
+            [`home-membership:${session.config.id}:${homeCommunityChannelId()}`],
+          );
+          lockAcquired = lock.rows[0]?.acquired === true;
+          if (!lockAcquired) return;
+          if (this.sessions.get(session.config.id) !== session) return;
+          const added = await reconcileHomeCommunityMembers(
+            session.relay,
+            privateKey,
+            () =>
+              !this.stopped &&
+              this.sessions.get(session.config.id) === session,
+          );
+          if (added === null) {
+            throw new ApiError(
+              "home_roster_unreadable",
+              "The operated community roster could not be verified.",
+              503,
+            );
+          }
+        } finally {
+          if (client && lockAcquired) {
+            await client
+              .query(
+                "SELECT pg_advisory_unlock(hashtextextended($1, 0))",
+                [`home-membership:${session.config.id}:${homeCommunityChannelId()}`],
+              )
+              .catch(() => undefined);
+          }
+          client?.release();
+          privateKey.fill(0);
+        }
+      })
+      .catch(async (error) => {
+        if (!this.stopped && this.sessions.get(session.config.id) === session) {
+          await recordConnectionHealth(
+            this.pool,
+            session.config.id,
+            "degraded",
+            safeErrorMessage(error),
+          );
+          console.error("Home-community channel reconciliation failed", error);
+        }
+      })
+      .finally(() => {
+        if (this.membershipReconciliations.get(session.config.id) === next) {
+          this.membershipReconciliations.delete(session.config.id);
+        }
+      });
+    this.membershipReconciliations.set(session.config.id, next);
   }
 
   private async handleSourceEvent(
@@ -509,7 +606,7 @@ export function createRelayConnectionFactory(): RelayConnectionFactory {
       relay.onauth = async (template: EventTemplate) =>
         finalizeEvent(template, privateKey) as VerifiedEvent;
       await relay.connect({ timeout: CONNECT_TIMEOUT_MS });
-      const connection = new NostrRelayConnection(relay, privateKey);
+      const connection = new NostrRelayConnection(relay, privateKey, relayUrl);
       await connection.authenticate();
       return connection;
     },
@@ -535,10 +632,12 @@ function isMissingChallenge(error: unknown): boolean {
 export class NostrRelayConnection implements RelayConnection {
   private subscription: Subscription | undefined;
   private readonly profileNames = new Map<string, string | null>();
+  private relayIdentity: string | undefined;
 
   constructor(
     private readonly relay: Relay,
     private readonly privateKey: Uint8Array,
+    private readonly relayUrl?: string,
   ) {}
 
   /**
@@ -591,6 +690,122 @@ export class NostrRelayConnection implements RelayConnection {
       await this.authenticate();
       return await this.collectGroups();
     }
+  }
+
+  async readRoster(): Promise<Set<string> | null> {
+    return this.readRelayState({ kinds: [COMMUNITY_ROSTER_KIND] }, (event) =>
+      parseMemberPubkeys(event, "member"),
+    );
+  }
+
+  async readGroupMembers(groupId: string): Promise<Set<string> | null> {
+    return this.readRelayState(
+      {
+        "#d": [groupId],
+        kinds: [GROUP_MEMBERS_KIND],
+      },
+      (event) =>
+        event.tags.some((tag) => tag[0] === "d" && tag[1] === groupId)
+          ? parseMemberPubkeys(event, "p")
+          : null,
+    );
+  }
+
+  private async readRelayState<T>(
+    filter: Filter,
+    parse: (event: Event) => T | null,
+  ): Promise<T | null> {
+    let relayIdentity: string;
+    try {
+      relayIdentity = await this.getRelayIdentity();
+    } catch {
+      return null;
+    }
+    const verifiedFilter = { ...filter, authors: [relayIdentity] };
+    try {
+      return await this.collectRelayState(verifiedFilter, relayIdentity, parse);
+    } catch (error) {
+      if (!isAuthRequired(error)) return null;
+      try {
+        await this.authenticate();
+        return await this.collectRelayState(
+          verifiedFilter,
+          relayIdentity,
+          parse,
+        );
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  private collectRelayState<T>(
+    filter: Filter,
+    relayIdentity: string,
+    parse: (event: Event) => T | null,
+  ): Promise<T | null> {
+    return new Promise((resolve, reject) => {
+      let latest: Event | undefined;
+      let settled = false;
+      let subscription: Subscription | undefined;
+      const finish = (complete: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        subscription?.close("relay state read complete");
+        complete();
+      };
+      const done = () => {
+        if (
+          !latest ||
+          (filter.kinds?.length === 1 && latest.kind !== filter.kinds[0]) ||
+          latest.pubkey !== relayIdentity ||
+          !verifyEvent(latest)
+        ) {
+          resolve(null);
+          return;
+        }
+        resolve(parse(latest));
+      };
+      const timeout = setTimeout(
+        () => finish(() => resolve(null)),
+        RELAY_STATE_TIMEOUT_MS,
+      );
+      subscription = this.relay.subscribe([filter], {
+        onclose: (reason: string) =>
+          finish(() =>
+            AUTH_REQUIRED_PATTERN.test(reason)
+              ? reject(new Error(reason))
+              : resolve(null),
+          ),
+        oneose: () => finish(done),
+        onevent: (event: Event) => {
+          if (!latest || event.created_at > latest.created_at) latest = event;
+        },
+      });
+    });
+  }
+
+  private async getRelayIdentity(): Promise<string> {
+    if (this.relayIdentity) return this.relayIdentity;
+    if (!this.relayUrl) throw new Error("relay URL unavailable");
+    const url = new URL(this.relayUrl);
+    url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+    const response = await fetch(url, {
+      headers: { Accept: "application/nostr+json" },
+      redirect: "error",
+      signal: AbortSignal.timeout(RELAY_INFO_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error("relay information unavailable");
+    const value = (await response.json()) as { self?: unknown };
+    if (
+      typeof value.self !== "string" ||
+      !/^[a-f0-9]{64}$/i.test(value.self)
+    ) {
+      throw new Error("relay identity unavailable");
+    }
+    this.relayIdentity = value.self.toLowerCase();
+    return this.relayIdentity;
   }
 
   private collectGroups(): Promise<RelayGroup[]> {
@@ -699,6 +914,7 @@ export class NostrRelayConnection implements RelayConnection {
 
   subscribe(
     routes: ConnectorRouteConfig[],
+    watchCommunityRoster: boolean,
     onEvent: (event: Event) => void,
     onClose: (reason: string) => void,
   ): void {
@@ -712,6 +928,9 @@ export class NostrRelayConnection implements RelayConnection {
         since: Math.min(...routes.map((route) => route.lastEventCreatedAt)),
       });
     }
+    if (watchCommunityRoster) {
+      filters.push({ kinds: [COMMUNITY_ROSTER_KIND] });
+    }
     if (filters.length === 0) {
       this.subscription = undefined;
       return;
@@ -723,6 +942,63 @@ export class NostrRelayConnection implements RelayConnection {
     });
   }
 
+}
+
+export async function reconcileHomeCommunityMembers(
+  relay: RelayConnection,
+  privateKey: Uint8Array,
+  shouldContinue: () => boolean = () => true,
+): Promise<number | null> {
+  const roster = await relay.readRoster();
+  if (!roster) return null;
+  const channelId = homeCommunityChannelId();
+  const groupMembers = await relay.readGroupMembers(channelId);
+  if (!groupMembers) return null;
+
+  let added = 0;
+  for (const pubkey of roster) {
+    if (groupMembers.has(pubkey)) continue;
+    if (!shouldContinue()) return added;
+    const event = finalizeEvent(
+      {
+        content: "",
+        created_at: Math.floor(Date.now() / 1_000),
+        kind: PUT_USER_KIND,
+        tags: [
+          ["h", channelId],
+          ["p", pubkey],
+          ["role", "member"],
+        ],
+      },
+      privateKey,
+    );
+    await relay.publish(event);
+    groupMembers.add(pubkey);
+    added += 1;
+  }
+  return added;
+}
+
+export function isOperatedCommunityRelay(relayUrl: string): boolean {
+  try {
+    return new URL(relayUrl).href === new URL(homeCommunityRelayUrl()).href;
+  } catch {
+    return false;
+  }
+}
+
+function parseMemberPubkeys(
+  event: Event,
+  tagName: "member" | "p",
+): Set<string> {
+  const members = new Set<string>();
+  for (const tag of event.tags) {
+    const pubkey = tag[0] === tagName ? tag[1] : undefined;
+    if (typeof pubkey === "string" && /^[a-f0-9]{64}$/.test(pubkey)) {
+      members.add(pubkey);
+    }
+  }
+  return members;
 }
 
 function toRelayGroup(event: Event): RelayGroup | null {

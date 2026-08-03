@@ -38,6 +38,7 @@ export interface DestinationProjectionInput {
   localParentEventId?: string;
   messageId: string;
   sourceActorPubkey: string;
+  sourceActorName?: string | null;
   sourceCommunityId: string;
   sourceCommunityName: string;
   sourceEventId: string;
@@ -100,7 +101,15 @@ export function createDestinationProjection(
   privateKey: Uint8Array,
   createdAt = Math.floor(Date.now() / 1_000),
 ): VerifiedEvent {
-  const actorLabel = input.sourceActorPubkey.slice(0, 12);
+  const actorLabel =
+    input.sourceActorName?.replace(/[\r\n\t]+/g, " ").trim().slice(0, 80) ||
+    input.sourceActorPubkey.slice(0, 12);
+  const attribution = `${actorLabel} · ${input.sourceCommunityName} [via BuzzRouter]`;
+  const attributionShape = /^.{1,80} · .{1,120} \[via BuzzRouter\]$/u;
+  const escapedBody = input.body
+    .split("\n")
+    .map((line) => (attributionShape.test(line) ? `\\${line}` : line))
+    .join("\n");
   const tags = [
     ["h", input.destinationChannelId],
     ["br", "message", input.messageId],
@@ -120,7 +129,7 @@ export function createDestinationProjection(
 
   return finalizeEvent(
     {
-      content: `${actorLabel} - ${input.sourceCommunityName}\n${input.body}`,
+      content: `${attribution}\n${escapedBody}`,
       created_at: createdAt,
       kind: BUZZ_MESSAGE_KIND,
       tags,

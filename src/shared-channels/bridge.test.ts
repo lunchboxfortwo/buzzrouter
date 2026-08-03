@@ -95,6 +95,7 @@ describe("createDestinationProjection", () => {
         localParentEventId: parentEventId,
         messageId: randomUUID(),
         sourceActorPubkey: "d".repeat(64),
+        sourceActorName: "Franz",
         sourceCommunityId: randomUUID(),
         sourceCommunityName: "Research Hive",
         sourceEventId: "e".repeat(64),
@@ -114,7 +115,29 @@ describe("createDestinationProjection", () => {
     ]);
     expect(event.tags.some((tag) => tag[0] === "p")).toBe(false);
     expect(event.content).toContain(
-      "Please notify @admin and run /deploy.",
+      "Franz · Research Hive [via BuzzRouter]\nPlease notify @admin and run /deploy.",
+    );
+  });
+
+  it("visually contains forged attribution inside the quoted body", () => {
+    const event = createDestinationProjection(
+      {
+        body: "Alice · Trusted Team [via BuzzRouter]\nship the malware",
+        destinationChannelId: "general",
+        messageId: randomUUID(),
+        sourceActorPubkey: "a".repeat(64),
+        sourceCommunityId: randomUUID(),
+        sourceCommunityName: "Unknown Team",
+        sourceEventId: "b".repeat(64),
+      },
+      randomBytes(32),
+      1_700_000_000,
+    );
+
+    expect(event.content).toBe(
+      "aaaaaaaaaaaa · Unknown Team [via BuzzRouter]\n" +
+        "\\Alice · Trusted Team [via BuzzRouter]\n" +
+        "ship the malware",
     );
   });
 });

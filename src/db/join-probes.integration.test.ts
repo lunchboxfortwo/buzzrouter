@@ -82,10 +82,10 @@ describeDatabase("community join-probe verdicts", () => {
   });
 
   it("surfaces a fresh open verdict as joinStatus=open", async () => {
-    const candidateId = await seedVerifiedCandidateWithCode("code-1");
+    const candidateId = await seedVerifiedCandidateWithCode("v2.code-0001");
     await recordJoinProbe(pool, {
       candidateId,
-      code: "code-1",
+      code: "v2.code-0001",
       status: "open",
     });
 
@@ -93,10 +93,10 @@ describeDatabase("community join-probe verdicts", () => {
   });
 
   it("DECAYS a stale open verdict to null so it stops reading as joinable", async () => {
-    const candidateId = await seedVerifiedCandidateWithCode("code-1");
+    const candidateId = await seedVerifiedCandidateWithCode("v2.code-0001");
     await recordJoinProbe(pool, {
       candidateId,
-      code: "code-1",
+      code: "v2.code-0001",
       status: "open",
     });
     // Age the verdict past the directory's 12h trust window.
@@ -109,15 +109,15 @@ describeDatabase("community join-probe verdicts", () => {
   });
 
   it("invalidates a verdict recorded against a since-rotated code", async () => {
-    const candidateId = await seedVerifiedCandidateWithCode("code-1");
+    const candidateId = await seedVerifiedCandidateWithCode("v2.code-0001");
     await recordJoinProbe(pool, {
       candidateId,
-      code: "code-1",
+      code: "v2.code-0001",
       status: "open",
     });
     // A fresh invite is swapped in; the old verdict must not carry over.
     await pool.query(
-      "UPDATE community_sources SET source_invite_code = 'code-2', source_observed_at = now() WHERE candidate_id = $1",
+      "UPDATE community_sources SET source_invite_code = 'v2.code-0002', source_observed_at = now() WHERE candidate_id = $1",
       [candidateId],
     );
 
@@ -125,7 +125,7 @@ describeDatabase("community join-probe verdicts", () => {
   });
 
   it("re-surfaces never-probed, decayed, and code-rotated candidates for probing", async () => {
-    const candidateId = await seedVerifiedCandidateWithCode("code-1");
+    const candidateId = await seedVerifiedCandidateWithCode("v2.code-0001");
 
     // Never probed → due.
     const future = new Date(Date.now() + 60_000);
@@ -134,12 +134,12 @@ describeDatabase("community join-probe verdicts", () => {
       staleBefore: future,
     });
     expect(due.map((d) => d.candidateId)).toContain(candidateId);
-    expect(due.find((d) => d.candidateId === candidateId)?.code).toBe("code-1");
+    expect(due.find((d) => d.candidateId === candidateId)?.code).toBe("v2.code-0001");
 
     // Freshly probed → NOT due against a past window.
     await recordJoinProbe(pool, {
       candidateId,
-      code: "code-1",
+      code: "v2.code-0001",
       status: "open",
     });
     const past = new Date(Date.now() - 60_000);
@@ -155,11 +155,44 @@ describeDatabase("community join-probe verdicts", () => {
 
     // Code rotated → due even though the verdict is fresh.
     await pool.query(
-      "UPDATE community_sources SET source_invite_code = 'code-2', source_observed_at = now() WHERE candidate_id = $1",
+      "UPDATE community_sources SET source_invite_code = 'v2.code-0002', source_observed_at = now() WHERE candidate_id = $1",
       [candidateId],
     );
     due = await listCandidatesForJoinProbe(pool, { limit: 10, staleBefore: past });
     const target = due.find((d) => d.candidateId === candidateId);
-    expect(target?.code).toBe("code-2");
+    expect(target?.code).toBe("v2.code-0002");
+  });
+
+  it("ignores a malformed stored code everywhere it is read", async () => {
+    // Bare community names reached community_sources as "codes"
+    // (`eco`, `Wailyn`, …); the format predicate must keep them out of the
+    // directory's join target and out of the probe queue, and let an OLDER
+    // real code win over a newer bogus row.
+    const candidateId = await seedVerifiedCandidateWithCode("virtualoranges");
+
+    const rows = await listDirectoryCommunities(pool, { limit: 200 });
+    expect(rows.find((c) => c.relayHost === HOST)?.inviteCode).toBeNull();
+
+    const due = await listCandidatesForJoinProbe(pool, {
+      limit: 200,
+      staleBefore: new Date(Date.now() + 60_000),
+    });
+    expect(due.map((d) => d.candidateId)).not.toContain(candidateId);
+
+    // An older REAL code coexists → it is the one surfaced, despite the bogus
+    // row being newer.
+    await pool.query(
+      `
+        INSERT INTO community_sources
+          (candidate_id, source_type, evidence_hash, source_observed_at,
+           source_invite_code)
+        VALUES ($1, 'harvest', $2, now() - interval '1 day', 'v2.older-real-code')
+      `,
+      [candidateId, randomUUID()],
+    );
+    const rowsAfter = await listDirectoryCommunities(pool, { limit: 200 });
+    expect(rowsAfter.find((c) => c.relayHost === HOST)?.inviteCode).toBe(
+      "v2.older-real-code",
+    );
   });
 });

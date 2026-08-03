@@ -27,7 +27,7 @@ test.beforeAll(async () => {
     description: "Everyone welcome, come on in.",
     displayName: "Discover Open Community",
     host: "discover-open.e2e.invalid",
-    inviteCode: "discover-open-code",
+    inviteCode: "v2.discover-open-code",
   });
 
   // Restricted: same invite code shape, but a probe proved admission is
@@ -37,7 +37,7 @@ test.beforeAll(async () => {
     description: "Admission is by approval only.",
     displayName: "Discover Locked Community",
     host: "discover-locked.e2e.invalid",
-    inviteCode: "discover-locked-code",
+    inviteCode: "v2.discover-locked-code",
     probeStatus: "restricted",
   });
 

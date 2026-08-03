@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 
+import { BUZZ_INVITE_CODE_SQL_RE } from "../directory/invite-code-format";
 import type { JoinStatus } from "../directory/joinability";
 
 /**
@@ -58,10 +59,12 @@ export async function getCandidateInviteTarget(
              invite.code AS code
       FROM community_candidates AS candidates
       JOIN LATERAL (
+        -- Newest REAL code only (a NULL or malformed code fails the match);
+        -- keep in sync with directory.ts's join_target pick.
         SELECT source_invite_code AS code
         FROM community_sources
         WHERE candidate_id = candidates.id
-          AND source_invite_code IS NOT NULL
+          AND source_invite_code ~ '${BUZZ_INVITE_CODE_SQL_RE}'
         ORDER BY source_observed_at DESC
         LIMIT 1
       ) AS invite ON true
@@ -123,10 +126,12 @@ export async function listCandidatesForJoinProbe(
              invite.code AS code
       FROM community_candidates AS candidates
       JOIN LATERAL (
+        -- Same real-code pick as getCandidateInviteTarget: never spend probe
+        -- claims on a malformed code that can only answer invite_invalid.
         SELECT source_invite_code AS code
         FROM community_sources
         WHERE candidate_id = candidates.id
-          AND source_invite_code IS NOT NULL
+          AND source_invite_code ~ '${BUZZ_INVITE_CODE_SQL_RE}'
         ORDER BY source_observed_at DESC
         LIMIT 1
       ) AS invite ON true

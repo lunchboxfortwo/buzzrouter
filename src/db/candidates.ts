@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { Pool, PoolClient } from "pg";
 
+import { isBuzzInviteCode } from "../directory/invite-code-format";
 import { sanitizeSourceLocator } from "../discovery/source-locator";
 import type { RelayProbeResult } from "../discovery/probe";
 import type { NormalizedRelay } from "../discovery/normalize";
@@ -180,8 +181,12 @@ export function normalizeCandidateSourceListing(
     typeof listing?.publicUrl === "string" && /^https:\/\//i.test(listing.publicUrl)
       ? listing.publicUrl.slice(0, 500)
       : null;
+  // Only a plausibly-real Buzz code (`eyJ…`/`vN.…`) is stored: harvested
+  // "codes" have arrived as bare community names, and a malformed code can
+  // only ever produce a broken join button downstream.
   const inviteCode =
-    typeof listing?.inviteCode === "string" && listing.inviteCode.trim()
+    typeof listing?.inviteCode === "string" &&
+    isBuzzInviteCode(listing.inviteCode.trim())
       ? listing.inviteCode.trim().slice(0, 200)
       : null;
   const contactEmail =

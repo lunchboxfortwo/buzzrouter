@@ -29,6 +29,7 @@ import {
   enrollVerifiedCommunityFromInvite,
   findVerifiedCommunityCandidateByRelayUrl,
   getCommunityConnectionInstallContext,
+  getOwnedCommunityConnection,
   type CommunityConnectionRecord,
   type VerifiedCommunityIdentity,
 } from "./store";
@@ -168,6 +169,7 @@ export interface BeginConnectionFromInviteResult {
   communityId: string;
   displayName: string;
   expiresAt: string;
+  reentered: boolean;
   relayUrl: string;
   session: string;
 }
@@ -193,6 +195,47 @@ export async function beginConnectionFromInvite(
     pool,
     canonicalRelayUrl,
   );
+  if (candidate.communityId && candidate.ownerPubkey) {
+    const existing = await getOwnedCommunityConnection(pool, {
+      communityId: candidate.communityId,
+      ownerPubkey: candidate.ownerPubkey,
+    });
+    if (existing) {
+      const wrappingKey = await wrappingKeys.getKey(
+        existing.wrappingKeyVersion,
+      );
+      const existingPrivateKey = decryptConnectorPrivateKey(
+        existing,
+        wrappingKey,
+        existing.communityId,
+      );
+      try {
+        // Validate the fresh invite with the connector that is already a member.
+        // A successful re-entry must never replace the active connector key or
+        // leave a second bridge identity behind in the owner's community.
+        await redeemInviteWithBridgeKey(
+          existingPrivateKey,
+          candidate.relayUrl,
+          invite,
+          claimInvite,
+        );
+      } finally {
+        existingPrivateKey.fill(0);
+      }
+      const session = await mintOwnerSession(pool, {
+        communityId: candidate.communityId,
+        ownerPubkey: candidate.ownerPubkey,
+      });
+      return {
+        communityId: candidate.communityId,
+        displayName: candidate.displayName,
+        expiresAt: session.expiresAt,
+        reentered: true,
+        relayUrl: candidate.relayUrl,
+        session: session.session,
+      };
+    }
+  }
   const privateKey = generateSecretKey();
   let community: VerifiedCommunityIdentity;
   let token: CommunityInstallToken;
@@ -234,6 +277,7 @@ export async function beginConnectionFromInvite(
     communityId: community.communityId,
     displayName: community.displayName,
     expiresAt: session.expiresAt,
+    reentered: false,
     relayUrl: community.relayUrl,
     session: session.session,
   };

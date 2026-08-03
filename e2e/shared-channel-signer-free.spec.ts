@@ -39,6 +39,7 @@ test.beforeAll(async () => {
     { id: "general", name: "general" },
     { id: "builders", name: "builders" },
   ]);
+  relay.setRoster([{ pubkey: callerOwner, role: "owner" }]);
   pool = new Pool({ connectionString: databaseUrl });
   await resetDatabase(pool);
 
@@ -76,6 +77,7 @@ test.afterAll(async () => {
 test("a phone with no extension connects to BuzzRouter from an invite link", async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   // The page leads with the signer-free flow — no extension wall gating it.
   await page.goto("/shared-channels");
   await expect(
@@ -114,7 +116,11 @@ test("a phone with no extension connects to BuzzRouter from an invite link", asy
   ).toBeVisible({ timeout: 20_000 });
 
   // The admitted connector lists real channels before the hub can be joined.
-  await page.getByLabel("Channel for hub messages").selectOption("general");
+  const channelPicker = page.getByRole("combobox", {
+    name: "Channel for hub messages",
+  });
+  await channelPicker.fill("gen");
+  await page.getByRole("option", { name: /#general/ }).click();
   await page
     .getByRole("button", { name: "Connect channel to hub" })
     .click();
@@ -185,6 +191,76 @@ test("a phone with no extension connects to BuzzRouter from an invite link", asy
     sends: true,
   });
 
+  // The same combobox in settings filters relay-backed channels and changes
+  // the endpoint without creating anything.
+  await channelPicker.fill("build");
+  await page.getByRole("option", { name: /#builders/ }).click();
+  await page.getByRole("button", { name: "Change hub channel" }).click();
+  await expect(
+    page.getByText("#builders", { exact: true }),
+  ).toBeVisible();
+
+  // An unmatched name only creates after the owner clicks the explicit action.
+  await channelPicker.fill("clover");
+  await expect(page.getByRole("button", { name: "Create #clover" }))
+    .toBeVisible();
+  expect(relay.channels().some((channel) => channel.name === "clover"))
+    .toBe(false);
+  await page.getByRole("button", { name: "Create #clover" }).click();
+  await expect(page.getByText("#clover", { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+
+  const created = relay.channels().find((channel) => channel.name === "clover");
+  expect(created).toBeTruthy();
+  const connection = await pool.query<{ bridge_pubkey: string }>(
+    "SELECT bridge_pubkey FROM community_connections WHERE community_id = $1",
+    [callerCommunityId],
+  );
+  const roster = new Map(
+    relay
+      .channelMembers(created!.id)
+      .map((member) => [member.pubkey, member.role]),
+  );
+  expect(roster.get(callerOwner)).toBe("owner");
+  expect(roster.get(connection.rows[0].bridge_pubkey)).toBe("member");
+
+  const rebound = await pool.query<{
+    local_channel_id: string;
+    local_channel_name_snapshot: string;
+  }>(
+    `
+      SELECT local_channel_id, local_channel_name_snapshot
+      FROM shared_channel_endpoints
+      WHERE community_id = $1
+    `,
+    [callerCommunityId],
+  );
+  expect(rebound.rows[0]).toMatchObject({
+    local_channel_id: created!.id,
+    local_channel_name_snapshot: "clover",
+  });
+
+  // Regression: after the short-lived session expires, the same valid invite
+  // proves control again and returns directly to the existing settings.
+  await pool.query(
+    "UPDATE connection_owner_sessions SET expires_at = now() - interval '1 minute' WHERE community_id = $1",
+    [callerCommunityId],
+  );
+  await page.reload();
+  const reentryInvite = page.getByLabel("Invite link from your Buzz app");
+  await reentryInvite.fill(
+    `https://127.0.0.1:${invitePort}/invite/reentry-code`,
+  );
+  await page.getByRole("button", { name: "Add your community" }).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Caller Community is in the open channel",
+    }),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("#clover", { exact: true })).toBeVisible();
+  await expect(page.getByText(/already connected/i)).toHaveCount(0);
+
 });
 
 function ownerKey(marker: number): string {
@@ -253,6 +329,7 @@ async function resetDatabase(database: Pool): Promise<void> {
   await database.query(`
     TRUNCATE
       connection_owner_sessions,
+      bridge_channel_handoffs,
       bridge_event_mappings,
       bridge_deliveries,
       bridge_messages,

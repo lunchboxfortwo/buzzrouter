@@ -71,12 +71,15 @@ export interface RelayGroup {
   name: string;
 }
 
+export type CommunityRoster = Map<string, string>;
+
 export interface RelayConnection {
   close(): void;
   hasEvent(eventId: string): Promise<boolean>;
   listGroups(): Promise<RelayGroup[]>;
   readGroupMembers(groupId: string): Promise<Set<string> | null>;
   readRoster(): Promise<Set<string> | null>;
+  readRosterRoles(): Promise<CommunityRoster | null>;
   getProfileName?(pubkey: string): Promise<string | null>;
   publish(event: Event): Promise<void>;
   subscribe(
@@ -698,6 +701,12 @@ export class NostrRelayConnection implements RelayConnection {
     );
   }
 
+  async readRosterRoles(): Promise<CommunityRoster | null> {
+    return this.readRelayState({ kinds: [COMMUNITY_ROSTER_KIND] }, (event) =>
+      parseRosterRoles(event),
+    );
+  }
+
   async readGroupMembers(groupId: string): Promise<Set<string> | null> {
     return this.readRelayState(
       {
@@ -999,6 +1008,20 @@ function parseMemberPubkeys(
     }
   }
   return members;
+}
+
+export function parseRosterRoles(event: Event): CommunityRoster {
+  const roster: CommunityRoster = new Map();
+  for (const tag of event.tags) {
+    if (tag[0] !== "member" && tag[0] !== "p") continue;
+    const pubkey = tag[1];
+    if (typeof pubkey !== "string" || !/^[a-f0-9]{64}$/.test(pubkey)) {
+      continue;
+    }
+    const role = (tag[3] ?? tag[2] ?? "member").toString().toLowerCase();
+    roster.set(pubkey, role || "member");
+  }
+  return roster;
 }
 
 function toRelayGroup(event: Event): RelayGroup | null {

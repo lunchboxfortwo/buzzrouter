@@ -167,6 +167,8 @@ export interface UpdateHubSettingsInput {
   communityId: string;
   filterList: string[];
   filterMode: HubFilterMode;
+  localChannelId?: string;
+  localChannelName?: string;
   ownerPubkey: string;
   receives: boolean;
   sends: boolean;
@@ -907,7 +909,9 @@ export interface VerifiedCommunityIdentity {
 
 export interface VerifiedCommunityCandidate {
   candidateId: string;
+  communityId: string | null;
   displayName: string;
+  ownerPubkey: string | null;
   relayUrl: string;
 }
 
@@ -921,13 +925,17 @@ export async function findVerifiedCommunityCandidateByRelayUrl(
   canonicalRelayUrl: string,
 ): Promise<VerifiedCommunityCandidate> {
   const result = await pool.query<{
+    community_id: string | null;
     display_name: string;
     candidate_id: string;
+    owner_pubkey: string | null;
     relay_url: string;
   }>(
     `
       SELECT
         candidates.id AS candidate_id,
+        communities.id AS community_id,
+        communities.owner_pubkey,
         COALESCE(communities.display_name, communities.slug, candidates.host)
           AS display_name,
         candidates.canonical_relay_url AS relay_url
@@ -950,7 +958,9 @@ export async function findVerifiedCommunityCandidateByRelayUrl(
   }
   return {
     candidateId: row.candidate_id,
+    communityId: row.community_id,
     displayName: row.display_name,
+    ownerPubkey: row.owner_pubkey,
     relayUrl: row.relay_url,
   };
 }
@@ -1260,10 +1270,46 @@ export async function updateOpenHubSettings(
   if (input.filterMode !== "everyone_except" && input.filterMode !== "only_these") {
     throw new ApiError("invalid_input", "The filter mode is invalid.");
   }
+  const changesChannel =
+    input.localChannelId !== undefined || input.localChannelName !== undefined;
+  if (changesChannel) {
+    assertText(input.localChannelId ?? "", 1, 200, "Local channel");
+    assertText(input.localChannelName ?? "", 1, 80, "Local channel name");
+  }
   const filterList = [...new Set(input.filterList)];
   for (const communityId of filterList) assertUuid(communityId, "Filter community");
   await withTransaction(pool, async (client) => {
     await requireVerifiedOwner(client, input.communityId, input.ownerPubkey);
+    const own = await client.query<{
+      id: string;
+      local_channel_id: string;
+    }>(
+      `
+        SELECT endpoints.id, endpoints.local_channel_id
+        FROM shared_channel_endpoints AS endpoints
+        JOIN shared_channels AS channels
+          ON channels.id = endpoints.shared_channel_id
+        WHERE channels.mode = 'hub'
+          AND endpoints.community_id = $1
+          AND endpoints.state = 'active'
+      `,
+      [input.communityId],
+    );
+    const ownEndpoint = own.rows[0];
+    if (!ownEndpoint) {
+      throw new ApiError("hub_membership_not_found", "Hub membership was not found.", 404);
+    }
+    if (
+      changesChannel &&
+      input.localChannelId !== ownEndpoint.local_channel_id
+    ) {
+      await assertChannelNotRouted(
+        client,
+        input.communityId,
+        input.localChannelId!,
+        ownEndpoint.id,
+      );
+    }
     const valid = await client.query<{ id: string }>(
       `
         SELECT endpoints.community_id AS id
@@ -1289,7 +1335,18 @@ export async function updateOpenHubSettings(
       `
         UPDATE shared_channel_endpoints AS endpoints
         SET sends = $2, receives = $3, filter_mode = $4,
-            filter_list = $5::uuid[], updated_at = now()
+            filter_list = $5::uuid[],
+            local_channel_id = COALESCE($6, endpoints.local_channel_id),
+            local_channel_name_snapshot = COALESCE(
+              $7,
+              endpoints.local_channel_name_snapshot
+            ),
+            last_event_created_at = CASE
+              WHEN $6 IS NULL OR $6 = endpoints.local_channel_id
+                THEN endpoints.last_event_created_at
+              ELSE floor(extract(epoch FROM now()))::bigint
+            END,
+            updated_at = now()
         FROM shared_channels AS channels
         WHERE endpoints.shared_channel_id = channels.id
           AND channels.mode = 'hub'
@@ -1303,6 +1360,8 @@ export async function updateOpenHubSettings(
         input.receives,
         input.filterMode,
         filterList,
+        input.localChannelId ?? null,
+        input.localChannelName ?? null,
       ],
     );
     if (!updated.rows[0]) {
@@ -1858,6 +1917,7 @@ async function assertChannelNotRouted(
   client: PoolClient,
   communityId: string,
   localChannelId: string,
+  excludeEndpointId?: string,
 ): Promise<void> {
   const result = await client.query(
     `
@@ -1866,9 +1926,10 @@ async function assertChannelNotRouted(
       WHERE community_id = $1
         AND local_channel_id = $2
         AND state IN ('active', 'paused')
+        AND ($3::uuid IS NULL OR id <> $3)
       LIMIT 1
     `,
-    [communityId, localChannelId],
+    [communityId, localChannelId, excludeEndpointId ?? null],
   );
   if (result.rows.length > 0) {
     throw new ApiError(

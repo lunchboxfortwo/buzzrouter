@@ -38,6 +38,7 @@ describeDatabase("open-hub PostgreSQL integration", () => {
     await boss.deleteAllJobs(BRIDGE_DELIVERY_QUEUE);
     await pool.query(`
       TRUNCATE
+        bridge_channel_handoffs,
         bridge_event_mappings,
         bridge_deliveries,
         bridge_messages,
@@ -114,6 +115,38 @@ describeDatabase("open-hub PostgreSQL integration", () => {
 
     expect(updated.filterMode).toBe("only_these");
     expect(updated.filterList).toEqual([second.communityId]);
+  });
+
+  it("changes the hub route to another local channel without creating a second endpoint", async () => {
+    await createConnectedCommunity(pool, "home", homeHost);
+    const member = await createConnectedCommunity(pool, "member");
+    const original = await join(member, "member-general");
+
+    const updated = await updateOpenHubSettings(pool, {
+      communityId: member.communityId,
+      filterList: original.filterList,
+      filterMode: original.filterMode,
+      localChannelId: "member-builders",
+      localChannelName: "builders",
+      ownerPubkey: member.ownerPubkey,
+      receives: original.receives,
+      sends: original.sends,
+    });
+
+    expect(updated).toMatchObject({
+      endpointId: original.endpointId,
+      localChannelId: "member-builders",
+      localChannelName: "builders",
+    });
+    const configs = await listActiveConnectorConfigs(pool);
+    expect(
+      configs.find((config) => config.communityId === member.communityId)?.routes,
+    ).toEqual([
+      expect.objectContaining({
+        localChannelId: "member-builders",
+        sourceEndpointId: original.endpointId,
+      }),
+    ]);
   });
 
   it("fans out into independent durable jobs after receive filters", async () => {

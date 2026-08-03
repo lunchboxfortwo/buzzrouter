@@ -124,6 +124,10 @@ Implemented:
 - Basic-auth protected candidate review with evidence and probe history
 - NIP-98 request authentication with one-use replay protection
 - Invite-driven community admission to the open BuzzRouter hub
+- Owner re-entry with a fresh invite after the short-lived Connect session
+  expires
+- One searchable channel control that can select an existing channel or
+  explicitly create one and transfer its ownership to a community owner/admin
 - Database-backed community detail pages
 - Adversarial unit and PostgreSQL integration verification
 

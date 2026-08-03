@@ -93,6 +93,105 @@
   margin: 4px 0 0;
 }
 
+.channelCombobox {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.channelCombobox > label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.comboboxControl {
+  min-width: 0;
+  position: relative;
+}
+
+.comboboxControl > input {
+  font-size: 16px;
+  width: 100%;
+}
+
+.comboboxMenu {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(17 19 24 / 12%);
+  left: 0;
+  max-height: 260px;
+  overflow: auto;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 5px);
+  z-index: 10;
+}
+
+.comboboxOptions {
+  display: grid;
+  padding: 4px;
+}
+
+.page button.comboboxOption {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 9px 10px;
+  text-align: start;
+  width: 100%;
+}
+
+.page button.comboboxOption:hover,
+.page button.comboboxOption[aria-selected="true"] {
+  background: var(--selected-surface, #efefff);
+}
+
+.comboboxOption span,
+.comboboxOption small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.comboboxOption small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.createChannelOffer {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.createChannelOffer p,
+.comboboxEmpty,
+.channelPickerNote {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.comboboxEmpty {
+  padding: 12px;
+}
+
+.channelSetting {
+  display: grid;
+  gap: 10px;
+}
+
+.channelSetting > button {
+  justify-self: start;
+}
+
 .spinner {
   animation: hub-spin 0.8s linear infinite;
   border: 2px solid var(--border);

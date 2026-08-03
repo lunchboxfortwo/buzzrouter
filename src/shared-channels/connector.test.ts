@@ -296,6 +296,12 @@ describe("NostrRelayConnection relay-signed state", () => {
     await expect(connection.readRoster()).resolves.toEqual(
       new Set(["a".repeat(64), "b".repeat(64)]),
     );
+    await expect(connection.readRosterRoles()).resolves.toEqual(
+      new Map([
+        ["a".repeat(64), "member"],
+        ["b".repeat(64), "admin"],
+      ]),
+    );
   });
 
   it("fails closed when the newest roster signature is invalid", async () => {
@@ -382,6 +388,11 @@ describe("home-community membership reconciliation", () => {
       },
       async readRoster() {
         return input.roster ? new Set(input.roster) : null;
+      },
+      async readRosterRoles() {
+        return input.roster
+          ? new Map([...input.roster].map((pubkey) => [pubkey, "member"]))
+          : null;
       },
       subscribe() {},
     };
@@ -541,6 +552,7 @@ describe("ConnectorSupervisor operated-community routing", () => {
             state.readRosterCalls += 1;
             return new Set();
           },
+          async readRosterRoles() { return new Map(); },
           subscribe(_routes, watchRoster, _onEvent, onClose) {
             state.subscriptions.push({ onClose, watchRoster });
           },

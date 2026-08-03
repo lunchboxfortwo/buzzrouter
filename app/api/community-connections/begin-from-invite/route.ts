@@ -22,7 +22,7 @@ export async function POST(request: Request): Promise<Response> {
     );
     return Response.json(result, {
       headers: { "cache-control": "no-store" },
-      status: 201,
+      status: result.reentered ? 200 : 201,
     });
   } catch (error) {
     return sharedChannelErrorResponse(error);

@@ -5,10 +5,17 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Event } from "nostr-tools/core";
-import { finalizeEvent, generateSecretKey } from "nostr-tools/pure";
+import {
+  finalizeEvent,
+  generateSecretKey,
+  getPublicKey,
+} from "nostr-tools/pure";
 import { WebSocketServer, type WebSocket } from "ws";
 
 const GROUP_METADATA_KIND = 39_000;
+const ROSTER_KIND = 13_534;
+const GROUP_CREATE_KIND = 9_007;
+const GROUP_PUT_USER_KIND = 9_000;
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "../fixtures");
 const tlsCert = readFileSync(join(fixturesDir, "fake-relay-cert.pem"));
@@ -17,6 +24,11 @@ const tlsKey = readFileSync(join(fixturesDir, "fake-relay-key.pem"));
 export interface FakeRelayGroup {
   id: string;
   name: string;
+}
+
+export interface FakeRosterMember {
+  pubkey: string;
+  role: string;
 }
 
 export interface FakeRelay {
@@ -31,6 +43,12 @@ export interface FakeRelay {
   injectEvent(event: Event): void;
   /** The groups the relay currently knows. */
   channels(): FakeRelayGroup[];
+  /** Community-wide owner/admin roster (kind 13534). */
+  roster(): FakeRosterMember[];
+  /** Effective membership roles for one channel after management events. */
+  channelMembers(channelId: string): FakeRosterMember[];
+  /** Seed the relay-signed community roster used to choose the real owner. */
+  setRoster(members: FakeRosterMember[]): void;
 }
 
 interface RelayFilter {
@@ -93,8 +111,11 @@ export async function startFakeRelay(
   // receipt, so these must be real events, not hand-built JSON.
   const relayKey = generateSecretKey();
   const groupNames = new Map<string, string>();
+  const groupRoles = new Map<string, Map<string, string>>();
+  const roster = new Map<string, string>();
   let bumps = 0;
   const groupEventIds = new Map<string, string>();
+  let rosterEventId: string | undefined;
 
   // The relay assigns strictly increasing created_at so the connector's
   // "newest wins" metadata resolution picks the latest write. Real time
@@ -122,6 +143,22 @@ export async function startFakeRelay(
     pushToSubscribers(event, subscriptions);
   };
 
+  const writeRoster = (): void => {
+    if (rosterEventId) stored.delete(rosterEventId);
+    const event = finalizeEvent(
+      {
+        content: "",
+        created_at: nextCreatedAt(),
+        kind: ROSTER_KIND,
+        tags: [...roster].map(([pubkey, role]) => ["member", pubkey, role]),
+      },
+      relayKey,
+    );
+    stored.set(event.id, event);
+    rosterEventId = event.id;
+    pushToSubscribers(event, subscriptions);
+  };
+
   for (const group of groups) {
     upsertGroup(group.id, group.name);
   }
@@ -134,6 +171,16 @@ export async function startFakeRelay(
   // separately by WebSocketServer's own 'upgrade' listener, so this plain
   // request handler never sees them.
   server.on("request", (req, res) => {
+    if (
+      req.method === "GET" &&
+      req.url === "/" &&
+      req.headers.accept?.includes("application/nostr+json")
+    ) {
+      req.resume();
+      res.writeHead(200, { "content-type": "application/nostr+json" });
+      res.end(JSON.stringify({ self: getPublicKey(relayKey) }));
+      return;
+    }
     if (req.method === "POST" && req.url === "/api/invites/claim") {
       let rawBody = "";
       req.setEncoding("utf8");
@@ -190,8 +237,11 @@ export async function startFakeRelay(
     subscriptions.set(socket, new Map());
     socket.on("message", (raw) => {
       handleMessage(socket, raw.toString(), {
+        groupRoles,
+        roster,
         stored,
         subscriptions,
+        upsertGroup,
       });
     });
     socket.on("close", () => {
@@ -224,6 +274,20 @@ export async function startFakeRelay(
     channels() {
       return [...groupNames].map(([id, name]) => ({ id, name }));
     },
+    roster() {
+      return [...roster].map(([pubkey, role]) => ({ pubkey, role }));
+    },
+    channelMembers(channelId) {
+      return [...(groupRoles.get(channelId) ?? [])].map(([pubkey, role]) => ({
+        pubkey,
+        role,
+      }));
+    },
+    setRoster(members) {
+      roster.clear();
+      for (const member of members) roster.set(member.pubkey, member.role);
+      writeRoster();
+    },
   };
 }
 
@@ -239,8 +303,11 @@ function safeJsonObject(text: string): Record<string, unknown> | null {
 }
 
 interface RelayContext {
+  groupRoles: Map<string, Map<string, string>>;
+  roster: Map<string, string>;
   stored: Map<string, Event>;
   subscriptions: Map<WebSocket, Map<string, RelayFilter[]>>;
+  upsertGroup(id: string, name: string): void;
 }
 
 function handleMessage(
@@ -264,6 +331,7 @@ function handleMessage(
     const event = message[1] as Event;
     stored.set(event.id, event);
     socket.send(JSON.stringify(["OK", event.id, true, ""]));
+    applyGroupManagement(event, ctx);
     pushToSubscribers(event, subscriptions);
     return;
   }
@@ -284,6 +352,26 @@ function handleMessage(
     const subscriptionId = message[1] as string;
     subscriptions.get(socket)?.delete(subscriptionId);
     return;
+  }
+}
+
+function applyGroupManagement(event: Event, ctx: RelayContext): void {
+  const groupId = event.tags.find((tag) => tag[0] === "h")?.[1];
+  if (event.kind === GROUP_CREATE_KIND) {
+    if (!groupId) return;
+    const name = event.tags.find((tag) => tag[0] === "name")?.[1];
+    ctx.upsertGroup(groupId, name?.trim() || groupId);
+    ctx.groupRoles.set(groupId, new Map([[event.pubkey, "owner"]]));
+    return;
+  }
+  if (event.kind === GROUP_PUT_USER_KIND) {
+    const member = event.tags.find((tag) => tag[0] === "p");
+    const pubkey = member?.[1];
+    const role = member?.[2];
+    if (!groupId || !pubkey || !role) return;
+    const members = ctx.groupRoles.get(groupId) ?? new Map<string, string>();
+    members.set(pubkey, role.toLowerCase());
+    ctx.groupRoles.set(groupId, members);
   }
 }
 

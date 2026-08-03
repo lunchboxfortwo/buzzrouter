@@ -85,6 +85,14 @@ export async function PATCH(request: Request): Promise<Response> {
       communityId: session.communityId,
       filterList: body.filterList as string[],
       filterMode: body.filterMode as HubFilterMode,
+      localChannelId:
+        body.localChannelId === undefined
+          ? undefined
+          : requireText(body.localChannelId, 200, "Local channel"),
+      localChannelName:
+        body.localChannelName === undefined
+          ? undefined
+          : requireText(body.localChannelName, 80, "Local channel name"),
       ownerPubkey: session.ownerPubkey,
       receives: body.receives,
       sends: body.sends,

@@ -3,8 +3,18 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   authentication_required: "Reconnect to your community and try again.",
   channel_already_routed:
     "That channel is already connected to the hub. Pick a different channel.",
+  channel_create_failed:
+    "The new channel could not be created on your relay. Try again.",
+  channel_event_not_stored:
+    "Your relay accepted the channel update but did not retain it. Try again.",
+  channel_handoff_incomplete:
+    "The channel was created, but ownership transfer did not finish. Try the same create action again to resume it.",
+  channel_owner_unavailable:
+    "Your relay did not return a verified owner or admin for this channel. Check the community roster and try again.",
   community_owner_required:
     "Only an owner or admin of that community can do this.",
+  connection_already_active:
+    "This community is already connected. Paste a fresh owner or admin invite to reopen its settings.",
   connection_activation_failed:
     "We couldn’t finish connecting this community. Try pasting the invite again.",
   destination_not_verified:
@@ -19,8 +29,6 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   route_inactive: "That connection isn’t active, so it can’t be changed.",
   wrapping_key_version_invalid:
     "The connector isn’t configured correctly on our side. This is our bug, not yours.",
-  connection_already_active:
-    "This community is already connected to the hub. Open its settings below to change the channel or turn sending and receiving on or off.",
   connection_required: "The community connector must be active first.",
   connector_key_unavailable:
     "The connector for this community isn’t ready yet. Try again shortly.",

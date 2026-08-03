@@ -2,17 +2,29 @@ import { npubEncode } from "nostr-tools/nip19";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  beginConnectionFromInvite,
   buildInstallerCommand,
   createCommunityInstallToken,
   resolveInviteClaimTarget,
 } from "./installer";
-import { beginCommunityConnectionInstall } from "./store";
+import {
+  beginCommunityConnectionInstall,
+  decryptConnectorPrivateKey,
+  findVerifiedCommunityCandidateByRelayUrl,
+  getOwnedCommunityConnection,
+} from "./store";
 
 vi.mock("./store", () => ({
   beginCommunityConnectionInstall: vi.fn(),
+  decryptConnectorPrivateKey: vi.fn(),
+  findVerifiedCommunityCandidateByRelayUrl: vi.fn(),
+  getOwnedCommunityConnection: vi.fn(),
 }));
 
 const beginInstall = vi.mocked(beginCommunityConnectionInstall);
+const decryptConnectorKey = vi.mocked(decryptConnectorPrivateKey);
+const findCandidate = vi.mocked(findVerifiedCommunityCandidateByRelayUrl);
+const getOwnedConnection = vi.mocked(getOwnedCommunityConnection);
 
 function stubBeginInstall(relayUrl = "wss://alpha.e2e.example"): void {
   beginInstall.mockResolvedValue({
@@ -26,6 +38,9 @@ describe("community connector installer", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     beginInstall.mockReset();
+    decryptConnectorKey.mockReset();
+    findCandidate.mockReset();
+    getOwnedConnection.mockReset();
   });
 
   it("renders the bridge key as an npub and surfaces the raw token", async () => {
@@ -110,6 +125,56 @@ describe("community connector installer", () => {
     expect(() => buildInstallerCommand("a".repeat(43))).toThrow(
       "installer is not published",
     );
+  });
+});
+
+describe("existing connector re-entry", () => {
+  it("validates a fresh invite with the existing bridge and mints a new owner session", async () => {
+    const communityId = "00000000-0000-4000-8000-000000000000";
+    const ownerPubkey = "a".repeat(64);
+    const privateKey = Buffer.alloc(32, 9);
+    findCandidate.mockResolvedValue({
+      candidateId: "10000000-0000-4000-8000-000000000000",
+      communityId,
+      displayName: "Existing Community",
+      ownerPubkey,
+      relayUrl: "wss://relay.example.com",
+    });
+    getOwnedConnection.mockResolvedValue({
+      authTag: Buffer.alloc(16),
+      bridgePubkey: "b".repeat(64),
+      ciphertext: Buffer.alloc(32),
+      communityId,
+      health: "healthy",
+      id: "20000000-0000-4000-8000-000000000000",
+      nonce: Buffer.alloc(12),
+      relayUrl: "wss://relay.example.com",
+      state: "active",
+      wrappingKeyVersion: 1,
+    });
+    decryptConnectorKey.mockReturnValue(privateKey);
+    const claimInvite = vi.fn().mockResolvedValue(undefined);
+    const query = vi.fn().mockResolvedValue({
+      rows: [{ expires_at: new Date("2026-08-03T15:00:00.000Z") }],
+    });
+
+    const result = await beginConnectionFromInvite(
+      { query } as never,
+      "https://relay.example.com/invite/fresh-code",
+      { getKey: async () => Buffer.alloc(32, 7) },
+      {} as never,
+      claimInvite,
+    );
+
+    expect(result).toMatchObject({
+      communityId,
+      displayName: "Existing Community",
+      reentered: true,
+    });
+    expect(claimInvite).toHaveBeenCalledOnce();
+    expect(beginInstall).not.toHaveBeenCalled();
+    expect(privateKey.every((byte) => byte === 0)).toBe(true);
+    expect(result.session).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 });
 

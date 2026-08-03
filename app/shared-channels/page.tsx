@@ -8,6 +8,11 @@ export const metadata: Metadata = {
   title: "Connect | BuzzRouter",
 };
 
+// This page is an owner control surface whose client behavior changes with the
+// deployed release. Do not let a shared cache retain HTML (and therefore stale
+// content-hashed client chunk references) across releases.
+export const dynamic = "force-dynamic";
+
 export default function SharedChannelsPage() {
   return (
     <main className={styles.page}>

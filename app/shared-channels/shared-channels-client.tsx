@@ -2,8 +2,10 @@
 
 import {
   type FormEvent,
+  type KeyboardEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -63,6 +65,7 @@ interface BeginFromInviteResponse {
   communityId: string;
   displayName: string;
   expiresAt: string;
+  reentered: boolean;
   relayUrl: string;
   session: string;
 }
@@ -140,7 +143,25 @@ function SignerFreeConnect() {
         "/api/community-connections/begin-from-invite",
         { invite: trimmed },
       );
+      let existingMembership: HubMembership | null = null;
+      if (result.reentered) {
+        try {
+          existingMembership = await sessionRequest<HubMembership>(
+            "/api/shared-channels/hub",
+            "GET",
+            result.session,
+          );
+        } catch (caught) {
+          if (
+            !(caught instanceof Error) ||
+            caught.message !== "hub_membership_not_found"
+          ) {
+            throw caught;
+          }
+        }
+      }
       setCommunity(result);
+      setMembership(existingMembership);
       setInvite("");
     } catch (caught) {
       setError(errorMessage(caught));
@@ -166,6 +187,42 @@ function SignerFreeConnect() {
       setMembership(result);
     } catch (caught) {
       setError(errorMessage(caught));
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function createAndConnectHub(
+    channelName: string,
+    idempotencyKey: string,
+  ) {
+    if (!community) return;
+    setConnecting(true);
+    setError("");
+    try {
+      const channel = await sessionRequest<{
+        channelId: string;
+        channelName: string;
+      }>(
+        "/api/shared-channels/create-channel",
+        "POST",
+        community.session,
+        { channelName, idempotencyKey },
+      );
+      setMembership(
+        await sessionRequest<HubMembership>(
+          "/api/shared-channels/hub",
+          "POST",
+          community.session,
+          {
+            localChannelId: channel.channelId,
+            localChannelName: channel.channelName,
+          },
+        ),
+      );
+    } catch (caught) {
+      setError(errorMessage(caught));
+      throw caught;
     } finally {
       setConnecting(false);
     }
@@ -201,6 +258,8 @@ function SignerFreeConnect() {
             communities in the hub will appear in this channel.
           </p>
           <HubChannelPicker
+            busy={connecting}
+            onCreate={createAndConnectHub}
             onChange={setSelection}
             state={localChannels}
             value={selection}
@@ -259,14 +318,94 @@ function SignerFreeConnect() {
 }
 
 function HubChannelPicker({
+  busy,
+  onCreate,
   onChange,
   state,
   value,
 }: {
+  busy: boolean;
+  onCreate: (channelName: string, idempotencyKey: string) => Promise<void>;
   onChange: (selection: LocalChannelSelection) => void;
   state: LocalChannelsState;
   value: LocalChannelSelection;
 }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value.channelName);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const idempotencyKeys = useRef(new Map<string, string>());
+  const filteredChannels = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    if (!needle) return state.channels;
+    return state.channels.filter((channel) =>
+      `${channel.name} ${channel.id}`.toLocaleLowerCase().includes(needle),
+    );
+  }, [query, state.channels]);
+  const createName = query.trim().replace(/^#+/, "").trim();
+  const canCreate =
+    createName.length > 0 &&
+    createName.length <= 80 &&
+    filteredChannels.length === 0;
+
+  useEffect(() => {
+    setQuery(value.channelName);
+  }, [value.channelId, value.channelName]);
+
+  function choose(channel: LocalChannelListing["channels"][number]) {
+    setQuery(channel.name);
+    setOpen(false);
+    setActiveIndex(-1);
+    onChange({
+      channelId: channel.id,
+      channelName: channel.name,
+      mode: "existing",
+    });
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      setOpen(false);
+      setActiveIndex(-1);
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setOpen(true);
+      if (filteredChannels.length === 0) return;
+      setActiveIndex((current) => {
+        if (event.key === "ArrowDown") {
+          return current >= filteredChannels.length - 1 ? 0 : current + 1;
+        }
+        return current <= 0 ? filteredChannels.length - 1 : current - 1;
+      });
+      return;
+    }
+    if (
+      event.key === "Enter" &&
+      activeIndex >= 0 &&
+      filteredChannels[activeIndex]
+    ) {
+      event.preventDefault();
+      choose(filteredChannels[activeIndex]);
+    }
+  }
+
+  async function createChannel() {
+    if (!canCreate || busy) return;
+    let idempotencyKey = idempotencyKeys.current.get(createName);
+    if (!idempotencyKey) {
+      idempotencyKey = `channel-${crypto.randomUUID()}`;
+      idempotencyKeys.current.set(createName, idempotencyKey);
+    }
+    try {
+      await onCreate(createName, idempotencyKey);
+      setOpen(false);
+    } catch {
+      // The owning surface renders the product error. Keep this exact name and
+      // key in place so the explicit retry resumes an incomplete handoff.
+    }
+  }
+
   if (state.loading || !state.connectorActive) {
     return (
       <div className={styles.connectorWait} role="status">
@@ -282,34 +421,87 @@ function HubChannelPicker({
     );
   }
   if (state.error) return <p className={styles.notice}>{state.error}</p>;
-  if (state.channels.length === 0) {
-    return <p className={styles.notice}>Your relay did not return any channels.</p>;
-  }
   return (
-    <label>
-      Channel for hub messages
-      <select
+    <div className={styles.channelCombobox}>
+      <label htmlFor="hub-channel-combobox">Channel for hub messages</label>
+      <div
+        className={styles.comboboxControl}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            setOpen(false);
+            setActiveIndex(-1);
+          }
+        }}
+      >
+        <input
+        aria-autocomplete="list"
+        aria-controls="hub-channel-options"
+        aria-expanded={open}
         aria-label="Channel for hub messages"
+        autoComplete="off"
+        id="hub-channel-combobox"
         onChange={(event) => {
-          const channel = state.channels.find(
-            (item) => item.id === event.target.value,
-          );
+          setQuery(event.target.value);
+          setOpen(true);
+          setActiveIndex(-1);
           onChange({
-            channelId: channel?.id ?? "",
-            channelName: channel?.name ?? "",
-            mode: "existing",
+            channelId: "",
+            channelName: event.target.value,
+            mode: "create",
           });
         }}
-        value={value.channelId}
-      >
-        <option value="">Choose a channel…</option>
-        {state.channels.map((channel) => (
-          <option key={channel.id} value={channel.id}>
-            {channel.name}
-          </option>
-        ))}
-      </select>
-    </label>
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
+        placeholder="Search or name a channel…"
+        role="combobox"
+        value={query}
+        />
+        {open ? (
+          <div className={styles.comboboxMenu} id="hub-channel-options">
+            {filteredChannels.length > 0 ? (
+              <div className={styles.comboboxOptions} role="listbox">
+                {filteredChannels.map((channel, index) => (
+                  <button
+                    aria-selected={index === activeIndex}
+                    className={styles.comboboxOption}
+                    key={channel.id}
+                    onClick={() => choose(channel)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    role="option"
+                    type="button"
+                  >
+                    <span>#{channel.name}</span>
+                    <small>{channel.id}</small>
+                  </button>
+                ))}
+              </div>
+            ) : canCreate ? (
+              <div className={styles.createChannelOffer}>
+                <button
+                  disabled={busy}
+                  onClick={() => void createChannel()}
+                  type="button"
+                >
+                  {busy ? "Creating…" : `Create #${createName}`}
+                </button>
+                <p>
+                  Creates this channel in your community, transfers ownership
+                  to you, and connects it to the hub.
+                </p>
+              </div>
+            ) : (
+              <p className={styles.comboboxEmpty}>
+                Type a channel name to create one.
+              </p>
+            )}
+          </div>
+        ) : null}
+      </div>
+      <p className={styles.channelPickerNote}>
+        Choose an existing channel, or type a new name and use the explicit
+        create action.
+      </p>
+    </div>
   );
 }
 
@@ -324,6 +516,25 @@ function HubSettings({
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [channelSelection, setChannelSelection] =
+    useState<LocalChannelSelection>({
+      channelId: membership.localChannelId,
+      channelName: membership.localChannelName,
+      mode: "existing",
+    });
+  const localChannels = useLocalChannels(
+    membership.communityId,
+    true,
+    request,
+  );
+
+  useEffect(() => {
+    setChannelSelection({
+      channelId: membership.localChannelId,
+      channelName: membership.localChannelName,
+      mode: "existing",
+    });
+  }, [membership.localChannelId, membership.localChannelName]);
 
   useEffect(() => {
     let active = true;
@@ -346,18 +557,26 @@ function HubSettings({
     };
   }, [onChange, request]);
 
+  async function update(next: Partial<HubMembership>) {
+    return request<HubMembership>("/api/shared-channels/hub", "PATCH", {
+      filterList: next.filterList ?? membership.filterList,
+      filterMode: next.filterMode ?? membership.filterMode,
+      ...(next.localChannelId && next.localChannelName
+        ? {
+            localChannelId: next.localChannelId,
+            localChannelName: next.localChannelName,
+          }
+        : {}),
+      receives: next.receives ?? membership.receives,
+      sends: next.sends ?? membership.sends,
+    });
+  }
+
   async function save(next: Partial<HubMembership>) {
     setSaving(true);
     setError("");
     try {
-      onChange(
-        await request<HubMembership>("/api/shared-channels/hub", "PATCH", {
-          filterList: next.filterList ?? membership.filterList,
-          filterMode: next.filterMode ?? membership.filterMode,
-          receives: next.receives ?? membership.receives,
-          sends: next.sends ?? membership.sends,
-        }),
-      );
+      onChange(await update(next));
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -365,8 +584,62 @@ function HubSettings({
     }
   }
 
+  async function createAndChangeChannel(
+    channelName: string,
+    idempotencyKey: string,
+  ) {
+    setSaving(true);
+    setError("");
+    try {
+      const channel = await request<{
+        channelId: string;
+        channelName: string;
+      }>("/api/shared-channels/create-channel", "POST", {
+        channelName,
+        idempotencyKey,
+      });
+      onChange(
+        await update({
+          localChannelId: channel.channelId,
+          localChannelName: channel.channelName,
+        }),
+      );
+    } catch (caught) {
+      setError(errorMessage(caught));
+      throw caught;
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div aria-busy={saving} className={styles.hubSettings}>
+      <div className={styles.channelSetting}>
+        <HubChannelPicker
+          busy={saving}
+          onChange={setChannelSelection}
+          onCreate={createAndChangeChannel}
+          state={localChannels}
+          value={channelSelection}
+        />
+        <button
+          className={styles.secondary}
+          disabled={
+            saving ||
+            !channelSelection.channelId ||
+            channelSelection.channelId === membership.localChannelId
+          }
+          onClick={() =>
+            void save({
+              localChannelId: channelSelection.channelId,
+              localChannelName: channelSelection.channelName,
+            })
+          }
+          type="button"
+        >
+          Change hub channel
+        </button>
+      </div>
       <div className={styles.switches}>
         <label>
           <input

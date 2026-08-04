@@ -1119,6 +1119,9 @@ describe("ConnectorSupervisor addressed routing", () => {
     state.subscribers.get(SOURCE_RELAY)!(notice);
     await settle();
     expect(state.published).toHaveLength(1);
+    // The notice carries its own event id, so the once-per-source-event claim
+    // would not have covered it: nothing even reached that check.
+    expect(state.noticeClaims).toHaveLength(1);
     await supervisor.stop();
   });
 });

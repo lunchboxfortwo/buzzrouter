@@ -27,7 +27,7 @@
 }
 
 .header {
-  padding: 48px 0 32px;
+  padding: 36px 0 28px;
 }
 
 .header > p {
@@ -38,8 +38,9 @@
 
 .header h1 {
   font-size: 34px;
+  font-weight: 680;
   letter-spacing: 0;
-  line-height: 1.15;
+  line-height: 1.12;
   margin: 0;
 }
 
@@ -312,10 +313,10 @@
 
 .explainerLead {
   color: var(--ink-soft);
-  font-size: 14px;
-  line-height: 1.6;
-  margin: 0 0 20px;
-  max-width: 680px;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  margin: 13px 0 0;
+  max-width: 62ch;
 }
 
 .flow {
@@ -1250,7 +1251,11 @@
   }
 
   .header {
-    padding: 32px 0 24px;
+    padding: 28px 0 24px;
+  }
+
+  .header h1 {
+    font-size: 28px;
   }
 
   .flowHeading {

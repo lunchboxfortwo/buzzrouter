@@ -21,7 +21,7 @@
 .page main {
   margin: 0 auto;
   max-width: 920px;
-  padding: 56px 24px 80px;
+  padding: 36px 24px 80px;
 }
 
 .intro {
@@ -30,16 +30,18 @@
 
 .intro h1 {
   font-size: 34px;
-  line-height: 1.15;
+  font-weight: 680;
+  line-height: 1.12;
   margin: 0;
 }
 
 .intro > span {
   color: var(--ink-soft);
   display: block;
-  font-size: 15px;
-  line-height: 1.55;
-  margin-top: 12px;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  margin-top: 13px;
+  max-width: 62ch;
 }
 
 .statusMessages:empty {
@@ -283,7 +285,7 @@
   }
 
   .page main {
-    padding: 36px 16px 60px;
+    padding: 28px 16px 60px;
   }
 
   .intro h1 {

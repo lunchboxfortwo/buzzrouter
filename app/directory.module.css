@@ -198,6 +198,7 @@
 .premiseSub {
   color: var(--ink-soft);
   font-size: 0.98rem;
+  line-height: 1.5;
   margin: 13px 0 0;
   max-width: 62ch;
 }
@@ -1352,7 +1353,7 @@
   }
 
   .premiseHeading {
-    font-size: 2.15rem;
+    font-size: 1.75rem;
   }
 
   .indexStatusCell {

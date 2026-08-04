@@ -4,41 +4,6 @@
 .siteCanvas {
   max-width: 100%;
   overflow-x: clip;
-  --canvas: #f5f6f8;
-  --surface: #ffffff;
-  --surface-muted: #fafbfc;
-  --surface-selected: #efefff;
-  --ink: #111318;
-  --reading-ink: #414958;
-  --ink-soft: #667085;
-  --ink-faint: #667085;
-  --line: #dfe2e8;
-  --line-strong: #c9ced8;
-  --accent: #5657f2;
-  --accent-strong: #4445d8;
-  --accent-soft: #efefff;
-  --positive: #087c5b;
-  --positive-soft: #e8f7f1;
-  --verified-border: #b6dfcf;
-  --caution: #8a5b00;
-  --caution-soft: #fff5d6;
-  --caution-border: #ead59f;
-  --focus: #7957ff;
-  --error: #9d2b22;
-  --error-soft: #fff3f2;
-  --error-border: #f0c9c4;
-  --radius-sm: 6px;
-  --radius-md: 6px;
-  --radius-lg: 6px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --duration: 180ms;
-  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   background-color: var(--canvas);
   color: var(--ink);
   display: flex;
@@ -68,10 +33,10 @@
   display: grid;
   gap: var(--space-5);
   grid-template-columns: auto auto minmax(280px, 1fr);
-  margin: 0 auto;
+  margin: 0;
+  max-width: 1320px;
   min-height: 60px;
   padding: 0 16px;
-  width: min(100% - 32px, 1320px);
 }
 
 /* Pages without a search box keep the nav in the same place as Discover — right

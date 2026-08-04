@@ -10,25 +10,32 @@ describe("parseMessageAddress", () => {
       slug: "trustysquire",
       user: "lunchbox",
       body: "test",
-      explicit: false,
     });
     expect(parseMessageAddress("@trustysquire ship it")).toEqual({
       slug: "trustysquire",
       body: "ship it",
-      explicit: false,
     });
   });
 
-  it("marks a bare address as non-explicit so an unknown one stays quiet", () => {
-    expect(parseMessageAddress("@bob can you look")?.explicit).toBe(false);
-    expect(parseMessageAddress("@[bob] can you look")?.explicit).toBe(true);
+  // What separates addressing from mentioning is position, not brackets: both
+  // forms parse only as the first token, so a caller may treat any parse as
+  // routing intent and bounce it when it resolves to nothing.
+  it("parses only in the addressing position, in either form", () => {
+    expect(parseMessageAddress("@bob can you look")).toMatchObject({
+      slug: "bob",
+    });
+    expect(parseMessageAddress("@[bob] can you look")).toMatchObject({
+      slug: "bob",
+    });
+    expect(parseMessageAddress("hey @bob can you look")).toBeNull();
+    expect(parseMessageAddress("thanks @bob")).toBeNull();
+    expect(parseMessageAddress("ping @bob/alice now")).toBeNull();
   });
 
   it("routes a community-addressed message and strips the address", () => {
     expect(parseMessageAddress("@[trustysquire] ship it")).toEqual({
       slug: "trustysquire",
       body: "ship it",
-      explicit: true,
     });
   });
 
@@ -37,7 +44,6 @@ describe("parseMessageAddress", () => {
       slug: "trustysquire",
       user: "alice",
       body: "ping",
-      explicit: true,
     });
   });
 
@@ -51,7 +57,6 @@ describe("parseMessageAddress", () => {
     expect(parseMessageAddress("  @[buzzrouter]   hello")).toEqual({
       slug: "buzzrouter",
       body: "hello",
-      explicit: true,
     });
   });
 

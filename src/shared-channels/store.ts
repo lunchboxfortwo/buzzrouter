@@ -2255,6 +2255,52 @@ export async function findRoutableCommunityBySlug(
   return row ? { communityId: row.community_id, slug: row.slug } : null;
 }
 
+export type UndeliverableReason = "unknown-destination" | "unknown-user";
+
+/**
+ * Claim the one notice a source event is ever allowed to produce.
+ *
+ * Returns true exactly once per (source endpoint, source event) across every
+ * reader, forever; every later caller gets false and must stay silent.
+ *
+ * This is required, not defensive. A message that does not route is never
+ * ingested, so it never advances `last_event_created_at`, and the connector
+ * re-subscribes from that cursor on every idle rebuild — so the relay keeps
+ * replaying the same unroutable event. Advancing the cursor would not fix it
+ * either: `since` is inclusive (`created_at >= since`), so the event at the
+ * cursor is replayed regardless, and moving the cursor past an event we never
+ * ingested would skip anything older that had not been read yet. Everything
+ * else the connector does with a source event is already idempotent by source
+ * event id; the notice needs its own key, and it has to be durable so a restart
+ * or a second replica cannot post a second one.
+ *
+ * Claimed BEFORE publishing, so the failure mode is a missing notice rather
+ * than a repeated one.
+ */
+export async function claimUndeliverableNotice(
+  pool: Pool,
+  input: {
+    reason: UndeliverableReason;
+    sourceEndpointId: string;
+    sourceEventId: string;
+  },
+): Promise<boolean> {
+  const result = await pool.query<{ source_event_id: string }>(
+    `
+      INSERT INTO bridge_undeliverable_notices (
+        source_endpoint_id,
+        source_event_id,
+        reason
+      )
+      VALUES ($1, $2, $3)
+      ON CONFLICT (source_endpoint_id, source_event_id) DO NOTHING
+      RETURNING source_event_id
+    `,
+    [input.sourceEndpointId, input.sourceEventId, input.reason],
+  );
+  return result.rows.length === 1;
+}
+
 /**
  * Give a community an addressable handle if it does not already have one.
  *

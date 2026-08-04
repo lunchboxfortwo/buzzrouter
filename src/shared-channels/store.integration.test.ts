@@ -14,6 +14,7 @@ import {
 } from "../jobs/provision-peer-channels";
 import { BRIDGE_DELIVERY_QUEUE, configureQueues } from "../jobs/queues";
 import {
+  claimUndeliverableNotice,
   getOpenHubMembership,
   ingestBridgeMessage,
   joinOpenHub,
@@ -458,6 +459,44 @@ describeDatabase("open-hub PostgreSQL integration", () => {
       sends: true,
     });
     expect(updated.filterList).toEqual([home.communityId]);
+  });
+
+  // The bounce notice is the one effect of reading a source event that is not
+  // idempotent on its own, and an unrouted event is re-read on every idle
+  // rebuild. This is the row that makes it once-only; the unit tests run
+  // against a fake pool, so the real conflict target is only proven here.
+  it("hands the right to notice a source event to exactly one caller", async () => {
+    await createConnectedCommunity(pool, "home", homeHost);
+    const first = await createConnectedCommunity(pool, "first");
+    const second = await createConnectedCommunity(pool, "second");
+    await join(first, "first-general");
+    await join(second, "second-general");
+    const endpoints = await pool.query<{ id: string }>(
+      `
+        SELECT endpoints.id
+        FROM shared_channel_endpoints AS endpoints
+        WHERE endpoints.community_id = ANY($1::uuid[])
+        ORDER BY endpoints.community_id
+      `,
+      [[first.communityId, second.communityId]],
+    );
+    const [firstEndpoint, secondEndpoint] = endpoints.rows.map((row) => row.id);
+    const sourceEventId = randomBytes(32).toString("hex");
+    const claim = (sourceEndpointId: string) =>
+      claimUndeliverableNotice(pool, {
+        reason: "unknown-destination",
+        sourceEndpointId,
+        sourceEventId,
+      });
+
+    expect(await claim(firstEndpoint!)).toBe(true);
+    // The rebuild's replay, and a second replica racing it.
+    expect(await claim(firstEndpoint!)).toBe(false);
+    expect(await Promise.all([claim(firstEndpoint!), claim(firstEndpoint!)]))
+      .toEqual([false, false]);
+    // Scoped to the endpoint that read it: another community's channel can
+    // carry an event of the same id and still be answered.
+    expect(await claim(secondEndpoint!)).toBe(true);
   });
 
   /** Runs one provisioning pass with the relay handoff stubbed out. */

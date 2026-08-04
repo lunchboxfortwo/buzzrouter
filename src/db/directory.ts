@@ -170,7 +170,7 @@ export async function listDirectoryCommunities(
                 THEN communities.description
             END,
             catalog.source_description,
-            presence.goals,
+            NULLIF(presence.goals, ''),
             latest.relay_description
           ) AS description,
           COALESCE(

@@ -302,10 +302,12 @@ export async function buildCommunitySummary(
 
 /**
  * Robustly extracts `{ goals, recentProjects, focus }` from a model completion.
- * Falls back to treating the raw text as the goals blurb when it is not valid
- * JSON, so a well-behaved-but-unfenced model never yields an empty summary. Any
- * `focus` that is not one of the known slugs is coerced to null — a wrong focus
- * is worse than none, so only an exact vocabulary match is trusted.
+ * Falls back to treating the raw text as the goals blurb only when it is NOT
+ * valid JSON (a well-behaved-but-unfenced model), so plain prose still lands as
+ * goals. When the text DOES parse as JSON but carries no usable `goals`, the
+ * blurb's goals is empty rather than the raw JSON — a broken completion must not
+ * become a community's public profile. Any `focus` that is not one of the known
+ * slugs is coerced to null — a wrong focus is worse than none.
  */
 export function parseBlurb(content: string): CommunityBlurb {
   const trimmed = content.trim();
@@ -317,10 +319,14 @@ export function parseBlurb(content: string): CommunityBlurb {
       focus?: unknown;
       tagline?: unknown;
     };
+    // The content parsed as JSON, so `trimmed` IS that JSON text — never fall
+    // back to it as the blurb. A model that returns a well-formed object but no
+    // usable `goals` (e.g. the degenerate `{"":"goals","":"tagline",...}` echo
+    // of the field names) yields an empty blurb, not the raw JSON as a profile.
     const goals =
       typeof parsed.goals === "string" && parsed.goals.trim().length > 0
         ? parsed.goals.trim()
-        : trimmed;
+        : "";
     const recentProjects = Array.isArray(parsed.recentProjects)
       ? parsed.recentProjects
           .filter((item): item is string => typeof item === "string")

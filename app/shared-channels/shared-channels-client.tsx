@@ -39,6 +39,37 @@ const IDLE_LOCAL_CHANNELS: LocalChannelsState = {
   loading: false,
 };
 
+/**
+ * Read a response body that is *supposed* to be our JSON error shape but may
+ * not be.
+ *
+ * Nothing between the browser and the route is obliged to speak JSON: when a
+ * request outlives the Cloudflare edge timeout the browser gets Cloudflare's
+ * HTML error page, and an unguarded `response.json()` then throws
+ * `Unexpected token '<', "<!DOCTYPE "... is not valid JSON` — burying the real
+ * failure under a parser complaint. Fall back to naming the actual HTTP status
+ * so the user sees the problem instead of the symptom.
+ */
+async function readJsonResponse<T>(
+  response: Response,
+): Promise<T & { error?: string; message?: string }> {
+  const body = await response.text();
+  try {
+    return JSON.parse(body) as T & { error?: string; message?: string };
+  } catch {
+    if (response.ok) {
+      throw new Error(
+        `The server returned an unreadable response (HTTP ${response.status}).`,
+      );
+    }
+    throw new Error(
+      response.status === 504 || response.status === 524
+        ? "The relay did not answer in time, so the request was cut off before it finished. Nothing was changed — try again."
+        : `The server returned an error (HTTP ${response.status}).`,
+    );
+  }
+}
+
 // The install-token and activation endpoints are authorized by the single-use
 // token in the body, not a NIP-98 signature, so they use a plain fetch. The
 // error body is the shared `{ error: <code> }` shape errorMessage() maps.
@@ -51,10 +82,7 @@ async function postInstallerAction<T>(
     headers: { "content-type": "application/json" },
     method: "POST",
   });
-  const result = (await response.json()) as T & {
-    error?: string;
-    message?: string;
-  };
+  const result = await readJsonResponse<T>(response);
   if (!response.ok) {
     throw new Error(result.message ?? result.error ?? "Request failed.");
   }
@@ -86,10 +114,7 @@ async function sessionRequest<T>(
     },
     method,
   });
-  const result = (await response.json()) as T & {
-    error?: string;
-    message?: string;
-  };
+  const result = await readJsonResponse<T>(response);
   if (!response.ok) {
     throw new Error(result.message ?? result.error ?? "Request failed.");
   }

@@ -127,6 +127,21 @@ Key routing rules:
   idempotency key so retries resume. Never replace this with an unjournaled 9007
   publish or let a successful request return while the bridge still owns the
   channel.
+- Two Buzz group-management tag rules are load-bearing and fail SILENTLY when
+  broken — both stranded live handoffs at `created`. (1) The `h` tag MUST be a
+  UUID: Buzz parses it with `val.parse::<Uuid>()` and drops anything else. On
+  9007 the `h` tag is optional, so a non-UUID id is still accepted and the relay
+  mints its own instead — the channel exists under an id you never learn, and
+  every later 9000 is refused `invalid: channel-scoped events must include an h
+  tag`. (2) The role rides in a separate `["role", <role>]` tag, NOT NIP-29's
+  `["p", <pubkey>, <role>]` third slot; an absent `role` tag means "no role
+  change", which lands a new member at `member` — so a promote appears to
+  succeed and leaves the channel ownerless once the bridge steps down. Note also
+  that a 9000 whose side effect fails is still stored and still OK-true'd (Buzz
+  only logs the failure relay-side), so an accepted publish is NOT proof the
+  role changed. The test double in
+  `src/shared-channels/channel-handoff.integration.test.ts` now enforces both
+  rules; keep it that way — a permissive double is what let this ship.
 - The hub is one `shared_channels` row with N `participant` endpoints. Each
   endpoint owns `sends`, `receives`, one `filter_mode`, and one UUID
   `filter_list`. Fan-out creates one ordinary `bridge_deliveries` row/job per

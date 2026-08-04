@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import type { Event, EventTemplate } from "nostr-tools/core";
 import { finalizeEvent } from "nostr-tools/pure";
@@ -264,6 +264,15 @@ async function runStep(
   }
 }
 
+/**
+ * Buzz reads the requested role from a dedicated `role` tag, NOT from the
+ * third element of the `p` tag that NIP-29 puts it in: `validate_admin_event`
+ * and `handle_put_user` both call `extract_tag_value(event, "role")`, and an
+ * absent `role` tag means "no role change", which silently lands a brand new
+ * member at `member`. Emitting both keeps the NIP-29 shape while giving Buzz
+ * the tag it actually reads — without it the promote would appear to succeed
+ * and still leave the channel with no owner once the bridge stepped down.
+ */
 function putUserTemplate(
   channelId: string,
   pubkey: string,
@@ -275,6 +284,7 @@ function putUserTemplate(
     tags: [
       ["h", channelId],
       ["p", pubkey, role],
+      ["role", role],
     ],
   };
 }
@@ -352,7 +362,7 @@ async function reserveHandoff(
       input.connection.communityId,
       input.requesterPubkey,
       input.connection.relayUrl,
-      deriveChannelId(input.channelName),
+      deriveChannelId(),
       input.channelName,
       input.idempotencyKey,
     ],
@@ -477,15 +487,21 @@ function assertIdempotencyKey(key: unknown): void {
 }
 
 /**
- * A self-describing, unique group id: a slug of the channel name plus random
- * entropy so two links to the same peer never collide on the relay.
+ * The channel's group id, which MUST be a UUID.
+ *
+ * Buzz parses the `h` tag with `val.parse::<Uuid>()` and silently drops
+ * anything else. On kind 9007 the `h` tag is optional, so a non-UUID id is
+ * accepted and the relay mints its own `gen_random_uuid()` instead — the
+ * channel is created under an id we never learn. Every later kind 9000 then
+ * carries an `h` the relay cannot resolve, and because 9000 requires channel
+ * scope it is refused with "invalid: channel-scoped events must include an h
+ * tag". That is what stranded three handoffs at `created`. A UUID here is
+ * honoured verbatim (`create_channel_with_id`), so the promote/demote steps
+ * address the channel that was actually created.
+ *
+ * The human-readable part of the channel lives in its name, which the relay
+ * stores separately; the id is opaque on both sides.
  */
-function deriveChannelId(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  const suffix = randomBytes(4).toString("hex");
-  return slug ? `${slug}-${suffix}` : `link-${suffix}`;
+function deriveChannelId(): string {
+  return randomUUID();
 }

@@ -63,9 +63,11 @@ describeDatabase("bridge channel ownership handoff", () => {
       new SingleRelayFactory(relay),
     );
 
-    // The owner-entered name is retained and the id is derived from it.
+    // The owner-entered name is retained. The id must be a UUID: Buzz parses
+    // the `h` tag as one and silently substitutes its own id otherwise, which
+    // leaves every later 9000 addressing a channel that does not exist.
     expect(result.channelName).toBe("Beta Collective");
-    expect(result.channelId).toMatch(/^beta-collective-[0-9a-f]{8}$/);
+    expect(result.channelId).toMatch(UUID_PATTERN);
 
     const create = relay.byKind(9_007);
     expect(create).toHaveLength(1);
@@ -75,23 +77,18 @@ describeDatabase("bridge channel ownership handoff", () => {
     // Ownership transfers to the relay owner, then the bot steps down to member.
     const puts = relay.byKind(9_000);
     expect(puts).toHaveLength(2);
-    expect(tag(puts[0], "p")).toEqual([
-      "p",
-      community.ownerPubkey,
-      "owner",
-    ]);
-    expect(tag(puts[1], "p")).toEqual([
-      "p",
-      community.bridgePubkey,
-      "member",
-    ]);
+    expect(tag(puts[0], "p")?.[1]).toBe(community.ownerPubkey);
+    expect(tag(puts[1], "p")?.[1]).toBe(community.bridgePubkey);
 
-    // The bot must NOT end as the owner of a channel in someone else's community.
-    const botFinalRole = relay
-      .byKind(9_000)
-      .filter((event) => tag(event, "p")?.[1] === community.bridgePubkey)
-      .at(-1);
-    expect(tag(botFinalRole!, "p")?.[2]).toBe("member");
+    // What the relay actually stored — the roles ride in `role` tags, so a
+    // promote that only fills the `p` tag's third slot would land here as
+    // "member" and leave the channel ownerless.
+    expect(relay.memberRoles.get(result.channelId)).toEqual(
+      new Map([
+        [community.ownerPubkey, "owner"],
+        [community.bridgePubkey, "member"],
+      ]),
+    );
 
     const handoff = await getChannelHandoff(pool, {
       idempotencyKey,
@@ -351,14 +348,34 @@ function tag(event: Event, name: string): string[] | undefined {
   return event.tags.find((entry) => entry[0] === name);
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The `h` tag as Buzz reads it: a UUID, or nothing at all. */
+function uuidHTag(event: Event): string | undefined {
+  const value = event.tags.find((entry) => entry[0] === "h")?.[1];
+  return value && UUID_PATTERN.test(value) ? value : undefined;
+}
+
 /**
  * A relay double that records every published event and can be told to reject
  * the ownership-promotion publish, so the create-then-fail-to-hand-off path is
  * exercised deterministically.
+ *
+ * It enforces the two rules Buzz enforces that a permissive double used to hide
+ * (see `crates/buzz-relay/src/handlers/ingest.rs` + `side_effects.rs`):
+ *   - the `h` tag is parsed as a UUID, and kind 9000 is refused outright when it
+ *     does not resolve to an existing channel ("channel-scoped events must
+ *     include an h tag");
+ *   - the role comes from a `role` tag, so `["p", pubkey, role]` alone leaves a
+ *     new member at `member`.
+ * `memberRoles` therefore records what the relay would really have stored.
  */
 class RecordingRelay implements RelayConnection {
   readonly published: Event[] = [];
   readonly rosterRoles = new Map<string, string>();
+  /** channelId -> pubkey -> role, as the relay would have stored it. */
+  readonly memberRoles = new Map<string, Map<string, string>>();
   failDemote = false;
   failPromote = false;
   rosterAvailable = true;
@@ -389,6 +406,24 @@ class RecordingRelay implements RelayConnection {
       put?.[2] === "member"
     ) {
       throw new Error("relay rejected the demotion");
+    }
+    const channelId = uuidHTag(event);
+    if (event.kind === 9_007) {
+      // A non-UUID `h` is dropped and the relay invents its own id, so the
+      // caller never learns where the channel landed.
+      this.memberRoles.set(channelId ?? randomUUID(), new Map());
+    }
+    if (event.kind === 9_000) {
+      const members = channelId ? this.memberRoles.get(channelId) : undefined;
+      if (!members) {
+        throw new Error(
+          "invalid: channel-scoped events must include an h tag",
+        );
+      }
+      const target = put?.[1];
+      if (!target) throw new Error("invalid: missing p tag");
+      const role = event.tags.find((entry) => entry[0] === "role")?.[1];
+      members.set(target, role ?? members.get(target) ?? "member");
     }
     this.published.push(event);
   }

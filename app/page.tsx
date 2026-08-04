@@ -434,9 +434,20 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
     >
       <header className={styles.inspectorHeader}>
         <div className={styles.inspectorHeading}>
-          <span aria-hidden="true" className={styles.inspectorInsignia} style={tone}>
-            {monogram(community.displayName)}
-          </span>
+          {community.iconUrl ? (
+            <Image
+              alt=""
+              className={styles.inspectorInsignia}
+              height={52}
+              src={community.iconUrl}
+              unoptimized
+              width={52}
+            />
+          ) : (
+            <span aria-hidden="true" className={styles.inspectorInsignia} style={tone}>
+              {monogram(community.displayName)}
+            </span>
+          )}
           <div>
             <div className={styles.inspectorNameRow}>
               <h2 className={styles.inspectorTitle} id="inspector-title">

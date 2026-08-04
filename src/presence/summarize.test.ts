@@ -131,6 +131,19 @@ describe("parseBlurb", () => {
     });
   });
 
+  it("returns an empty blurb when valid JSON carries no usable goals", () => {
+    // The model echoed the field NAMES as values under empty keys; this parses
+    // (last key wins) but has no `goals`. It must never become the profile.
+    expect(
+      parseBlurb('{"": "goals", "": "tagline", "": "recentProjects", "": "focus"}'),
+    ).toEqual({
+      focus: null,
+      goals: "",
+      recentProjects: [],
+      tagline: null,
+    });
+  });
+
   it("drops non-string project entries", () => {
     expect(
       parseBlurb('{"goals":"G","recentProjects":["A",1,null,"B"]}'),

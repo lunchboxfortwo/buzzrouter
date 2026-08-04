@@ -68,7 +68,25 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The browser download is the single most expensive step in CI (~30s of a
+      # ~130s run) and changes only when the Playwright dependency does, so key
+      # the cache on its exact locked version. On a hit, skip the install
+      # entirely: ubuntu-latest already ships the shared libraries chromium
+      # needs, so `--with-deps` (an apt-get run) is only worth paying on a miss.
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: |
+          echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browser
+        id: playwright-cache
+        uses: actions/cache@640a1c2554105b57832a23eea0b4672fc7a790d5 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Playwright browser
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Test shared-channel workflow

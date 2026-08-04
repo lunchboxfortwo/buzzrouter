@@ -19,9 +19,9 @@
 
 
 .page main {
-  margin: 0 auto;
+  margin: 0;
   max-width: 920px;
-  padding: 36px 24px 80px;
+  padding: 36px 16px 80px;
 }
 
 .intro {

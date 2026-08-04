@@ -1,9 +1,9 @@
 .page {
   color: var(--ink);
   flex: 1;
-  margin: 0 auto;
+  margin: 0;
   max-width: 1080px;
-  padding: 0 28px 80px;
+  padding: 0 16px 80px;
 }
 
 .page a {

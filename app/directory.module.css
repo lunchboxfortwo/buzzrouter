@@ -176,14 +176,25 @@
 
 /* Compact directory premise */
 
+/* Entrance for the community list. The reference existed but its keyframes
+   were dropped in the structural-shell refactor (#74), leaving a dangling
+   animation; restored here. Suppressed under prefers-reduced-motion below. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
 .workspaceShell {
-  margin-inline: auto;
+  margin: 0;
+  max-width: 1512px;
   padding-block: var(--space-3) var(--space-4);
-  width: min(100% - 24px, 1512px);
+  padding-inline: 16px;
 }
 
 .premiseBand {
-  padding: 24px 4px 20px;
+  padding: 24px 0 20px;
 }
 
 .premiseHeading {

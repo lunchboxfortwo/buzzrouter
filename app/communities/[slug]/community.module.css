@@ -121,7 +121,7 @@
   padding: 0 22px;
   border-radius: var(--radius-sm);
   background: var(--accent);
-  color: #fff;
+  color: var(--surface);
   font-weight: 660;
   font-size: 1rem;
   border: 0;
@@ -191,7 +191,7 @@
   width: 19px;
   height: 19px;
   fill: none;
-  stroke: #fff;
+  stroke: var(--surface);
   stroke-width: 1.9;
   stroke-linecap: round;
   stroke-linejoin: round;

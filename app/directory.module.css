@@ -546,7 +546,7 @@
 
 .indexStatusCell {
   align-items: center;
-  color: #316d61;
+  color: var(--positive);
   display: inline-flex;
   font-size: 0.79rem;
   font-weight: 620;
@@ -619,7 +619,7 @@
   background: var(--accent);
   border: none;
   border-radius: var(--radius-sm);
-  color: #fff;
+  color: var(--surface);
   cursor: pointer;
   font-size: 0.8rem;
   font-weight: 660;
@@ -859,7 +859,7 @@
   background: var(--accent);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  color: #fff;
+  color: var(--surface);
   cursor: pointer;
   display: inline-flex;
   font-size: 0.92rem;
@@ -1009,7 +1009,7 @@
 }
 
 .inspectorSection p {
-  color: #414958;
+  color: var(--reading-ink);
   font-size: 0.84rem;
   line-height: 1.55;
   margin: 0;
@@ -1032,7 +1032,7 @@
 }
 
 .reasonList li {
-  color: #414958;
+  color: var(--reading-ink);
   font-size: 0.84rem;
   line-height: 1.5;
   padding-left: 16px;

@@ -75,7 +75,7 @@
 
 .formPanel input,
 .formPanel select {
-  background: #fafbfc;
+  background: var(--surface-muted);
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--ink);
@@ -132,7 +132,7 @@
 }
 
 .fieldError {
-  color: #9d2b22;
+  color: var(--error);
   font-size: 12px;
   font-weight: 600;
   grid-column: 1 / -1;
@@ -163,7 +163,7 @@
 }
 
 .preview {
-  background: var(--surface-muted, #f8f9fb);
+  background: var(--surface-muted);
   border: 1px solid var(--line);
   padding: 20px;
   position: sticky;
@@ -211,7 +211,7 @@
 }
 
 .previewLogoPlaceholder {
-  background: var(--surface-muted, #f1f1f4);
+  background: var(--surface-muted);
   border: 1px dashed var(--line);
 }
 
@@ -241,7 +241,7 @@
 }
 
 .previewTag {
-  background: var(--surface-muted, #f1f1f4);
+  background: var(--surface-muted);
   border: 1px solid var(--line);
   border-radius: 4px;
   color: var(--ink-soft);
@@ -261,15 +261,15 @@
 }
 
 .success {
-  background: #e8f7f1;
-  border-color: #b6dfcf;
+  background: var(--positive-soft);
+  border-color: var(--verified-border);
   color: var(--positive);
 }
 
 .error {
-  background: #fff3f2;
-  border-color: #f0c9c4;
-  color: #9d2b22;
+  background: var(--error-soft);
+  border-color: var(--error-border);
+  color: var(--error);
 }
 
 .honeypot {

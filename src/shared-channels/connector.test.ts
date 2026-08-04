@@ -11,12 +11,18 @@ import {
   verifyEvent,
 } from "nostr-tools/pure";
 
+import { parseMessageAddress } from "./addressing";
+import {
+  canonicalizeSourceEvent,
+  hasBuzzRouterProjectionMarker,
+} from "./bridge";
 import {
   ConnectorSupervisor,
   isOperatedCommunityRelay,
   NostrRelayConnection,
   parseWrappingKeyFile,
   reconcileHomeCommunityMembers,
+  undeliverableNotice,
   type RelayConnection,
 } from "./connector";
 import {
@@ -630,6 +636,492 @@ describe("ConnectorSupervisor operated-community routing", () => {
     await supervisor.reconcile();
     expect(state.connectCalls).toBe(2);
     expect(state.subscriptions).toHaveLength(2);
+    await supervisor.stop();
+  });
+});
+
+describe("ConnectorSupervisor addressed routing", () => {
+  const SOURCE_COMMUNITY = "11111111-1111-4111-8111-111111111111";
+  const DESTINATION_COMMUNITY = "22222222-2222-4222-8222-222222222222";
+  const SOURCE_CONNECTION = "33333333-3333-4333-8333-333333333333";
+  const DESTINATION_CONNECTION = "44444444-4444-4444-8444-444444444444";
+  const SHARED_CHANNEL = "55555555-5555-4555-8555-555555555555";
+  const SOURCE_ENDPOINT = "66666666-6666-4666-8666-666666666666";
+  const SOURCE_RELAY = "wss://source.example";
+  const DESTINATION_RELAY = "wss://destination.example";
+  const ALICE = "a".repeat(64);
+  const BOB = "b".repeat(64);
+
+  /**
+   * A supervisor holding a live session for both ends of one hub: the source
+   * community whose channel is read, and the `@destination` community whose
+   * roster answers `@destination/user`.
+   *
+   * The source relay is a store, not a pipe: everything posted to the bridged
+   * channel is kept, and every (re)subscription replays what it holds from the
+   * route's cursor. That is the behaviour that turned one bounce into a storm,
+   * so a harness that only pushes live events cannot see the bug at all.
+   */
+  function routingHarness(
+    options: {
+      /** Clock cost of one profile read, for exercising the index deadline. */
+      profileCostMs?: number;
+      profiles?: Record<string, string | null>;
+      rosterReadable?: boolean;
+    } = {},
+  ) {
+    const wrappingKey = randomBytes(32);
+    const keys = new Map([
+      [SOURCE_CONNECTION, generateSecretKey()],
+      [DESTINATION_CONNECTION, generateSecretKey()],
+    ]);
+    const connections = [
+      {
+        communityId: SOURCE_COMMUNITY,
+        id: SOURCE_CONNECTION,
+        relayUrl: SOURCE_RELAY,
+      },
+      {
+        communityId: DESTINATION_COMMUNITY,
+        id: DESTINATION_CONNECTION,
+        relayUrl: DESTINATION_RELAY,
+      },
+    ];
+    const state = {
+      /** Everything the source relay stores for the bridged channel. */
+      channelLog: [] as Event[],
+      destinationLookups: [] as string[],
+      /** Every attempt to claim a notice, whether or not it won. */
+      noticeClaims: [] as string[],
+      claimedNotices: new Set<string>(),
+      profileReads: 0,
+      published: [] as Event[],
+      rosterReads: 0,
+      subscribers: new Map<string, (event: Event) => void>(),
+    };
+    const pool = {
+      async connect() {
+        return {
+          async query() {
+            return { rows: [] };
+          },
+          release() {},
+        };
+      },
+      async query(sql: string, params?: unknown[]) {
+        // claimUndeliverableNotice, standing in for the real
+        // INSERT ... ON CONFLICT DO NOTHING RETURNING: a row comes back to the
+        // first claimer of a (source endpoint, source event) and to nobody
+        // after it, for as long as the table exists.
+        if (sql.includes("INSERT INTO bridge_undeliverable_notices")) {
+          const key = `${params?.[0]}:${params?.[1]}`;
+          state.noticeClaims.push(key);
+          if (state.claimedNotices.has(key)) return { rows: [] };
+          state.claimedNotices.add(key);
+          return { rows: [{ source_event_id: params?.[1] }] };
+        }
+        if (sql.includes("FROM community_connections")) {
+          return {
+            rows: connections.map((connection) => {
+              const privateKey = keys.get(connection.id)!;
+              const encrypted = encryptConnectorPrivateKey(
+                privateKey,
+                wrappingKey,
+                connection.communityId,
+              );
+              return {
+                bridge_pubkey: getPublicKey(privateKey),
+                community_id: connection.communityId,
+                encrypted_private_key: encrypted.ciphertext,
+                health: "healthy",
+                id: connection.id,
+                private_key_auth_tag: encrypted.authTag,
+                private_key_nonce: encrypted.nonce,
+                relay_url_snapshot: connection.relayUrl,
+                state: "active",
+                wrapping_key_version: 1,
+              };
+            }),
+          };
+        }
+        // findRoutableCommunityBySlug: only `@destination` is connected.
+        if (sql.includes("FROM communities")) {
+          const slug = String(params?.[1] ?? "");
+          state.destinationLookups.push(slug);
+          return slug === "destination"
+            ? {
+                rows: [{
+                  community_id: DESTINATION_COMMUNITY,
+                  slug: "destination",
+                }],
+              }
+            : { rows: [] };
+        }
+        if (sql.includes("FROM shared_channel_endpoints AS endpoints")) {
+          return {
+            rows: [{
+              connection_id: SOURCE_CONNECTION,
+              last_event_created_at: 0,
+              local_channel_id: "general",
+              shared_channel_id: SHARED_CHANNEL,
+              source_endpoint_id: SOURCE_ENDPOINT,
+            }],
+          };
+        }
+        return { rows: [] };
+      },
+    };
+    const profiles = options.profiles ?? { [ALICE]: "Alice", [BOB]: null };
+    const relayFactory = {
+      async connect(relayUrl: string) {
+        const relay: RelayConnection = {
+          close() {},
+          async getProfileName(pubkey: string) {
+            if (relayUrl === DESTINATION_RELAY) {
+              state.profileReads += 1;
+              if (options.profileCostMs) {
+                vi.setSystemTime(Date.now() + options.profileCostMs);
+              }
+            }
+            return profiles[pubkey] ?? null;
+          },
+          async hasEvent() {
+            return false;
+          },
+          async listGroups() {
+            return [];
+          },
+          async publish(event: Event) {
+            if (relayUrl !== SOURCE_RELAY) return;
+            state.published.push(event);
+            // A notice is an ordinary kind-9 in the channel, so the relay
+            // stores it and replays it like any other message.
+            state.channelLog.push(event);
+          },
+          async readGroupMembers() {
+            return new Set<string>();
+          },
+          async readRoster() {
+            return new Set<string>();
+          },
+          async readRosterRoles() {
+            if (relayUrl !== DESTINATION_RELAY) return new Map();
+            state.rosterReads += 1;
+            if (options.rosterReadable === false) return null;
+            return new Map(
+              Object.keys(profiles).map((pubkey) => [pubkey, "member"]),
+            );
+          },
+          subscribe(routes, _watchRoster, onEvent) {
+            state.subscribers.set(relayUrl, onEvent);
+            if (relayUrl !== SOURCE_RELAY || routes.length === 0) return;
+            // `since` is inclusive, so a REQ replays the event sitting exactly
+            // at the cursor as well as everything after it.
+            const since = Math.min(
+              ...routes.map((route) => route.lastEventCreatedAt),
+            );
+            for (const stored of state.channelLog) {
+              if (stored.created_at >= since) onEvent(stored);
+            }
+          },
+        };
+        return relay;
+      },
+    };
+    /** A process: same relay, same database, no memory of the last one. */
+    const startProcess = () =>
+      new ConnectorSupervisor(
+        pool as never,
+        {} as never,
+        { async getKey() { return wrappingKey; } },
+        relayFactory,
+      );
+    const supervisor = startProcess();
+
+    return {
+      startProcess,
+      state,
+      supervisor,
+      /**
+       * What the connector does when a session has gone quiet: drop it and
+       * subscribe again from the route cursor, which an unrouted message never
+       * advances.
+       */
+      async rebuild() {
+        vi.setSystemTime(Date.now() + 120_000);
+        await supervisor.reconcile();
+      },
+      /** Post a message into the source community's bridged channel. */
+      say(content: string, privateKey = generateSecretKey()): Event {
+        const event = finalizeEvent(
+          {
+            content,
+            created_at: Math.floor(Date.now() / 1_000),
+            kind: 9,
+            tags: [["h", "general"]],
+          },
+          privateKey,
+        );
+        state.channelLog.push(event);
+        state.subscribers.get(SOURCE_RELAY)!(event);
+        return event;
+      },
+      /** Let every immediately-resolving relay/pool step run to completion. */
+      async settle() {
+        for (let tick = 0; tick < 10; tick += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      },
+    };
+  }
+
+  it("bounces a bare first-token address that names no connected community", async () => {
+    const { say, settle, state, supervisor } = routingHarness();
+    await supervisor.start();
+
+    say("@trustysqire hello");
+    await settle();
+
+    expect(state.published).toHaveLength(1);
+    expect(state.published[0]).toMatchObject({
+      content: undeliverableNotice("trustysqire"),
+      kind: 9,
+      tags: [["h", "general"], ["br", "notice", "unknown-destination"]],
+    });
+    expect(state.published[0].content).toContain("@trustysqire");
+    await supervisor.stop();
+  });
+
+  // THE STORM. #97 shipped without this test and posted ~20 identical notices
+  // into a live channel, about one a minute, until it was reverted.
+  //
+  // Nothing about the notice itself was looping: the source message was. A
+  // message that does not route is never ingested, so it never advances
+  // `last_event_created_at`; the idle rebuild re-subscribes from that cursor;
+  // the relay replays the same unroutable event; the connector bounces it
+  // again. Ingestion has always been idempotent by source event id — the
+  // notice was the one effect that was not.
+  it("bounces a source event once however often the rebuild re-reads it", async () => {
+    const { rebuild, say, settle, state, supervisor } = routingHarness();
+    await supervisor.start();
+
+    const source = say("@trustysqire hello");
+    await settle();
+    expect(state.published).toHaveLength(1);
+
+    await rebuild();
+    await settle();
+    await rebuild();
+    await settle();
+
+    // The event really was re-read each time — the claim is what stayed the
+    // notice, not a subscription that quietly stopped replaying.
+    expect(state.noticeClaims).toEqual([
+      `${SOURCE_ENDPOINT}:${source.id}`,
+      `${SOURCE_ENDPOINT}:${source.id}`,
+      `${SOURCE_ENDPOINT}:${source.id}`,
+    ]);
+    expect(state.published).toHaveLength(1);
+    await supervisor.stop();
+  });
+
+  // Same loop, same claim, for the half that needs the destination roster.
+  it("bounces an unknown user once however often the rebuild re-reads it", async () => {
+    const { rebuild, say, settle, state, supervisor } = routingHarness();
+    await supervisor.start();
+
+    say("@destination/nosuchperson hello");
+    await settle();
+    expect(state.published).toHaveLength(1);
+
+    await rebuild();
+    await settle();
+
+    expect(state.noticeClaims).toHaveLength(2);
+    expect(state.published).toHaveLength(1);
+    await supervisor.stop();
+  });
+
+  // A restart is the same replay with none of the process's memory, which is
+  // why the claim is a database row and not a Set on the supervisor.
+  it("does not bounce again after a restart replays the channel", async () => {
+    const { say, settle, startProcess, state, supervisor } = routingHarness();
+    await supervisor.start();
+    say("@trustysqire hello");
+    await settle();
+    await supervisor.stop();
+    expect(state.published).toHaveLength(1);
+
+    const restarted = startProcess();
+    await restarted.start();
+    await settle();
+
+    expect(state.published).toHaveLength(1);
+    await restarted.stop();
+  });
+
+  // The core of the product: only the addressing position routes, so an
+  // ordinary mention must be neither mirrored nor answered.
+  it.each([
+    ["a mid-sentence mention", "hey @trustysqire can you look"],
+    ["a trailing mention", "thanks @trustysqire"],
+    ["ordinary conversation", "just talking here"],
+  ])("neither routes nor bounces %s", async (_label, content) => {
+    const { say, settle, state, supervisor } = routingHarness();
+    await supervisor.start();
+
+    say(content);
+    await settle();
+
+    expect(state.published).toHaveLength(0);
+    expect(state.destinationLookups).toHaveLength(0);
+    await supervisor.stop();
+  });
+
+  it("bounces an unknown user in a community that is connected", async () => {
+    const { say, settle, state, supervisor } = routingHarness();
+    await supervisor.start();
+
+    say("@destination/nosuchperson hello");
+    await settle();
+
+    expect(state.published).toHaveLength(1);
+    expect(state.published[0]).toMatchObject({
+      content: undeliverableNotice("destination", "nosuchperson"),
+      tags: [["h", "general"], ["br", "notice", "unknown-user"]],
+    });
+    // The notice has to say which half failed, not just that something did.
+    expect(state.published[0].content).toContain("@destination is connected");
+    expect(state.published[0].content).toContain("nobody there is named");
+    await supervisor.stop();
+  });
+
+  it("delivers to a user the destination roster knows, whatever the casing", async () => {
+    const { say, settle, state, supervisor } = routingHarness();
+    await supervisor.start();
+
+    say("@destination/ALICE hello");
+    await settle();
+
+    expect(state.published).toHaveLength(0);
+    expect(state.rosterReads).toBe(1);
+    await supervisor.stop();
+  });
+
+  it("delivers to a member addressed by pubkey", async () => {
+    const { say, settle, state, supervisor } = routingHarness();
+    await supervisor.start();
+
+    say(`@destination/${BOB} hello`);
+    await settle();
+
+    expect(state.published).toHaveLength(0);
+    expect(state.rosterReads).toBe(1);
+    await supervisor.stop();
+  });
+
+  // Our own connection being unhealthy is not evidence about their roster.
+  it("does not bounce a user when the destination roster cannot be read", async () => {
+    const { say, settle, state, supervisor } = routingHarness({
+      rosterReadable: false,
+    });
+    await supervisor.start();
+
+    say("@destination/nosuchperson hello");
+    await settle();
+
+    expect(state.published).toHaveLength(0);
+    await supervisor.stop();
+  });
+
+  // A bounce per message is fine; re-reading the roster per message is not.
+  it("reuses one roster read across a burst of bounces", async () => {
+    const { say, settle, state, supervisor } = routingHarness();
+    await supervisor.start();
+
+    say("@destination/nosuchperson one");
+    await settle();
+    say("@destination/nosuchperson two");
+    say("@destination/nosuchperson three");
+    await settle();
+
+    expect(state.published).toHaveLength(3);
+    expect(state.rosterReads).toBe(1);
+    // Profiles are cached for the life of the connection, so the roster
+    // members are resolved once and not once per message.
+    expect(state.profileReads).toBe(2);
+    await supervisor.stop();
+  });
+
+  // A burst arriving before the first index finishes must share that one build.
+  it("reads the destination roster once for concurrent addressed messages", async () => {
+    const { say, settle, state, supervisor } = routingHarness();
+    await supervisor.start();
+
+    say("@destination/nosuchperson one");
+    say("@destination/nosuchperson two");
+    say("@destination/nosuchperson three");
+    await settle();
+
+    expect(state.published).toHaveLength(3);
+    expect(state.rosterReads).toBe(1);
+    await supervisor.stop();
+  });
+
+  // Validation must never become an outage. A roster too slow to index inside
+  // the budget delivers unvalidated instead of holding the message.
+  it("abandons an index that runs long instead of bouncing on a partial one", async () => {
+    const profiles = Object.fromEntries(
+      Array.from({ length: 64 }, (_, member) => [
+        member.toString(16).padStart(64, "0"),
+        `member-${member}`,
+      ]),
+    );
+    const { say, settle, state, supervisor } = routingHarness({
+      profileCostMs: 1_000,
+      profiles,
+    });
+    await supervisor.start();
+
+    // `member-0` IS on the roster, but the index never got far enough to say
+    // so — and a half-built index must not be trusted to deny anyone.
+    say("@destination/nosuchperson one");
+    say("@destination/member-0 two");
+    await settle();
+
+    expect(state.published).toHaveLength(0);
+    expect(state.profileReads).toBeLessThan(64);
+    await supervisor.stop();
+  });
+
+  it("cannot re-ingest or re-bounce its own notice", async () => {
+    const { say, settle, state, supervisor } = routingHarness();
+    await supervisor.start();
+
+    say("@trustysqire hello");
+    await settle();
+    const notice = state.published[0]!;
+
+    // The notice is an ordinary kind-9 the bridge will read back. It carries no
+    // projection marker, so being bridge-authored is what stops it — and its
+    // text is unaddressed, so it routes nowhere even if that check is reached.
+    expect(hasBuzzRouterProjectionMarker(notice)).toBe(false);
+    expect(parseMessageAddress(notice.content)).toBeNull();
+    expect(
+      canonicalizeSourceEvent(notice, {
+        bridgePubkey: notice.pubkey,
+        localChannelId: "general",
+        sharedChannelId: SHARED_CHANNEL,
+        sourceEndpointId: SOURCE_ENDPOINT,
+      }),
+    ).toBeNull();
+
+    state.subscribers.get(SOURCE_RELAY)!(notice);
+    await settle();
+    expect(state.published).toHaveLength(1);
+    // The notice carries its own event id, so the once-per-source-event claim
+    // would not have covered it: nothing even reached that check.
+    expect(state.noticeClaims).toHaveLength(1);
     await supervisor.stop();
   });
 });

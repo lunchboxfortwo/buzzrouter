@@ -24,14 +24,6 @@ export type MessageAddress = {
   user?: string;
   /** The message with the address prefix removed. */
   body: string;
-  /**
-   * Whether the author used the bracket form, which is unambiguous routing
-   * intent. A bare `@name` is indistinguishable from an ordinary mention, so an
-   * unresolvable one must stay local silently — bouncing "no such community" at
-   * someone who typed `@bob can you look` would be noise. An unresolvable
-   * `@[bob]` is worth a bounce, because they clearly meant to route.
-   */
-  explicit: boolean;
 };
 
 /**
@@ -40,6 +32,13 @@ export type MessageAddress = {
  * Returns null for anything unaddressed, which is the common case and MUST be
  * treated as "do not route" rather than as an error — a community's channel is
  * mostly ordinary conversation.
+ *
+ * Both forms are anchored at the start of the message, and that anchor — not
+ * the brackets — is what separates addressing from mentioning. `see @[hive]
+ * for details` and `ask @bob about it` both return null, because neither is in
+ * the addressing position. So a parse that succeeds IS routing intent whichever
+ * form was used, which is what makes an unresolved address safe to bounce: the
+ * caller never has to guess whether the author meant to route.
  */
 export function parseMessageAddress(body: string): MessageAddress | null {
   // Both forms are accepted. The bracket form is the documented one; the bare
@@ -47,7 +46,6 @@ export function parseMessageAddress(body: string): MessageAddress | null {
   const bracketed = /^\s*@\[([^\]\s]{1,120})\]\s*/u.exec(body);
   const match = bracketed ?? /^\s*@([^\s\]]{1,120})\s+/u.exec(body);
   if (!match) return null;
-  const explicit = bracketed !== null;
 
   const target = match[1]!;
   const separator = target.indexOf("/");
@@ -69,6 +67,5 @@ export function parseMessageAddress(body: string): MessageAddress | null {
     slug: rawSlug,
     ...(rawUser === undefined ? {} : { user: rawUser }),
     body: remainder,
-    explicit,
   };
 }

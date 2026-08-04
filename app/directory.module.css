@@ -1159,6 +1159,19 @@
   padding: 18px 20px;
 }
 
+/* Detail shown inline on desktop but suppressed on a phone, where a "More
+   detail" dropdown would open onto nothing worth reading. Mirrors the
+   `.collapsible` transparent-wrapper trick, hidden below the mobile cutover. */
+.detailDesktopOnly {
+  display: contents;
+}
+
+@media (max-width: 920px) {
+  .detailDesktopOnly {
+    display: none;
+  }
+}
+
 .inspectorSection {
   padding: 20px;
 }

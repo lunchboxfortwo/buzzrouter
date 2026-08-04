@@ -63,6 +63,30 @@ const MAX_WEBSOCKET_MESSAGE_BYTES = 512 * 1_024;
  */
 const RELAY_IDLE_RECYCLE_AFTER_MS = 60_000;
 const AUTH_REQUIRED_PATTERN = /auth-required/i;
+/**
+ * How long a destination community's member-name index may be reused.
+ *
+ * Checking `@community/user` needs a name, and the relay only stores pubkeys
+ * (the roster) and profiles (kind 0) — so there is no single query that answers
+ * "is anyone here called bob", and a correct check costs a roster read plus a
+ * profile read per member. The index makes that affordable: profile names are
+ * cached for the life of the connection by {@link
+ * NostrRelayConnection.getProfileName}, so a rebuild is one roster REQ plus a
+ * profile REQ for members seen for the first time. A few seconds is short
+ * enough that someone who has just joined is addressable almost immediately,
+ * and long enough that a burst of messages costs one read rather than one each.
+ */
+const MEMBER_NAME_CACHE_MS = 5_000;
+/** Profile reads per wave, so a large roster cannot open one REQ per member. */
+const PROFILE_LOOKUP_BATCH = 8;
+/**
+ * How long an index may take to build before the community is left unchecked.
+ *
+ * Validation must never become an outage: a roster too large or too slow to
+ * index in this budget delivers unvalidated, exactly as it did before there was
+ * a check, rather than holding the message while every member is resolved.
+ */
+const MEMBER_INDEX_TIMEOUT_MS = 4_000;
 
 /**
  * A relay socket carrying the connector's transport limits.
@@ -139,6 +163,18 @@ export class ConnectorSupervisor {
   private readonly sessions = new Map<string, ConnectorSession>();
   private readonly failures = new Map<string, FailedConnectionAttempt>();
   private readonly membershipReconciliations = new Map<string, Promise<void>>();
+  /**
+   * Per connection: the addressable member names of its community, or `null`
+   * for "no usable index right now", which never bounces.
+   */
+  private readonly memberNames = new Map<
+    string,
+    { expiresAt: number; names: Set<string> | null }
+  >();
+  private readonly memberNameBuilds = new Map<
+    string,
+    Promise<Set<string> | null>
+  >();
   private reconcileTimer: NodeJS.Timeout | undefined;
   private stopped = true;
 
@@ -186,6 +222,7 @@ export class ConnectorSupervisor {
         this.sessions.delete(connectionId);
         closeSession(session);
         this.failures.delete(connectionId);
+        this.memberNames.delete(connectionId);
       }
     }
 
@@ -490,20 +527,35 @@ export class ConnectorSupervisor {
    * Deliberately not a bridge_deliveries row: nothing was routed, so there is
    * no delivery to retry or report on. Failure to post the notice is swallowed
    * — a bounce that throws would mark an otherwise healthy connection degraded.
+   *
+   * The notice cannot start a loop. It is signed with the bridge's own key, and
+   * {@link canonicalizeSourceEvent} drops anything the bridge authored before
+   * it looks at the content at all; the `br notice` tag is not a projection
+   * marker, so that check is the one doing the work. As a second stop the text
+   * opens with `BuzzRouter:` rather than an `@`, so even a notice read by some
+   * other connector parses as unaddressed chat and routes nowhere.
    */
   private async reportUndeliverable(
     session: ConnectorSession,
     localChannelId: string,
     slug: string,
+    user?: string,
   ): Promise<void> {
     try {
       await session.relay.publish(
         finalizeEvent(
           {
-            content: `↳ BuzzRouter: no community named "${slug}" is connected here, so that message was not delivered.`,
+            content: undeliverableNotice(slug, user),
             created_at: Math.floor(Date.now() / 1_000),
             kind: BUZZ_MESSAGE_KIND,
-            tags: [["h", localChannelId], ["br", "notice", "unknown-destination"]],
+            tags: [
+              ["h", localChannelId],
+              [
+                "br",
+                "notice",
+                user === undefined ? "unknown-destination" : "unknown-user",
+              ],
+            ],
           },
           session.privateKey,
         ),
@@ -511,6 +563,103 @@ export class ConnectorSupervisor {
     } catch {
       // Best effort only.
     }
+  }
+
+  /**
+   * Whether the destination community has a member the author could have meant.
+   *
+   * `null` is "cannot tell" — this process holds no live session for that
+   * community, or its roster did not read — and MUST NOT bounce: refusing a
+   * message because our own connection is unhealthy would be a worse lie than
+   * the mention that fails to resolve.
+   */
+  private async destinationHasMember(
+    communityId: string,
+    user: string,
+  ): Promise<boolean | null> {
+    const session = [...this.sessions.values()].find(
+      (candidate) => candidate.config.communityId === communityId,
+    );
+    if (!session?.relay.getProfileName) return null;
+    try {
+      const names = await this.communityMemberNames(session);
+      return names?.has(user.toLowerCase()) ?? null;
+    } catch {
+      // A failure to check says nothing about the roster, and it is the far
+      // end's relay that failed: never bounce on it, never degrade this side.
+      return null;
+    }
+  }
+
+  private communityMemberNames(
+    session: ConnectorSession,
+  ): Promise<Set<string> | null> {
+    const cached = this.memberNames.get(session.config.id);
+    if (cached && cached.expiresAt > Date.now()) {
+      return Promise.resolve(cached.names);
+    }
+    // One build at a time per community. Without this a burst of addressed
+    // messages would each start their own roster read, which is the relay
+    // hammering this cache exists to prevent.
+    const running = this.memberNameBuilds.get(session.config.id);
+    if (running) return running;
+
+    const build = this.buildMemberNames(session).finally(() => {
+      this.memberNameBuilds.delete(session.config.id);
+    });
+    this.memberNameBuilds.set(session.config.id, build);
+    return build;
+  }
+
+  private async buildMemberNames(
+    session: ConnectorSession,
+  ): Promise<Set<string> | null> {
+    // The roster is relay-signed, so membership is the relay's answer rather
+    // than ours; only the pubkey-to-name step is a guess, and it is the same
+    // guess a human reading `@bob` in that channel makes.
+    const roster = await session.relay.readRosterRoles();
+    if (!roster) {
+      // Cached as "unusable" so an unreadable roster costs one read per window
+      // rather than one per message.
+      this.rememberMemberNames(session, null);
+      return null;
+    }
+    const names = new Set<string>();
+    const pubkeys = [...roster.keys()];
+    const deadline = Date.now() + MEMBER_INDEX_TIMEOUT_MS;
+    for (let index = 0; index < pubkeys.length; index += PROFILE_LOOKUP_BATCH) {
+      // A half-built index would bounce members it simply had not reached yet,
+      // so a build that runs long is abandoned whole. Nothing is lost: profile
+      // names stay cached on the connection, so the next attempt starts from
+      // where this one got to and a large community converges.
+      if (Date.now() > deadline) {
+        this.rememberMemberNames(session, null);
+        return null;
+      }
+      const batch = pubkeys.slice(index, index + PROFILE_LOOKUP_BATCH);
+      const resolved = await Promise.all(
+        batch.map((pubkey) => session.relay.getProfileName!(pubkey)),
+      );
+      batch.forEach((pubkey, offset) => {
+        // A pubkey is a name a person can type, and one we can be certain of.
+        names.add(pubkey.toLowerCase());
+        const profile = resolved[offset];
+        if (profile) names.add(profile.trim().toLowerCase());
+      });
+    }
+    this.rememberMemberNames(session, names);
+    return names;
+  }
+
+  /** Cache the index, or the fact that there is currently no usable one. */
+  private rememberMemberNames(
+    session: ConnectorSession,
+    names: Set<string> | null,
+  ): void {
+    this.memberNames.set(session.config.id, {
+      expiresAt: Date.now() + MEMBER_NAME_CACHE_MS,
+      names,
+    });
   }
 
   private async handleSourceEvent(
@@ -540,17 +689,33 @@ export class ConnectorSupervisor {
         canonical.destinationSlug,
       );
       if (!destination) {
-        // Only answer when the author unambiguously meant to route. A bare
-        // `@bob` that matches nobody is an ordinary mention, and replying "no
-        // such community" to it would turn every mention into router noise.
-        if (canonical.destinationExplicit) {
+        // Every parse reaching here is in the addressing position — the first
+        // token of the message — so it is routing intent whether or not it was
+        // bracketed. Staying silent is what made a typo look like a send.
+        await this.reportUndeliverable(
+          session,
+          route.localChannelId,
+          canonical.destinationSlug,
+        );
+        return;
+      }
+
+      if (canonical.destinationUser !== undefined) {
+        const addressable = await this.destinationHasMember(
+          destination.communityId,
+          canonical.destinationUser,
+        );
+        // Delivering anyway would mention nobody at the far end, which is the
+        // failure this bounce exists to surface. `null` is not a failure.
+        if (addressable === false) {
           await this.reportUndeliverable(
             session,
             route.localChannelId,
-            canonical.destinationSlug,
+            destination.slug,
+            canonical.destinationUser,
           );
+          return;
         }
-        return;
       }
 
       const sourceActorName = await session.relay.getProfileName?.(event.pubkey);
@@ -588,6 +753,24 @@ export class ConnectorSupervisor {
     }
   }
 
+}
+
+/**
+ * The text of a bounce, in the grammar the author already reads.
+ *
+ * A delivered message is tagged `@community/user`, so the notice quotes the
+ * address back in that same form and then names the half that failed — a
+ * message that mentions the wrong community and one that mentions nobody are
+ * different mistakes with different fixes, and the older notice could only
+ * describe the first.
+ */
+export function undeliverableNotice(slug: string, user?: string): string {
+  const address = user === undefined ? `@${slug}` : `@${slug}/${user}`;
+  const cause =
+    user === undefined
+      ? "no connected community has that name"
+      : `@${slug} is connected, but nobody there is named ${user}`;
+  return `BuzzRouter: not delivered to ${address} — ${cause}.`;
 }
 
 export async function registerBridgeDeliveryWorker(

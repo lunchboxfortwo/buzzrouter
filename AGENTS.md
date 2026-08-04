@@ -144,6 +144,19 @@ Key routing rules:
   included) through the journaled `createDedicatedChannel` handoff. Only the
   promoted owner is a member of a new channel — the bridge demotes itself and
   cannot add BuzzRouter staff afterwards.
+- Routing is addressed and never silent. `parseMessageAddress`
+  (`src/shared-channels/addressing.ts`) matches `@community[/user]` ONLY as the
+  first token, so a mid-sentence `@bob` is an ordinary mention that stays local;
+  that anchor — not the bracket form — is what separates addressing from
+  mentioning, so anything that parses is routing intent and an unresolved one
+  bounces. `handleSourceEvent` bounces an unknown community, and an unknown user
+  checked against the destination community's relay-signed roster (member
+  pubkeys resolved to kind-0 names, cached per connection for seconds; an
+  unreadable or too-slow roster delivers unvalidated and NEVER bounces). Bounce
+  text is `undeliverableNotice` in `src/shared-channels/connector.ts`: it opens
+  with `BuzzRouter:` — never an `@` — so a notice re-read from the channel
+  cannot itself parse as an address, on top of the bridge-authored drop in
+  `canonicalizeSourceEvent`.
 - Mirrored kind-9 content starts with the source actor's kind-0 display name and
   community. `NostrRelayConnection.getProfileName` caches pubkey-to-name on the
   actor's own relay; only a missing profile falls back to a pubkey prefix. Because

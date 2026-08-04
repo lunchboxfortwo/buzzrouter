@@ -300,10 +300,20 @@ export async function listDirectoryCommunities(
               LIMIT 1
             ) AS invite_code,
             (
+              -- A join URL must be a real hosted join/invite page, not a bare
+              -- homepage. Sources (e.g. the buzzdir catalog) list a community's
+              -- root domain as its "publicUrl", and we were rendering that as an
+              -- "Open community" button that opened a dead/wrong page (measured:
+              -- buzz.cashu.space). Reject a bare origin (scheme://host with no
+              -- path beyond a trailing slash) so the card falls back to the
+              -- invite code or copy-relay affordance instead of a broken link. A
+              -- well-formed-but-unreachable URL still slips through; that needs a
+              -- reachability probe (follow-up), which this does not add.
               SELECT source_public_url
               FROM community_sources
               WHERE candidate_id = candidates.id
                 AND source_public_url IS NOT NULL
+                AND source_public_url !~ '^https?://[^/]+/?$'
               ORDER BY source_observed_at DESC
               LIMIT 1
             ) AS public_url

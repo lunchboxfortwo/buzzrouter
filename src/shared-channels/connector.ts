@@ -39,7 +39,7 @@ import {
   homeCommunityRelayUrl,
 } from "./store";
 
-const RECONCILE_INTERVAL_MS = 5_000;
+const RECONCILE_INTERVAL_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 5_000;
 const EVENT_LOOKUP_TIMEOUT_MS = 3_000;
 const GROUP_LIST_TIMEOUT_MS = 4_000;
@@ -52,39 +52,24 @@ const COMMUNITY_ROSTER_KIND = 13_534;
 const PUT_USER_KIND = 9_000;
 const MAX_WEBSOCKET_MESSAGE_BYTES = 512 * 1_024;
 /**
- * Ping cadence. A dead socket is detected within two intervals, so this bounds
- * how long the hub can be deaf; it must stay well under the reconcile loop's
- * usefulness, and comfortably inside typical NAT/proxy idle timeouts.
- */
-const RELAY_HEARTBEAT_INTERVAL_MS = 30_000;
-/**
  * How long a session may receive nothing before its subscription is rebuilt.
  *
- * Deliberately short. The subscription stops delivering while the connection
- * stays healthy and the relay logs no close — cause still unknown — so the
- * rebuild IS the delivery mechanism, and this value is the worst-case latency
- * a message can sit unrouted. Combined with the reconcile tick that is ~20s,
- * down from ~90s, which was slow enough that the owner repeatedly reported
- * working messages as failures.
- *
- * The cost is one reconnect per idle interval per community. At current scale
- * that is nothing; revisit if the hub grows to hundreds of participants.
+ * A backstop, not the delivery path — live fan-out routes messages (see
+ * {@link NostrRelayConnection.subscribe} for why the channel and roster
+ * filters must stay separate for that to work). So this only has to catch a
+ * subscription that has silently stopped delivering, and is sized to be cheap
+ * rather than to bound routing latency: at worst one reconnect per idle
+ * minute per community.
  */
-const RELAY_IDLE_RECYCLE_AFTER_MS = 15_000;
+const RELAY_IDLE_RECYCLE_AFTER_MS = 60_000;
 const AUTH_REQUIRED_PATTERN = /auth-required/i;
 
 /**
- * A relay socket that proves it is still alive.
+ * A relay socket carrying the connector's transport limits.
  *
- * The supervisor already tears down and rebuilds a session when the relay
- * subscription closes — but that only helps if a close is actually observed.
- * A half-open TCP connection emits no close frame and no error: the socket
- * stays `OPEN`, events silently stop arriving, and the connection keeps
- * reporting `healthy`. Production went deaf this way for three hours, and the
- * only tell was that `last_health_at` (written on every ingest) had frozen.
- *
- * So probe rather than wait. An unanswered ping terminates the socket, which
- * finally produces the close event the existing recovery path needs.
+ * Liveness is nostr-tools' job: with `enablePing` its `pingpong()` pings on an
+ * interval and closes a socket that misses a pong, which reaches the
+ * supervisor as the subscription `onclose` its recovery path already handles.
  */
 export class ConnectorWebSocket extends NodeWebSocket {
   constructor(address: string | URL, protocols?: string | string[]) {
@@ -92,34 +77,6 @@ export class ConnectorWebSocket extends NodeWebSocket {
       maxPayload: MAX_WEBSOCKET_MESSAGE_BYTES,
       perMessageDeflate: false,
     });
-
-    let awaitingPong = false;
-    const heartbeat = setInterval(() => {
-      if (this.readyState !== NodeWebSocket.OPEN) return;
-      if (awaitingPong) {
-        // A full interval passed with no pong. `terminate`, not `close`: a peer
-        // that ignored a ping will not complete a closing handshake either.
-        this.terminate();
-        return;
-      }
-      awaitingPong = true;
-      try {
-        this.ping();
-      } catch {
-        this.terminate();
-      }
-    }, RELAY_HEARTBEAT_INTERVAL_MS);
-    heartbeat.unref?.();
-
-    this.on("pong", () => {
-      awaitingPong = false;
-    });
-    // Any inbound traffic is equally good proof of life, and costs nothing.
-    this.on("message", () => {
-      awaitingPong = false;
-    });
-    this.on("close", () => clearInterval(heartbeat));
-    this.on("error", () => clearInterval(heartbeat));
   }
 }
 
@@ -264,17 +221,11 @@ export class ConnectorSupervisor {
   /**
    * True when a session has been silent long enough that it must be rebuilt.
    *
-   * Three liveness checks failed before this one, each because they asked the
-   * wrong thing. The socket stays OPEN, the relay logs no close, and a fresh
-   * REQ is answered normally — measured, all three — while the long-lived
-   * subscription delivers nothing. nostr-tools reconnects the transport
-   * underneath and does not restore subscriptions, so the connection is
-   * genuinely healthy and the subscription is orphaned. Nothing observable
-   * about the connection can distinguish that from an idle channel.
-   *
-   * So stop interrogating and just recycle. Rebuilding a subscription costs
-   * one reconnect per idle interval, which is cheap and, unlike every check
-   * that came before, cannot silently be wrong.
+   * A subscription that has stopped delivering looks exactly like a quiet
+   * channel from this side — the socket is OPEN either way — so silence is the
+   * only signal available. Recycling on it cannot be silently wrong: the worst
+   * case is one wasted reconnect for a community that simply had nothing to
+   * say.
    */
   private isStale(session: ConnectorSession): boolean {
     return Date.now() - session.lastInboundAt >= RELAY_IDLE_RECYCLE_AFTER_MS;
@@ -413,10 +364,6 @@ export class ConnectorSupervisor {
         config.routes,
         isOperatedCommunityRelay(config.relayUrl),
         (event) => {
-          const gap = Math.round((Date.now() - session.lastInboundAt) / 1000);
-          console.log(
-            `connector: event relay=${config.relayUrl} kind=${event.kind} afterGap=${gap}s`,
-          );
           session.lastInboundAt = Date.now();
           if (event.kind === COMMUNITY_ROSTER_KIND) {
             this.scheduleHomeMembershipReconciliation(session);
@@ -756,17 +703,16 @@ export function parseWrappingKeyFile(contents: string): Map<number, Buffer> {
 export function createRelayConnectionFactory(): RelayConnectionFactory {
   return {
     async connect(relayUrl, privateKey) {
-      // enableReconnect is OFF deliberately. nostr-tools re-fires
-      // subscriptions the instant a reconnected socket opens — before the
-      // relay's AUTH challenge arrives, so the REQ lands on an unauthenticated
-      // connection. Buzz gates fan-out on `pubkey_for_conn`, skipping
-      // unauthenticated subscribers with `continue`: no CLOSED, no error, no
-      // log, events simply stop. That is the exact signature we chased for
-      // hours — socket open, pings answered, EOSE returned, nothing delivered.
+      // enableReconnect stays OFF so that reconnection is the supervisor's.
+      // In nostr-tools' relay.js, `handleHardClose` takes the reconnect branch
+      // INSTEAD of calling `onclose` and `closeAllSubscriptions(reason)`: with
+      // it on, a dropped socket never reaches the subscription `onclose` this
+      // connector uses to tear the session down and record it degraded, and
+      // the reopened socket re-fires the open subscriptions from `ws.onopen`
+      // itself, so recovery would bypass this factory entirely.
       //
-      // With it off, a dropped socket surfaces through onclose and the
-      // supervisor rebuilds through this factory, which authenticates BEFORE
-      // subscribing. Reconnection stays ours, and stays correctly ordered.
+      // With it off the drop surfaces as `onclose`, the supervisor rebuilds
+      // through here, and connect -> authenticate -> subscribe stays ordered.
       const relay = new Relay(relayUrl, {
         enablePing: true,
         enableReconnect: false,

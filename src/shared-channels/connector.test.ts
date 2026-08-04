@@ -570,10 +570,9 @@ describe("ConnectorSupervisor operated-community routing", () => {
     return { state, supervisor };
   }
 
-  // Measured in production: the socket stays OPEN, the relay logs no close,
-  // and a fresh REQ is answered normally, all while the long-lived
-  // subscription delivers nothing. No observable property of the connection
-  // separates that from an idle channel, so silence alone triggers a rebuild.
+  // The backstop for a subscription that stops delivering while the socket
+  // stays OPEN: that is indistinguishable from a quiet channel here, so
+  // silence alone triggers a rebuild.
   it("rebuilds a subscription that has been silent too long", async () => {
     const { state, supervisor } = supervisorHarness("wss://third-party.example");
     await supervisor.start();

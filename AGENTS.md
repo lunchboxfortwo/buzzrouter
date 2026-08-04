@@ -131,6 +131,19 @@ Key routing rules:
   endpoint owns `sends`, `receives`, one `filter_mode`, and one UUID
   `filter_list`. Fan-out creates one ordinary `bridge_deliveries` row/job per
   eligible destination, preserving the existing retry and relay-ack semantics.
+- One endpoint per community was a UNIQUE constraint until
+  `migrations/20260804T0200_hub_dedicated_peer_channels.sql`. A community may now
+  also hold one `dedicated_to_community_id` endpoint per peer, which is how
+  BuzzRouter gives every participant its own `channel-<community-id>` on
+  `relay.buzzrouter.com` instead of taking them all into `general`. A dedicated
+  endpoint exchanges with its one peer only, and the ordinary endpoint yields to
+  it — both enforced in `ingestBridgeMessage`'s destination query, so anything
+  else scoping "the endpoint for community X" must add
+  `dedicated_to_community_id IS NULL` or it will count/return several.
+  `src/jobs/provision-peer-channels.ts` creates them (existing participants
+  included) through the journaled `createDedicatedChannel` handoff. Only the
+  promoted owner is a member of a new channel — the bridge demotes itself and
+  cannot add BuzzRouter staff afterwards.
 - Mirrored kind-9 content starts with the source actor's kind-0 display name and
   community. `NostrRelayConnection.getProfileName` caches pubkey-to-name on the
   actor's own relay; only a missing profile falls back to a pubkey prefix. Because

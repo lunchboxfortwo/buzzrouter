@@ -13,6 +13,8 @@ export const HARVEST_INVITES_QUEUE = "presence.harvest-invites";
 export const REFRESH_INVITES_QUEUE = "presence.refresh-invites";
 export const PROBE_JOINABILITY_QUEUE = "directory.probe-joinability";
 export const BRIDGE_DELIVERY_QUEUE = "shared-channels.deliver";
+export const PROVISION_PEER_CHANNELS_QUEUE =
+  "shared-channels.provision-peer-channels";
 
 export interface ProbeCandidateJob {
   candidateId: string;
@@ -84,6 +86,14 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
     expireInSeconds: 30 * 60,
     retryBackoff: true,
     retryDelay: 5 * 60,
+    retryLimit: 2,
+  });
+
+  await boss.createQueue(PROVISION_PEER_CHANNELS_QUEUE, {
+    deleteAfterSeconds: 24 * 60 * 60,
+    expireInSeconds: 15 * 60,
+    retryBackoff: true,
+    retryDelay: 60,
     retryLimit: 2,
   });
 
@@ -169,6 +179,14 @@ export async function configureQueues(boss: PgBoss): Promise<void> {
   // time without ever approaching the relay's per-pubkey claim rate limit.
   await boss.schedule(PROBE_JOINABILITY_QUEUE, "50 * * * *", null, {
     key: "directory-probe-joinability",
+    tz: "UTC",
+  });
+  // Give each hub participant its own channel on the relay we operate. Every
+  // 10 minutes: a newly linked community only waits for it to stop sharing
+  // `general`, never to finish connecting, and a relay failure just retries on
+  // the next tick.
+  await boss.schedule(PROVISION_PEER_CHANNELS_QUEUE, "*/10 * * * *", null, {
+    key: "shared-channels-provision-peer-channels",
     tz: "UTC",
   });
 }

@@ -8,6 +8,10 @@ import {
   createDatabasePool,
   getDatabaseConnectionOptions,
 } from "../db/pool";
+import {
+  dedicatedChannelName,
+  provisionPeerChannels,
+} from "../jobs/provision-peer-channels";
 import { BRIDGE_DELIVERY_QUEUE, configureQueues } from "../jobs/queues";
 import {
   getOpenHubMembership,
@@ -292,6 +296,219 @@ describeDatabase("open-hub PostgreSQL integration", () => {
       configs.find((config) => config.communityId === member.communityId)?.routes,
     ).toEqual([]);
   });
+
+  it("gives every hub participant its own channel on the relay we operate", async () => {
+    const home = await createConnectedCommunity(pool, "home", homeHost);
+    const first = await createConnectedCommunity(pool, "first");
+    await join(first, "first-general");
+
+    const firstPass = await provision();
+    expect(firstPass).toEqual({ errors: 0, provisioned: 1 });
+
+    // Retroactive by construction: `second` joined before this pass exactly the
+    // way an already-connected community predates the feature.
+    const second = await createConnectedCommunity(pool, "second");
+    await join(second, "second-general");
+    expect(await provision()).toEqual({ errors: 0, provisioned: 1 });
+    // Nothing left to do, and no second channel for anyone.
+    expect(await provision()).toEqual({ errors: 0, provisioned: 0 });
+
+    const dedicated = await pool.query<{
+      dedicated_to_community_id: string;
+      local_channel_id: string;
+      local_channel_name_snapshot: string;
+    }>(
+      `
+        SELECT dedicated_to_community_id, local_channel_id,
+               local_channel_name_snapshot
+        FROM shared_channel_endpoints
+        WHERE community_id = $1 AND dedicated_to_community_id IS NOT NULL
+        ORDER BY local_channel_id
+      `,
+      [home.communityId],
+    );
+    expect(dedicated.rows).toHaveLength(2);
+    expect(
+      new Set(dedicated.rows.map((row) => row.local_channel_name_snapshot)),
+    ).toEqual(
+      new Set([
+        dedicatedChannelName(first.communityId),
+        dedicatedChannelName(second.communityId),
+      ]),
+    );
+    // The connector reads all three of BuzzRouter's channels, so a reply typed
+    // in a dedicated channel is picked up like any other source message.
+    const configs = await listActiveConnectorConfigs(pool);
+    expect(
+      configs
+        .find((config) => config.communityId === home.communityId)
+        ?.routes.map((route) => route.localChannelId)
+        .sort(),
+    ).toEqual(
+      [
+        "general",
+        ...dedicated.rows.map((row) => row.local_channel_id),
+      ].sort(),
+    );
+  });
+
+  it("routes a message addressed to BuzzRouter into that sender's own channel", async () => {
+    const home = await createConnectedCommunity(pool, "home", homeHost);
+    const first = await createConnectedCommunity(pool, "first");
+    const second = await createConnectedCommunity(pool, "second");
+    const firstMembership = await join(first, "first-general");
+    await join(second, "second-general");
+    await provision();
+
+    const delivered = await ingestAddressed(
+      firstMembership.sharedChannelId,
+      firstMembership.endpointId,
+      home.communityId,
+    );
+
+    // Exactly one copy, in first's dedicated channel: not `general`, and above
+    // all not in second's dedicated channel.
+    expect(delivered).toEqual([
+      {
+        communityId: home.communityId,
+        dedicatedTo: first.communityId,
+      },
+    ]);
+  });
+
+  it("keeps the shared channel as the fallback until a peer has its own", async () => {
+    const home = await createConnectedCommunity(pool, "home", homeHost);
+    const first = await createConnectedCommunity(pool, "first");
+    await join(first, "first-general");
+    await provision();
+
+    const late = await createConnectedCommunity(pool, "late");
+    const lateMembership = await join(late, "late-general");
+    const delivered = await ingestAddressed(
+      lateMembership.sharedChannelId,
+      lateMembership.endpointId,
+      home.communityId,
+    );
+
+    expect(delivered).toEqual([
+      { communityId: home.communityId, dedicatedTo: null },
+    ]);
+  });
+
+  it("lets a dedicated channel reach its own peer and nobody else", async () => {
+    const home = await createConnectedCommunity(pool, "home", homeHost);
+    const first = await createConnectedCommunity(pool, "first");
+    const second = await createConnectedCommunity(pool, "second");
+    const firstMembership = await join(first, "first-general");
+    await join(second, "second-general");
+    await provision();
+
+    const source = await pool.query<{ id: string }>(
+      `
+        SELECT id FROM shared_channel_endpoints
+        WHERE community_id = $1 AND dedicated_to_community_id = $2
+      `,
+      [home.communityId, first.communityId],
+    );
+    const sourceEndpointId = source.rows[0]!.id;
+
+    expect(
+      await ingestAddressed(
+        firstMembership.sharedChannelId,
+        sourceEndpointId,
+        first.communityId,
+      ),
+    ).toEqual([{ communityId: first.communityId, dedicatedTo: null }]);
+
+    await expect(
+      ingestAddressed(
+        firstMembership.sharedChannelId,
+        sourceEndpointId,
+        second.communityId,
+      ),
+    ).rejects.toMatchObject({ code: "route_inactive" });
+  });
+
+  it("still counts BuzzRouter as one hub member once it holds peer channels", async () => {
+    const home = await createConnectedCommunity(pool, "home", homeHost);
+    const first = await createConnectedCommunity(pool, "first");
+    const second = await createConnectedCommunity(pool, "second");
+    await join(first, "first-general");
+    await join(second, "second-general");
+    await provision();
+
+    const membership = await getOpenHubMembership(
+      pool,
+      first.communityId,
+      first.ownerPubkey,
+    );
+    expect(membership.localChannelId).toBe("first-general");
+    expect(membership.members.map((member) => member.communityId).sort()).toEqual(
+      [home.communityId, second.communityId].sort(),
+    );
+
+    // A filter list naming BuzzRouter must still validate: the check counts
+    // member communities, not endpoints.
+    const updated = await updateOpenHubSettings(pool, {
+      communityId: first.communityId,
+      filterList: [home.communityId],
+      filterMode: "only_these",
+      ownerPubkey: first.ownerPubkey,
+      receives: true,
+      sends: true,
+    });
+    expect(updated.filterList).toEqual([home.communityId]);
+  });
+
+  /** Runs one provisioning pass with the relay handoff stubbed out. */
+  async function provision() {
+    return provisionPeerChannels({
+      createChannel: async (input) => ({
+        channelId: `${input.channelName}-relay`,
+        channelName: input.channelName,
+      }),
+      pool,
+    });
+  }
+
+  /** Ingests one addressed message and reports where it was actually queued. */
+  async function ingestAddressed(
+    sharedChannelId: string,
+    sourceEndpointId: string,
+    destinationCommunityId: string,
+  ) {
+    const sourceEventId = randomBytes(32).toString("hex");
+    const result = await ingestBridgeMessage(pool, boss, {
+      body: "addressed payload",
+      bodySha256: sha256("addressed payload"),
+      destinationCommunityId,
+      messageId: randomUUID(),
+      sharedChannelId,
+      signedEvent: { id: sourceEventId, kind: 9 },
+      sourceActorPubkey: randomBytes(32).toString("hex"),
+      sourceCreatedAt: Math.floor(Date.now() / 1_000),
+      sourceEndpointId,
+      sourceEventId,
+    });
+    const destinations = await pool.query<{
+      community_id: string;
+      dedicated_to_community_id: string | null;
+    }>(
+      `
+        SELECT endpoints.community_id, endpoints.dedicated_to_community_id
+        FROM bridge_deliveries AS deliveries
+        JOIN shared_channel_endpoints AS endpoints
+          ON endpoints.id = deliveries.destination_endpoint_id
+        WHERE deliveries.id = ANY($1::uuid[])
+        ORDER BY endpoints.community_id
+      `,
+      [result.deliveryIds],
+    );
+    return destinations.rows.map((row) => ({
+      communityId: row.community_id,
+      dedicatedTo: row.dedicated_to_community_id,
+    }));
+  }
 
   async function join(
     community: CommunityFixture,

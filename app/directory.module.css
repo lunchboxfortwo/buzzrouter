@@ -962,6 +962,15 @@
   grid-area: status;
 }
 
+/* Right-aligned action cluster in the status row: the Share chip, and — on a
+   keyless card — the "Copy relay URL" link sitting inline beside it. */
+.inspectorActions {
+  align-items: center;
+  display: inline-flex;
+  gap: 12px;
+  margin-left: auto;
+}
+
 .inspectorShare {
   align-items: center;
   background: var(--surface);
@@ -973,9 +982,40 @@
   font-size: 0.76rem;
   font-weight: 620;
   gap: 6px;
-  margin-left: auto;
   padding: 5px 10px;
   text-decoration: none;
+}
+
+/* Copy relay URL as a plain blue text link, not a button — a low-value action
+   that should not compete with Share or take a full-width row on a phone. */
+.inspectorCopyLink {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--accent-strong);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 620;
+  gap: 6px;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.inspectorCopyLink svg {
+  fill: none;
+  height: 13px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+  width: 13px;
+}
+
+.inspectorCopyLink:hover {
+  text-decoration: underline;
 }
 
 .inspectorShare svg {

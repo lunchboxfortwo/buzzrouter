@@ -393,6 +393,21 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
   const tone = insigniaTone(community.relayHost);
   const hasActivity = hasActivitySummary(community);
   const keyless = !community.inviteCode && !community.publicUrl;
+  // The keyless card's only join action is "Copy relay URL" (no invite, no
+  // public URL, and not owner-restricted). It is a low-value action for most
+  // readers, so instead of a full-width button it rides inline next to Share.
+  const copyRelayOnly = keyless && community.joinStatus !== "restricted";
+  const renderJoinAction = (className: string) => (
+    <JoinButton
+      candidateId={community.candidateId}
+      className={className}
+      communityName={community.displayName}
+      inviteCode={community.inviteCode}
+      joinStatus={community.joinStatus}
+      publicUrl={community.publicUrl}
+      relayUrl={community.canonicalRelayUrl}
+    />
+  );
   const overview = summaryLine(community);
   const shareUrl = `${process.env.PUBLIC_APP_ORIGIN ?? "https://buzzrouter.com"}/communities/${encodeURIComponent(community.relayHost)}`;
   const shareText = `${community.displayName} — a real, live Buzz community, verified by @buzzrouter`;
@@ -467,22 +482,21 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
               Invite-only
             </span>
           ) : null}
-          <ShareOnX
-            className={styles.inspectorShare}
-            label="Share"
-            text={shareText}
-            url={shareUrl}
-          />
+          <div className={styles.inspectorActions}>
+            {copyRelayOnly ? renderJoinAction(styles.inspectorCopyLink) : null}
+            <ShareOnX
+              className={styles.inspectorShare}
+              label="Share"
+              text={shareText}
+              url={shareUrl}
+            />
+          </div>
         </div>
-        <JoinButton
-          candidateId={community.candidateId}
-          className={keyless ? styles.copyButtonQuiet : styles.copyButton}
-          communityName={community.displayName}
-          inviteCode={community.inviteCode}
-          joinStatus={community.joinStatus}
-          publicUrl={community.publicUrl}
-          relayUrl={community.canonicalRelayUrl}
-        />
+        {copyRelayOnly
+          ? null
+          : renderJoinAction(
+              keyless ? styles.copyButtonQuiet : styles.copyButton,
+            )}
       </header>
 
       {hasActivity ? (

@@ -1,8 +1,10 @@
 import { npubEncode } from "nostr-tools/nip19";
+import { generateSecretKey } from "nostr-tools/pure";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   beginConnectionFromInvite,
+  buildBridgeProfileEvent,
   buildInstallerCommand,
   createCommunityInstallToken,
   resolveInviteClaimTarget,
@@ -252,5 +254,16 @@ describe("invite claim target resolution", () => {
     expect(() =>
       resolveInviteClaimTarget(relayOnRecord, "https://relay.buzzrouter.com/"),
     ).toThrow("invite code");
+  });
+});
+
+describe("bridge profile", () => {
+  it("names the bridge with the bare word members tag", () => {
+    const event = buildBridgeProfileEvent(generateSecretKey());
+    expect(event.kind).toBe(0);
+    expect(JSON.parse(event.content)).toMatchObject({
+      display_name: "buzzrouter",
+      name: "buzzrouter",
+    });
   });
 });

@@ -4,26 +4,27 @@ description: A restrained, evidence-backed directory for finding Buzz communitie
 colors:
   canvas: "#f5f6f8"
   surface: "#ffffff"
-  field-surface: "#fafbfc"
-  muted-surface: "#f0f2f5"
-  selected-surface: "#efefff"
+  surface-muted: "#fafbfc"
+  surface-selected: "#efefff"
   ink: "#111318"
   reading-ink: "#414958"
-  monogram-ink: "#384152"
-  muted-ink: "#667085"
-  divider: "#dfe2e8"
+  ink-soft: "#667085"
+  ink-faint: "#667085"
+  line: "#dfe2e8"
+  line-strong: "#c9ced8"
   accent: "#5657f2"
   accent-strong: "#4445d8"
-  verified: "#087c5b"
-  verified-muted: "#316d61"
-  verified-soft: "#e8f7f1"
+  accent-soft: "#efefff"
+  positive: "#087c5b"
+  positive-soft: "#e8f7f1"
   verified-border: "#b6dfcf"
-  error: "#9d2b22"
-  error-soft: "#fff3f2"
-  error-border: "#f0c9c4"
   caution: "#8a5b00"
   caution-soft: "#fff5d6"
   caution-border: "#ead59f"
+  focus: "#7957ff"
+  error: "#9d2b22"
+  error-soft: "#fff3f2"
+  error-border: "#f0c9c4"
 typography:
   display:
     fontFamily: "Instrument Sans, ui-sans-serif, sans-serif"
@@ -136,15 +137,15 @@ components:
     padding: "0 16px"
     height: "38px"
   control-field:
-    backgroundColor: "{colors.field-surface}"
+    backgroundColor: "{colors.surface-muted}"
     textColor: "{colors.ink}"
     typography: "{typography.control}"
     rounded: "{rounded.control}"
     padding: "0 11px"
     height: "38px"
   category-tag:
-    backgroundColor: "{colors.muted-surface}"
-    textColor: "{colors.muted-ink}"
+    backgroundColor: "{colors.surface-muted}"
+    textColor: "{colors.ink-soft}"
     typography: "{typography.label}"
     rounded: "{rounded.tag}"
     padding: "0 5px"
@@ -156,14 +157,14 @@ components:
     padding: "11px 13px"
     height: "76px"
   community-row-selected:
-    backgroundColor: "{colors.selected-surface}"
+    backgroundColor: "{colors.surface-selected}"
     textColor: "{colors.ink}"
     rounded: "0"
     padding: "11px 13px"
     height: "76px"
   community-logo:
-    backgroundColor: "{colors.muted-surface}"
-    textColor: "{colors.monogram-ink}"
+    backgroundColor: "{colors.surface-muted}"
+    textColor: "{colors.reading-ink}"
     rounded: "{rounded.control}"
     width: "40px"
     height: "40px"
@@ -227,12 +228,15 @@ or action.
 - **Canvas** (`#f5f6f8`): Page background around working surfaces.
 - **Surface** (`#ffffff`): Masthead, controls, result list, inspector, and form
   panels.
-- **Field Surface** (`#fafbfc`): Inputs, selects, and low-emphasis hover states.
-- **Muted Surface** (`#f0f2f5`): Monograms, category tags, and evidence tags.
+- **Surface Muted** (`#fafbfc`): Inputs, selects, low-emphasis hover states,
+  monograms, and category/evidence tags.
+- **Surface Selected** (`#efefff`): The current community row and selected
+  identity surfaces.
 - **Ink** (`#111318`): Headings, names, controls, and strong values.
 - **Reading Ink** (`#414958`): Descriptions and longer factual copy.
-- **Muted Ink** (`#667085`): Metadata, labels, timestamps, and helper copy.
-- **Divider** (`#dfe2e8`): Every structural boundary.
+- **Ink Soft** (`#667085`): Metadata, labels, timestamps, and helper copy.
+- **Line** (`#dfe2e8`) / **Line Strong** (`#c9ced8`): Structural boundaries; the
+  strong step for emphasized dividers.
 
 ### Named Rules
 

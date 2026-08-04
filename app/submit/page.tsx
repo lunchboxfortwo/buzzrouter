@@ -21,7 +21,6 @@ export default async function SubmitPage({
 
       <main>
         <section className={styles.intro}>
-          <p>Community intake</p>
           <h1>Submit a Buzz community</h1>
           <span>
             Tell us what your community does and who it&apos;s for. We&apos;ll

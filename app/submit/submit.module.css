@@ -28,14 +28,6 @@
   max-width: 650px;
 }
 
-.intro p {
-  color: var(--ink-soft);
-  font-size: 12px;
-  font-weight: 700;
-  margin: 0 0 8px;
-  text-transform: uppercase;
-}
-
 .intro h1 {
   font-size: 34px;
   line-height: 1.15;

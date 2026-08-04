@@ -194,16 +194,76 @@
 }
 
 .premiseBand {
-  padding: 24px 0 20px;
+  align-items: center;
+  animation: rise-in 360ms var(--ease-out) backwards;
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 30px 4px 26px;
+  position: relative;
+  z-index: 0;
+}
+
+.premiseBand::before {
+  background:
+    radial-gradient(520px 260px at 16% 42%, rgb(86 87 242 / 15%), transparent 70%),
+    radial-gradient(420px 230px at 72% 55%, rgb(8 124 91 / 9%), transparent 72%),
+    radial-gradient(rgb(68 69 216 / 9%) 1.2px, transparent 1.3px);
+  background-size:
+    auto,
+    auto,
+    17px 17px;
+  content: "";
+  inset: -60px -120px -20px;
+  mask-image: radial-gradient(90% 100% at 40% 45%, var(--ink) 55%, transparent 100%);
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
 }
 
 .premiseHeading {
-  font-size: 34px;
-  font-weight: 680;
-  letter-spacing: 0;
-  line-height: 1.12;
+  font-size: clamp(2.3rem, 4.2vw, 3.4rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.04;
   margin: 0;
-  max-width: 30ch;
+  max-width: none;
+  text-shadow: 5px 5px 0 rgb(86 87 242 / 13%);
+}
+
+/* First line on its own row; the accent mark drops to the line below it. */
+.headingLine {
+  display: block;
+  white-space: nowrap;
+}
+
+.premiseMark {
+  color: var(--accent-strong);
+  display: inline-block;
+  font-style: normal;
+  position: relative;
+  white-space: nowrap;
+}
+
+.premiseUnderline {
+  bottom: -8px;
+  height: 10px;
+  left: 0;
+  overflow: visible;
+  position: absolute;
+  right: 0;
+  width: 100%;
+}
+
+.premiseUnderline path {
+  animation: underline-draw 700ms 300ms var(--ease-out) backwards;
+  fill: none;
+  opacity: 0.85;
+  stroke: var(--accent);
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  stroke-linecap: round;
+  stroke-width: 3.5;
 }
 
 .premiseSub {
@@ -212,6 +272,100 @@
   line-height: 1.5;
   margin: 13px 0 0;
   max-width: 62ch;
+}
+
+/* Desktop-only signal: an accent pulse travels the route from the BuzzRouter
+   origin to the verified relay node. Hidden with the whole band at <=920px. */
+.premiseSignal {
+  animation: rise-in 420ms 120ms var(--ease-out) backwards;
+  height: auto;
+  overflow: visible;
+  width: min(330px, 30vw);
+}
+
+.routeLine {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-dasharray: 2 7;
+  stroke-linecap: round;
+  stroke-width: 1.6;
+}
+
+.routePulse {
+  animation: route-travel 2.8s linear infinite;
+  fill: none;
+  stroke: var(--accent);
+  stroke-dasharray: 14 100;
+  stroke-dashoffset: 114;
+  stroke-linecap: round;
+  stroke-width: 2.2;
+}
+
+.signalRing {
+  animation: ring-pulse 2.8s var(--ease) infinite;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.signalRingLate {
+  animation-delay: 1.4s;
+}
+
+.signalOrigin {
+  fill: var(--accent);
+}
+
+.signalRelay {
+  fill: var(--surface);
+  stroke: var(--line-strong);
+  stroke-width: 1.6;
+}
+
+.signalCheck {
+  fill: none;
+  stroke: var(--positive);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.1;
+}
+
+.signalLabel {
+  fill: var(--ink-soft);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.signalLabelRoute {
+  fill: var(--accent-strong);
+}
+
+@keyframes underline-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+@keyframes route-travel {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes ring-pulse {
+  0% {
+    opacity: 0.5;
+    transform: scale(0.55);
+  }
+
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
 }
 
 /* Command bar + access rail */

@@ -799,7 +799,7 @@ function isMissingChallenge(error: unknown): boolean {
 }
 
 export class NostrRelayConnection implements RelayConnection {
-  private subscription: Subscription | undefined;
+  private subscriptions: Subscription[] = [];
   private readonly profileNames = new Map<string, string | null>();
   private relayIdentity: string | undefined;
 
@@ -840,8 +840,7 @@ export class NostrRelayConnection implements RelayConnection {
   }
 
   close(): void {
-    this.subscription?.close("connector stopped");
-    this.subscription = undefined;
+    this.closeSubscriptions("connector stopped");
     this.relay.close();
   }
 
@@ -1094,28 +1093,53 @@ export class NostrRelayConnection implements RelayConnection {
     onEvent: (event: Event) => void,
     onClose: (reason: string) => void,
   ): void {
-    this.subscription?.close("routes changed");
+    this.closeSubscriptions("routes changed");
 
-    const filters: Filter[] = [];
+    // The channel filter and the roster filter MUST be separate subscriptions.
+    //
+    // Buzz scopes a whole subscription to one channel via
+    // extract_channel_id_from_filters, which returns None the moment ANY filter
+    // lacks an `#h` tag. The roster filter has none, so combining them made the
+    // entire subscription global — and the relay's fan-out deliberately never
+    // routes channel-scoped events to global subscribers:
+    //
+    //   "Global subscriptions (channel_id = None) do NOT receive
+    //    channel-scoped events."
+    //
+    // The channel subscription then received live messages never, only the
+    // stored events its REQ returned. That is why events arrived exclusively
+    // right after a reconnect, why latency equalled the rebuild interval, and
+    // why only the home relay was affected — it is the one that watches the
+    // roster.
     if (routes.length > 0) {
-      filters.push({
-        "#h": [...new Set(routes.map((route) => route.localChannelId))],
-        kinds: [9],
-        since: Math.min(...routes.map((route) => route.lastEventCreatedAt)),
-      });
+      this.subscriptions.push(
+        this.relay.subscribe(
+          [
+            {
+              "#h": [...new Set(routes.map((route) => route.localChannelId))],
+              kinds: [9],
+              since: Math.min(
+                ...routes.map((route) => route.lastEventCreatedAt),
+              ),
+            },
+          ],
+          { onevent: onEvent, onclose: onClose },
+        ),
+      );
     }
     if (watchCommunityRoster) {
-      filters.push({ kinds: [COMMUNITY_ROSTER_KIND] });
+      this.subscriptions.push(
+        this.relay.subscribe([{ kinds: [COMMUNITY_ROSTER_KIND] }], {
+          onevent: onEvent,
+          onclose: onClose,
+        }),
+      );
     }
-    if (filters.length === 0) {
-      this.subscription = undefined;
-      return;
-    }
+  }
 
-    this.subscription = this.relay.subscribe(filters, {
-      onevent: onEvent,
-      onclose: onClose,
-    });
+  private closeSubscriptions(reason: string): void {
+    for (const subscription of this.subscriptions) subscription.close(reason);
+    this.subscriptions = [];
   }
 
 }

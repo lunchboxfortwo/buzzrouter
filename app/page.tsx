@@ -397,6 +397,20 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
   const shareUrl = `${process.env.PUBLIC_APP_ORIGIN ?? "https://buzzrouter.com"}/communities/${encodeURIComponent(community.relayHost)}`;
   const shareText = `${community.displayName} — a real, live Buzz community, verified by @buzzrouter`;
 
+  const categoriesBlock =
+    community.categories.length > 0 ? (
+      <div className={styles.inspectorTags}>
+        <span>Categories</span>
+        <div className={styles.tagList}>
+          {community.categories.map((category) => (
+            <span className={styles.tag} key={category}>
+              {category}
+            </span>
+          ))}
+        </div>
+      </div>
+    ) : null;
+
   return (
     <article
       aria-labelledby="inspector-title"
@@ -471,88 +485,82 @@ function CommunityInspector({ community }: { community: DirectoryCommunity }) {
         />
       </header>
 
-      <MobileCollapsible label="More detail">
       {hasActivity ? (
-        <dl className={`${styles.inspectorMetrics} ${styles.inspectorActivity}`}>
-          <div className={styles.metricTile}>
-            <dt>Activity</dt>
-            <dd>
-              {activityLabel(community.activityLevel)}
-              <span className={styles.metricNote}>
-                past {community.activityWindowDays ?? 7}d
-              </span>
-            </dd>
-          </div>
-          <div className={styles.metricTile}>
-            <dt>Active members</dt>
-            <dd>
-              {community.activeMemberCount}
-              <span className={styles.metricNote}>
-                {community.totalMemberCount
-                  ? `of ${community.totalMemberCount} members`
-                  : "active recently"}
-              </span>
-            </dd>
-          </div>
-          <div className={styles.metricTile}>
-            <dt>Messages</dt>
-            <dd>
-              {community.messageCount}
-              <span className={styles.metricNote}>
-                past {community.activityWindowDays ?? 7}d
-              </span>
-            </dd>
-          </div>
-        </dl>
-      ) : null}
+        <MobileCollapsible label="More detail">
+          <dl className={`${styles.inspectorMetrics} ${styles.inspectorActivity}`}>
+            <div className={styles.metricTile}>
+              <dt>Activity</dt>
+              <dd>
+                {activityLabel(community.activityLevel)}
+                <span className={styles.metricNote}>
+                  past {community.activityWindowDays ?? 7}d
+                </span>
+              </dd>
+            </div>
+            <div className={styles.metricTile}>
+              <dt>Active members</dt>
+              <dd>
+                {community.activeMemberCount}
+                <span className={styles.metricNote}>
+                  {community.totalMemberCount
+                    ? `of ${community.totalMemberCount} members`
+                    : "active recently"}
+                </span>
+              </dd>
+            </div>
+            <div className={styles.metricTile}>
+              <dt>Messages</dt>
+              <dd>
+                {community.messageCount}
+                <span className={styles.metricNote}>
+                  past {community.activityWindowDays ?? 7}d
+                </span>
+              </dd>
+            </div>
+          </dl>
 
-      {community.categories.length > 0 ? (
-        <div className={styles.inspectorTags}>
-          <span>Categories</span>
-          <div className={styles.tagList}>
-            {community.categories.map((category) => (
-              <span className={styles.tag} key={category}>
-                {category}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
+          {categoriesBlock}
 
-      {hasActivity ? (
-        (community.tagline && overview) ||
-        community.recentProjects.length > 0 ? (
-          <div className={styles.inspectorSections}>
-            {community.tagline && overview ? (
-              <section className={styles.inspectorSection}>
-                <h3>Overview</h3>
-                <p>{overview}</p>
-                <small>What this community is about.</small>
-              </section>
-            ) : null}
-            {community.recentProjects.length > 0 ? (
-              <section className={styles.inspectorSection}>
-                <h3>Recently</h3>
-                <ul className={styles.reasonList}>
-                  {community.recentProjects.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-                <small>
-                  What the community has been working on lately, from our agent
-                  inside it.
-                </small>
-              </section>
-            ) : null}
-          </div>
-        ) : null
+          {(community.tagline && overview) ||
+          community.recentProjects.length > 0 ? (
+            <div className={styles.inspectorSections}>
+              {community.tagline && overview ? (
+                <section className={styles.inspectorSection}>
+                  <h3>Overview</h3>
+                  <p>{overview}</p>
+                  <small>What this community is about.</small>
+                </section>
+              ) : null}
+              {community.recentProjects.length > 0 ? (
+                <section className={styles.inspectorSection}>
+                  <h3>Recently</h3>
+                  <ul className={styles.reasonList}>
+                    {community.recentProjects.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                  <small>
+                    What the community has been working on lately, from our agent
+                    inside it.
+                  </small>
+                </section>
+              ) : null}
+            </div>
+          ) : null}
+        </MobileCollapsible>
       ) : (
-        <p className={styles.inspectorNote}>
-          Verified live at the relay &mdash; but we don&rsquo;t have an agent
-          inside yet, so there&rsquo;s no activity to show.
-        </p>
+        /* No agent inside: the "More detail" content is just categories and a
+           note about the absence of activity. That dropdown is worthless on a
+           phone, so it is not rendered there; desktop still shows the content
+           inline (the toggle is desktop-hidden), unchanged. */
+        <div className={styles.detailDesktopOnly}>
+          {categoriesBlock}
+          <p className={styles.inspectorNote}>
+            Verified live at the relay &mdash; but we don&rsquo;t have an agent
+            inside yet, so there&rsquo;s no activity to show.
+          </p>
+        </div>
       )}
-      </MobileCollapsible>
 
       {keyless ? (
         <div className={styles.inspectorInviteCta}>

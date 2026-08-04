@@ -719,6 +719,34 @@ export async function ingestBridgeMessage(
             AND destination.state = 'active'
             AND destination.receives = true
             AND ($4::uuid IS NULL OR destination.community_id = $4)
+            -- An endpoint dedicated to one peer exchanges with that peer only,
+            -- in both directions. Without this a message addressed to a
+            -- community that holds several endpoints would be copied into every
+            -- one of them, which is how another peer's dedicated channel would
+            -- end up holding this conversation.
+            AND (
+              destination.dedicated_to_community_id IS NULL OR
+              destination.dedicated_to_community_id = source.community_id
+            )
+            AND (
+              source.dedicated_to_community_id IS NULL OR
+              source.dedicated_to_community_id = destination.community_id
+            )
+            -- The ordinary endpoint yields to a dedicated one for this source,
+            -- so the shared channel stays the fallback for a peer whose
+            -- dedicated channel does not exist (yet) rather than a second copy.
+            AND (
+              destination.dedicated_to_community_id IS NOT NULL OR
+              NOT EXISTS (
+                SELECT 1
+                FROM shared_channel_endpoints AS dedicated
+                WHERE dedicated.shared_channel_id = destination.shared_channel_id
+                  AND dedicated.community_id = destination.community_id
+                  AND dedicated.dedicated_to_community_id = source.community_id
+                  AND dedicated.state = 'active'
+                  AND dedicated.receives = true
+              )
+            )
             AND (
               (destination.filter_mode = 'everyone_except'
                 AND NOT ($3::uuid = ANY(destination.filter_list)))
@@ -1193,6 +1221,7 @@ export async function getOpenHubMembership(
       WHERE channels.mode = 'hub'
         AND endpoints.community_id = $1
         AND endpoints.state = 'active'
+        AND endpoints.dedicated_to_community_id IS NULL
         AND communities.owner_pubkey = $2
     `,
     [communityId, ownerPubkey],
@@ -1216,6 +1245,9 @@ export async function getOpenHubMembership(
         ON candidates.id = communities.candidate_id
       WHERE endpoints.shared_channel_id = $1
         AND endpoints.state = 'active'
+        -- One row per member community: a community that also holds dedicated
+        -- per-peer endpoints is still one member of the hub.
+        AND endpoints.dedicated_to_community_id IS NULL
         AND endpoints.community_id <> $2
       ORDER BY display_name, endpoints.community_id
     `,
@@ -1304,6 +1336,7 @@ export async function updateOpenHubSettings(
         WHERE channels.mode = 'hub'
           AND endpoints.community_id = $1
           AND endpoints.state = 'active'
+          AND endpoints.dedicated_to_community_id IS NULL
       `,
       [input.communityId],
     );
@@ -1332,7 +1365,12 @@ export async function updateOpenHubSettings(
         WHERE channels.mode = 'hub'
           AND own.community_id = $1
           AND own.state = 'active'
+          AND own.dedicated_to_community_id IS NULL
           AND endpoints.state = 'active'
+          -- Count member communities, not endpoints: a community with dedicated
+          -- per-peer endpoints must not be counted several times, or a valid
+          -- filter list would be rejected as containing unknown communities.
+          AND endpoints.dedicated_to_community_id IS NULL
           AND endpoints.community_id = ANY($2::uuid[])
       `,
       [input.communityId, filterList],
@@ -1364,6 +1402,7 @@ export async function updateOpenHubSettings(
           AND channels.mode = 'hub'
           AND endpoints.community_id = $1
           AND endpoints.state = 'active'
+          AND endpoints.dedicated_to_community_id IS NULL
         RETURNING endpoints.id
       `,
       [
@@ -1381,6 +1420,140 @@ export async function updateOpenHubSettings(
     }
   });
   return getOpenHubMembership(pool, input.communityId, input.ownerPubkey);
+}
+
+export interface HubHomeEndpoint {
+  communityId: string;
+  ownerPubkey: string;
+  sharedChannelId: string;
+}
+
+/**
+ * BuzzRouter's own ordinary hub endpoint — the `general` participant on the
+ * relay we operate — together with the owner key needed to create channels
+ * there. Returns null before the hub exists or while our own connector is down,
+ * which is a reason to do nothing rather than an error.
+ */
+export async function getHubHomeEndpoint(
+  pool: Pool,
+): Promise<HubHomeEndpoint | null> {
+  const result = await pool.query<{
+    community_id: string;
+    owner_pubkey: string;
+    shared_channel_id: string;
+  }>(
+    `
+      SELECT endpoints.community_id,
+             endpoints.shared_channel_id,
+             communities.owner_pubkey
+      FROM shared_channel_endpoints AS endpoints
+      JOIN shared_channels AS channels
+        ON channels.id = endpoints.shared_channel_id
+      JOIN communities ON communities.id = endpoints.community_id
+      JOIN community_candidates AS candidates
+        ON candidates.id = communities.candidate_id
+      WHERE channels.mode = 'hub'
+        AND channels.state = 'active'
+        AND endpoints.state = 'active'
+        AND endpoints.dedicated_to_community_id IS NULL
+        AND candidates.host = $1
+        AND communities.owner_pubkey IS NOT NULL
+      ORDER BY endpoints.community_id
+      LIMIT 1
+    `,
+    [homeCommunityHost()],
+  );
+  const row = result.rows[0];
+  return row
+    ? {
+        communityId: row.community_id,
+        ownerPubkey: row.owner_pubkey,
+        sharedChannelId: row.shared_channel_id,
+      }
+    : null;
+}
+
+/**
+ * Hub participants that BuzzRouter does not yet hold a dedicated channel for,
+ * oldest first. This is what makes the change retroactive: an already-connected
+ * community is simply one that has been waiting the longest.
+ */
+export async function listHubPeersMissingDedicatedChannel(
+  pool: Pool,
+  home: HubHomeEndpoint,
+  limit: number,
+): Promise<string[]> {
+  const result = await pool.query<{ community_id: string }>(
+    `
+      SELECT peer.community_id
+      FROM shared_channel_endpoints AS peer
+      WHERE peer.shared_channel_id = $1
+        AND peer.state = 'active'
+        AND peer.dedicated_to_community_id IS NULL
+        AND peer.community_id <> $2
+        AND NOT EXISTS (
+          SELECT 1
+          FROM shared_channel_endpoints AS dedicated
+          WHERE dedicated.shared_channel_id = peer.shared_channel_id
+            AND dedicated.community_id = $2
+            AND dedicated.dedicated_to_community_id = peer.community_id
+        )
+      ORDER BY peer.created_at, peer.id
+      LIMIT $3
+    `,
+    [home.sharedChannelId, home.communityId, limit],
+  );
+  return result.rows.map((row) => row.community_id);
+}
+
+/**
+ * Bind a freshly created channel on our own relay as BuzzRouter's dedicated
+ * endpoint for one peer.
+ *
+ * Runs after the channel handoff has completed, so a crash in between leaves an
+ * orphaned (already owner-transferred) channel that the next pass reuses via the
+ * handoff journal rather than an endpoint pointing at a channel we still own.
+ */
+export async function attachDedicatedPeerChannel(
+  pool: Pool,
+  input: {
+    home: HubHomeEndpoint;
+    localChannelId: string;
+    localChannelName: string;
+    peerCommunityId: string;
+  },
+): Promise<boolean> {
+  assertText(input.localChannelId, 1, 200, "Local channel");
+  assertText(input.localChannelName, 1, 80, "Local channel name");
+  const result = await pool.query(
+    `
+      INSERT INTO shared_channel_endpoints (
+        shared_channel_id, community_id, connection_id, role, state,
+        relay_url_snapshot, local_channel_id, local_channel_name_snapshot,
+        last_event_created_at, sends, receives, filter_mode, filter_list,
+        dedicated_to_community_id
+      )
+      SELECT home.shared_channel_id, home.community_id, home.connection_id,
+             'participant', 'active', home.relay_url_snapshot, $3, $4,
+             floor(extract(epoch FROM now()))::bigint, true, true,
+             'everyone_except', '{}', $2
+      FROM shared_channel_endpoints AS home
+      WHERE home.shared_channel_id = $5
+        AND home.community_id = $1
+        AND home.state = 'active'
+        AND home.dedicated_to_community_id IS NULL
+      ON CONFLICT DO NOTHING
+      RETURNING id
+    `,
+    [
+      input.home.communityId,
+      input.peerCommunityId,
+      input.localChannelId,
+      input.localChannelName,
+      input.home.sharedChannelId,
+    ],
+  );
+  return result.rows.length > 0;
 }
 
 export async function listActiveConnectorConfigs(

@@ -26,13 +26,8 @@ export interface CanonicalSourceMessage {
   bodySha256: string;
   /** Destination community handle the author addressed, without the `@[]`. */
   destinationSlug: string;
-  /**
-   * Destination user handle the author addressed, if any. Kept alongside the
-   * body — which already carries it as a mention — so the router can check it
-   * against the destination roster and say which half of `@community/user`
-   * failed.
-   */
-  destinationUser?: string;
+  /** True when the author used the bracket form, i.e. unambiguous intent. */
+  destinationExplicit: boolean;
   sharedChannelId: string;
   signedEvent: Event;
   sourceActorPubkey: string;
@@ -110,7 +105,7 @@ export function canonicalizeSourceEvent(
     body: routedBody,
     bodySha256: createHash("sha256").update(routedBody).digest("hex"),
     destinationSlug: address.slug,
-    ...(address.user === undefined ? {} : { destinationUser: address.user }),
+    destinationExplicit: address.explicit,
     sharedChannelId: route.sharedChannelId,
     signedEvent: event,
     sourceActorPubkey: event.pubkey,

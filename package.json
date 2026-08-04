@@ -8,7 +8,9 @@
   ],
   "scripts": {
     "admin": "node --import tsx scripts/signed-request.ts",
+    "bridge:profile": "node --import tsx scripts/publish-bridge-profile.ts",
     "build": "next build",
+    "community:icon": "node --import tsx scripts/set-community-icon.ts",
     "test:e2e": "playwright test",
     "db:migrate": "node --import tsx scripts/migrate.ts",
     "dev": "next dev",

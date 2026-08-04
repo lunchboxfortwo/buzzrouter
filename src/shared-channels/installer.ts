@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
+import type { VerifiedEvent } from "nostr-tools/core";
 import { npubEncode } from "nostr-tools/nip19";
 import {
   finalizeEvent,
@@ -108,6 +109,34 @@ export async function getCommunityInstallDescriptor(
   };
 }
 
+/**
+ * The bridge's kind-0 profile. Buzz renders `display_name` for a mirrored
+ * message's attribution line and for channel-admin events ("<name> added <x> to
+ * the channel"), and `getProfileName` (connector.ts) reads the same field, so
+ * this is the one name members see and tag — keep it the bare word.
+ *
+ * Published once at activation. An existing connection keeps whatever profile
+ * it published then, so changing this string only reaches that community after
+ * `npm run bridge:profile -- <relay-url>` republishes it.
+ */
+export const BRIDGE_PROFILE_CONTENT = JSON.stringify({
+  about: "Routes explicitly approved BuzzRouter hub connections.",
+  display_name: "buzzrouter",
+  name: "buzzrouter",
+});
+
+export function buildBridgeProfileEvent(privateKey: Uint8Array): VerifiedEvent {
+  return finalizeEvent(
+    {
+      content: BRIDGE_PROFILE_CONTENT,
+      created_at: Math.floor(Date.now() / 1_000),
+      kind: 0,
+      tags: [["client", "buzzrouter-installer"]],
+    },
+    privateKey,
+  );
+}
+
 export async function verifyAndActivateCommunityConnection(
   pool: Pool,
   token: string,
@@ -131,20 +160,7 @@ export async function verifyAndActivateCommunityConnection(
 
   try {
     relay = await relayFactory.connect(context.relayUrl, privateKey);
-    const event = finalizeEvent(
-      {
-        content: JSON.stringify({
-          about:
-            "Routes explicitly approved BuzzRouter hub connections.",
-          display_name: "BuzzRouter Bridge",
-          name: "buzzrouter-bridge",
-        }),
-        created_at: Math.floor(Date.now() / 1_000),
-        kind: 0,
-        tags: [["client", "buzzrouter-installer"]],
-      },
-      privateKey,
-    );
+    const event = buildBridgeProfileEvent(privateKey);
     await relay.publish(event);
     if (!(await relay.hasEvent(event.id))) {
       throw new ApiError(

@@ -1,3 +1,53 @@
+/* App-wide foundation: the single source of truth for the design tokens, the
+   brand face, and the baseline reset. Surface modules consume these tokens and
+   never redefine them. */
+
+@font-face {
+  font-display: swap;
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  src: url("/fonts/instrument-sans-latin.woff2") format("woff2");
+}
+
+:root {
+  --canvas: #f5f6f8;
+  --surface: #ffffff;
+  --surface-muted: #fafbfc;
+  --surface-selected: #efefff;
+  --ink: #111318;
+  --reading-ink: #414958;
+  --ink-soft: #667085;
+  --ink-faint: #667085;
+  --line: #dfe2e8;
+  --line-strong: #c9ced8;
+  --accent: #5657f2;
+  --accent-strong: #4445d8;
+  --accent-soft: #efefff;
+  --positive: #087c5b;
+  --positive-soft: #e8f7f1;
+  --verified-border: #b6dfcf;
+  --caution: #8a5b00;
+  --caution-soft: #fff5d6;
+  --caution-border: #ead59f;
+  --focus: #7957ff;
+  --error: #9d2b22;
+  --error-soft: #fff3f2;
+  --error-border: #f0c9c4;
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --duration: 180ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -12,4 +62,18 @@ input,
 select,
 textarea {
   letter-spacing: 0;
+}
+
+/* One consistent keyboard-focus treatment for every interactive element, so
+   focus never silently disappears on a surface that forgot to style it. A
+   surface can still override with a higher-specificity rule. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
 }

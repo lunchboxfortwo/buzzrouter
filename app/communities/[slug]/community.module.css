@@ -1,12 +1,4 @@
 .page {
-  --muted: var(--surface-muted);
-  --reading: var(--reading-ink);
-  --soft: var(--ink-soft);
-  --line2: var(--line-strong);
-  --accent2: var(--accent-strong);
-  --pos: var(--positive);
-  --pos-soft: var(--positive-soft);
-  --pos-border: var(--verified-border);
   flex: 1;
   overflow-x: clip;
 }
@@ -51,7 +43,7 @@
 .tagline {
   margin-top: 8px;
   max-width: 60ch;
-  color: var(--reading);
+  color: var(--reading-ink);
   font-size: 1.05rem;
   line-height: 1.45;
 }
@@ -60,7 +52,7 @@
    the headline subtitle. */
 .host {
   margin-top: 12px;
-  color: var(--soft);
+  color: var(--ink-soft);
   font-size: 0.78rem;
   font-family: ui-monospace, monospace;
   overflow-wrap: anywhere;
@@ -85,24 +77,24 @@
 }
 
 .pillLive {
-  background: var(--pos-soft);
-  color: var(--pos);
+  background: var(--positive-soft);
+  color: var(--positive);
 }
 
 .pillFocus {
   background: var(--accent-soft);
-  color: var(--accent2);
+  color: var(--accent-strong);
 }
 
 .pillOpen {
-  background: var(--pos-soft);
-  color: var(--pos);
-  border: 1px solid var(--pos-border);
+  background: var(--positive-soft);
+  color: var(--positive);
+  border: 1px solid var(--verified-border);
 }
 
 .pillInvite {
-  background: var(--muted);
-  color: var(--soft);
+  background: var(--surface-muted);
+  color: var(--ink-soft);
   border: 1px solid var(--line);
 }
 
@@ -148,7 +140,7 @@
   min-height: 48px;
   padding: 0 18px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--line2);
+  border: 1px solid var(--line-strong);
   background: var(--surface);
   color: var(--ink);
   font-weight: 620;
@@ -176,7 +168,7 @@
   min-height: 44px;
   padding: 0 18px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--line2);
+  border: 1px solid var(--line-strong);
   background: var(--surface);
   color: var(--ink);
   font-weight: 620;
@@ -192,7 +184,7 @@
 }
 
 .heroShare:hover {
-  border-color: var(--soft);
+  border-color: var(--ink-soft);
 }
 
 .cta svg {
@@ -208,7 +200,7 @@
 .lede {
   margin: 4px 0 26px;
   max-width: 62ch;
-  color: var(--reading);
+  color: var(--reading-ink);
   font-size: 1.05rem;
   line-height: 1.5;
 }
@@ -237,7 +229,7 @@
   font-weight: 680;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--soft);
+  color: var(--ink-soft);
 }
 
 .actDot {
@@ -249,24 +241,24 @@
 
 .actBusy,
 .actActive {
-  background: var(--pos);
-  box-shadow: 0 0 0 3px var(--pos-soft);
+  background: var(--positive);
+  box-shadow: 0 0 0 3px var(--positive-soft);
 }
 
 .actLight {
-  background: var(--soft);
-  box-shadow: 0 0 0 3px var(--muted);
+  background: var(--ink-soft);
+  box-shadow: 0 0 0 3px var(--surface-muted);
 }
 
 .actQuiet {
-  background: var(--line2);
-  box-shadow: 0 0 0 3px var(--muted);
+  background: var(--line-strong);
+  box-shadow: 0 0 0 3px var(--surface-muted);
 }
 
 .pulseFresh {
   flex: none;
   font-size: 0.74rem;
-  color: var(--soft);
+  color: var(--ink-soft);
 }
 
 .pulseGoals {
@@ -283,7 +275,7 @@
   font-weight: 680;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: var(--soft);
+  color: var(--ink-soft);
 }
 
 .pulseList {
@@ -297,7 +289,7 @@
   position: relative;
   padding-left: 22px;
   list-style: none;
-  color: var(--reading);
+  color: var(--reading-ink);
   font-size: 0.9rem;
   line-height: 1.5;
 }
@@ -323,7 +315,7 @@
 
 .pulseStat {
   font-size: 0.86rem;
-  color: var(--soft);
+  color: var(--ink-soft);
 }
 
 .pulseStat strong {
@@ -337,7 +329,7 @@
   font-weight: 680;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  color: var(--soft);
+  color: var(--ink-soft);
 }
 
 .relGrid {
@@ -377,16 +369,16 @@
 
 .relCard span {
   font-size: 0.76rem;
-  color: var(--soft);
+  color: var(--ink-soft);
 }
 
 .illus {
   margin-top: 10px;
   font-size: 0.72rem;
-  color: var(--soft);
+  color: var(--ink-soft);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 680px) {
   .hero {
     grid-template-columns: 64px minmax(0, 1fr);
   }

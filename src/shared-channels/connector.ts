@@ -364,10 +364,6 @@ export class ConnectorSupervisor {
         config.routes,
         isOperatedCommunityRelay(config.relayUrl),
         (event) => {
-          const gap = Math.round((Date.now() - session.lastInboundAt) / 1000);
-          console.log(
-            `connector: event relay=${config.relayUrl} kind=${event.kind} afterGap=${gap}s`,
-          );
           session.lastInboundAt = Date.now();
           if (event.kind === COMMUNITY_ROSTER_KIND) {
             this.scheduleHomeMembershipReconciliation(session);

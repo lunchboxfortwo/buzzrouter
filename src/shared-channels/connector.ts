@@ -703,13 +703,30 @@ export class ConnectorSupervisor {
         localChannelId: route.localChannelId,
         sharedChannelId: route.sharedChannelId,
         sourceEndpointId: route.sourceEndpointId,
+        dedicatedToCommunityId: route.dedicatedToCommunityId,
       });
       if (!canonical) return;
+
+      // A direct channel names its destination by binding, so it skips address
+      // resolution and the unknown-community bounce entirely.
+      if (canonical.destinationCommunityId) {
+        const sourceActorName = await session.relay.getProfileName?.(
+          event.pubkey,
+        );
+        await ingestBridgeMessage(this.pool, this.boss, {
+          ...canonical,
+          destinationCommunityId: canonical.destinationCommunityId,
+          messageId: randomUUID(),
+          sourceActorName: sourceActorName ?? undefined,
+        });
+        await recordConnectionHealth(this.pool, session.config.id, "healthy");
+        return;
+      }
 
       const destination = await findRoutableCommunityBySlug(
         this.pool,
         canonical.sharedChannelId,
-        canonical.destinationSlug,
+        canonical.destinationSlug!,
       );
       if (!destination) {
         // Every parse reaching here is in the addressing position — the first
@@ -719,7 +736,7 @@ export class ConnectorSupervisor {
           session,
           route,
           canonical.sourceEventId,
-          canonical.destinationSlug,
+          canonical.destinationSlug!,
         );
         return;
       }

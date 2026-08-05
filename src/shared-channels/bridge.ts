@@ -19,13 +19,25 @@ export interface SourceRoute {
   localChannelId: string;
   sharedChannelId: string;
   sourceEndpointId: string;
+  /** Set when this channel is bound 1:1 to one peer — see ConnectorRouteConfig. */
+  dedicatedToCommunityId?: string | null;
 }
 
 export interface CanonicalSourceMessage {
   body: string;
   bodySha256: string;
-  /** Destination community handle the author addressed, without the `@[]`. */
-  destinationSlug: string;
+  /**
+   * Destination community the author addressed by handle (inbox channels).
+   * Absent for a direct channel, where {@link destinationCommunityId} carries
+   * the fixed peer instead.
+   */
+  destinationSlug?: string;
+  /**
+   * Fixed destination for a direct channel: the peer this channel is bound to.
+   * When set, the message was NOT addressed — the channel is the address — and
+   * {@link destinationSlug}/{@link destinationUser} are absent.
+   */
+  destinationCommunityId?: string;
   /**
    * Destination user handle the author addressed, if any. Kept alongside the
    * body — which already carries it as a mention — so the router can check it
@@ -89,6 +101,24 @@ export function canonicalizeSourceEvent(
       "source_body_invalid",
       "The source message body is invalid.",
     );
+  }
+
+  // A direct channel is bound to one peer, so there is no addressing: the whole
+  // message routes there, untagged, and a leading `@x` is literal text. This is
+  // the inverse of an inbox channel, where an unaddressed message stays local.
+  if (route.dedicatedToCommunityId) {
+    return {
+      body: event.content,
+      bodySha256: createHash("sha256").update(event.content).digest("hex"),
+      destinationCommunityId: route.dedicatedToCommunityId,
+      sharedChannelId: route.sharedChannelId,
+      signedEvent: event,
+      sourceActorPubkey: event.pubkey,
+      sourceCreatedAt: event.created_at,
+      sourceEndpointId: route.sourceEndpointId,
+      sourceEventId: event.id,
+      sourceParentEventId: replyEventId(event),
+    };
   }
 
   // Routing is opt-in per message. An unaddressed message is ordinary local

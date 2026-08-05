@@ -185,6 +185,12 @@ export interface ConnectorRouteConfig {
   localChannelId: string;
   sharedChannelId: string;
   sourceEndpointId: string;
+  /**
+   * When set, this channel is a direct channel bound to exactly one peer.
+   * A message typed here routes to that community untagged — the channel is
+   * the address. When null it is an inbox channel and needs `@community`.
+   */
+  dedicatedToCommunityId: string | null;
 }
 
 export interface ActiveConnectorConfig
@@ -1591,6 +1597,7 @@ export async function listActiveConnectorConfigs(
     local_channel_id: string;
     shared_channel_id: string;
     source_endpoint_id: string;
+    dedicated_to_community_id: string | null;
   }>(
     `
       SELECT
@@ -1598,7 +1605,8 @@ export async function listActiveConnectorConfigs(
         endpoints.id AS source_endpoint_id,
         endpoints.shared_channel_id,
         endpoints.local_channel_id,
-        endpoints.last_event_created_at
+        endpoints.last_event_created_at,
+        endpoints.dedicated_to_community_id
       FROM shared_channel_endpoints AS endpoints
       JOIN shared_channels AS channels
         ON channels.id = endpoints.shared_channel_id
@@ -1620,6 +1628,7 @@ export async function listActiveConnectorConfigs(
       localChannelId: route.local_channel_id,
       sharedChannelId: route.shared_channel_id,
       sourceEndpointId: route.source_endpoint_id,
+      dedicatedToCommunityId: route.dedicated_to_community_id,
     });
     routesByConnection.set(route.connection_id, connectionRoutes);
   }

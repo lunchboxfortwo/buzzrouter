@@ -16,6 +16,7 @@ import { BRIDGE_DELIVERY_QUEUE, configureQueues } from "../jobs/queues";
 import {
   attachDedicatedPeerChannel,
   claimCommandReceipt,
+  claimDirectChannelHint,
   claimUndeliverableNotice,
   getCommunityInboxEndpoint,
   getOpenHubMembership,
@@ -508,6 +509,45 @@ describeDatabase("open-hub PostgreSQL integration", () => {
     // Scoped to the endpoint that read it: another community's channel can
     // carry an event of the same id and still be answered.
     expect(await claim(secondEndpoint!)).toBe(true);
+  });
+
+  it("hints a direct channel once per source, and only for an inbox", async () => {
+    await createConnectedCommunity(pool, "home", homeHost);
+    const inbox = await createConnectedCommunity(pool, "inbox");
+    const source = await createConnectedCommunity(pool, "src");
+    await join(inbox, "inbox-general");
+    const inboxEndpoint = (
+      await pool.query<{ id: string }>(
+        "SELECT id FROM shared_channel_endpoints WHERE community_id = $1",
+        [inbox.communityId],
+      )
+    ).rows[0]!.id;
+
+    const claim = () =>
+      claimDirectChannelHint(pool, {
+        destinationEndpointId: inboxEndpoint,
+        sourceCommunityId: source.communityId,
+      });
+    // First message from that source into the inbox hints; the rebuild replay
+    // and a racing replica do not.
+    expect(await claim()).toBe(true);
+    expect(await claim()).toBe(false);
+    expect(await Promise.all([claim(), claim()])).toEqual([false, false]);
+
+    // A dedicated endpoint means the receiver already promoted — never hint.
+    await pool.query(
+      `UPDATE shared_channel_endpoints
+         SET dedicated_to_community_id = $2
+       WHERE id = $1`,
+      [inboxEndpoint, source.communityId],
+    );
+    const other = await createConnectedCommunity(pool, "other");
+    expect(
+      await claimDirectChannelHint(pool, {
+        destinationEndpointId: inboxEndpoint,
+        sourceCommunityId: other.communityId,
+      }),
+    ).toBe(false);
   });
 
   // The command support functions. Unit tests run against a fake pool, so the

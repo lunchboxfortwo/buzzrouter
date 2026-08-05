@@ -39,7 +39,18 @@ stored_code() {
 
 check_expiry() {
   docker exec -i -e CODE="$1" "$APP_CONTAINER" node - <<'JS'
-const raw = (process.env.CODE || "").split(".")[0];
+const code = process.env.CODE || "";
+
+// Keep these shape branches in sync with src/directory/invite-code-format.ts.
+// Versioned codes are opaque: only the relay's live probe can judge them.
+if (/^v\d+[.][A-Za-z0-9._~-]{8,}$/.test(code)) {
+  console.log(
+    "invite expiry/validity is governed by the live joinability probe, not embedded in the code",
+  );
+  process.exit(0);
+}
+
+const raw = code.split(".")[0];
 const json = Buffer.from(raw + "=".repeat((4 - (raw.length % 4)) % 4), "base64url");
 const days = (JSON.parse(json).e - Math.floor(Date.now() / 1000)) / 86400;
 console.log(days > 0

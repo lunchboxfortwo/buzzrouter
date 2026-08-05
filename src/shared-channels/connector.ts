@@ -26,7 +26,9 @@ import { COMMAND_USAGE, parseCommand, type ParsedCommand } from "./commands";
 import {
   attachDedicatedPeerChannel,
   cancelBridgeDelivery,
+  type BridgeDeliveryContext,
   claimCommandReceipt,
+  claimDirectChannelHint,
   claimUndeliverableNotice,
   completeBridgeDelivery,
   decryptConnectorPrivateKey,
@@ -379,6 +381,47 @@ export class ConnectorSupervisor {
     }
 
     await completeBridgeDelivery(this.pool, deliveryId, event);
+    await this.hintDirectChannel(session, context);
+  }
+
+  /**
+   * On the FIRST message a community sends into a peer's inbox, tell the peer
+   * they can open a direct channel and drop the tag. Fires only for an inbox
+   * endpoint (claimDirectChannelHint gates on dedicated_to IS NULL — a message
+   * that reached a dedicated channel means they already promoted), and exactly
+   * once per (inbox, source community). Bridge-authored + `br notice hint`, so
+   * the connector drops it on read like every other notice. Best effort: a
+   * failed hint must never fail the delivery it rides on.
+   */
+  private async hintDirectChannel(
+    session: ConnectorSession,
+    context: BridgeDeliveryContext,
+  ): Promise<void> {
+    try {
+      const claimed = await claimDirectChannelHint(this.pool, {
+        destinationEndpointId: context.destinationEndpointId,
+        sourceCommunityId: context.sourceCommunityId,
+      });
+      if (!claimed) return;
+      await session.relay.publish(
+        finalizeEvent(
+          {
+            content:
+              `buzzrouter: @${context.sourceCommunitySlug} messaged you here. ` +
+              `Type "/open ${context.sourceCommunitySlug}" for a direct channel — no tags.`,
+            created_at: Math.floor(Date.now() / 1_000),
+            kind: BUZZ_MESSAGE_KIND,
+            tags: [
+              ["h", context.destinationChannelId],
+              ["br", "notice", "hint"],
+            ],
+          },
+          session.privateKey,
+        ),
+      );
+    } catch {
+      // Best effort only.
+    }
   }
 
   private async startConnection(

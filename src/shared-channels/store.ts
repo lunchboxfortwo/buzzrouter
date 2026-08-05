@@ -2576,3 +2576,38 @@ export async function getCommunitySlug(
   );
   return result.rows[0]?.slug ?? null;
 }
+
+/**
+ * Claim the one-time "you can /open a direct channel" hint for a peer whose
+ * message just landed in this inbox. Returns true on the FIRST message from
+ * that source community into that inbox, false ever after.
+ *
+ * The INSERT is gated on the destination being an INBOX endpoint
+ * (dedicated_to_community_id IS NULL): a message that reached a dedicated
+ * channel means the receiver already promoted, so there is nothing to hint.
+ * Claimed before the hint is published so a redelivery can never double-post.
+ */
+export async function claimDirectChannelHint(
+  pool: Pool,
+  input: {
+    destinationEndpointId: string;
+    sourceCommunityId: string;
+  },
+): Promise<boolean> {
+  const result = await pool.query<{ destination_endpoint_id: string }>(
+    `
+      INSERT INTO bridge_direct_channel_hints (
+        destination_endpoint_id,
+        source_community_id
+      )
+      SELECT endpoints.id, $2
+      FROM shared_channel_endpoints AS endpoints
+      WHERE endpoints.id = $1
+        AND endpoints.dedicated_to_community_id IS NULL
+      ON CONFLICT (destination_endpoint_id, source_community_id) DO NOTHING
+      RETURNING destination_endpoint_id
+    `,
+    [input.destinationEndpointId, input.sourceCommunityId],
+  );
+  return result.rows.length === 1;
+}

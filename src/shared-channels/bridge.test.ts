@@ -13,6 +13,56 @@ import {
 } from "./bridge";
 
 describe("canonicalizeSourceEvent", () => {
+  it("routes a direct-channel message by binding, untagged", () => {
+    const sourceKey = randomBytes(32);
+    const peer = randomUUID();
+    const event = finalizeEvent(
+      {
+        // No @-address, and a leading @ is literal text, not an address.
+        content: "@relay just talk to me here",
+        created_at: Math.floor(Date.now() / 1_000),
+        kind: 9,
+        tags: [["h", "direct"]],
+      },
+      sourceKey,
+    );
+
+    expect(
+      canonicalizeSourceEvent(event, {
+        bridgePubkey: getPublicKey(randomBytes(32)),
+        localChannelId: "direct",
+        sharedChannelId: randomUUID(),
+        sourceEndpointId: randomUUID(),
+        dedicatedToCommunityId: peer,
+      }),
+    ).toMatchObject({
+      // The whole message is the body — nothing stripped, no address parsed.
+      body: "@relay just talk to me here",
+      destinationCommunityId: peer,
+    });
+  });
+
+  it("still stays local for an unaddressed inbox message", () => {
+    const event = finalizeEvent(
+      {
+        content: "just chatting locally",
+        created_at: Math.floor(Date.now() / 1_000),
+        kind: 9,
+        tags: [["h", "inbox"]],
+      },
+      randomBytes(32),
+    );
+    // No dedicatedToCommunityId => inbox channel => unaddressed stays local.
+    expect(
+      canonicalizeSourceEvent(event, {
+        bridgePubkey: getPublicKey(randomBytes(32)),
+        localChannelId: "inbox",
+        sharedChannelId: randomUUID(),
+        sourceEndpointId: randomUUID(),
+      }),
+    ).toBeNull();
+  });
+
   it("preserves the signed source event and extracts its reply", () => {
     const sourceKey = randomBytes(32);
     const bridgeKey = randomBytes(32);

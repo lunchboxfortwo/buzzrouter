@@ -1480,6 +1480,52 @@ export async function getHubHomeEndpoint(
 }
 
 /**
+ * Any hub participant's own ordinary inbox endpoint — the `dedicated_to_community_id
+ * IS NULL` participant — together with the owner key needed to create a channel
+ * on that community's relay. This is {@link getHubHomeEndpoint} generalized off
+ * BuzzRouter's own community to ANY community, so the `/open` command can create
+ * a direct channel in the requester's own community and bind it with
+ * {@link attachDedicatedPeerChannel}. Null when the community has no active inbox
+ * endpoint or no owner on record, which is a reason to decline rather than error.
+ */
+export async function getCommunityInboxEndpoint(
+  pool: Pool,
+  communityId: string,
+): Promise<HubHomeEndpoint | null> {
+  const result = await pool.query<{
+    community_id: string;
+    owner_pubkey: string;
+    shared_channel_id: string;
+  }>(
+    `
+      SELECT endpoints.community_id,
+             endpoints.shared_channel_id,
+             communities.owner_pubkey
+      FROM shared_channel_endpoints AS endpoints
+      JOIN shared_channels AS channels
+        ON channels.id = endpoints.shared_channel_id
+      JOIN communities ON communities.id = endpoints.community_id
+      WHERE channels.mode = 'hub'
+        AND channels.state = 'active'
+        AND endpoints.state = 'active'
+        AND endpoints.dedicated_to_community_id IS NULL
+        AND endpoints.community_id = $1
+        AND communities.owner_pubkey IS NOT NULL
+      LIMIT 1
+    `,
+    [communityId],
+  );
+  const row = result.rows[0];
+  return row
+    ? {
+        communityId: row.community_id,
+        ownerPubkey: row.owner_pubkey,
+        sharedChannelId: row.shared_channel_id,
+      }
+    : null;
+}
+
+/**
  * Hub participants that BuzzRouter does not yet hold a dedicated channel for,
  * oldest first. This is what makes the change retroactive: an already-connected
  * community is simply one that has been waiting the longest.
@@ -2308,6 +2354,163 @@ export async function claimUndeliverableNotice(
     [input.sourceEndpointId, input.sourceEventId, input.reason],
   );
   return result.rows.length === 1;
+}
+
+export type CommandVerb = "open" | "close" | "list" | "usage";
+
+/**
+ * Claim the single execution a slash-command source event is ever allowed.
+ *
+ * Returns true exactly once per (source endpoint, source event) across every
+ * reader, forever; every later caller gets false and must do nothing. This is
+ * required for the same reason as {@link claimUndeliverableNotice}: an
+ * intercepted command is never ingested, so it never advances the endpoint
+ * cursor and the relay replays it on every idle rebuild. Claimed BEFORE the
+ * command runs, so a replay cannot re-run the handoff or repost the reply.
+ */
+export async function claimCommandReceipt(
+  pool: Pool,
+  input: {
+    sourceEndpointId: string;
+    sourceEventId: string;
+    verb: CommandVerb;
+  },
+): Promise<boolean> {
+  const result = await pool.query<{ source_event_id: string }>(
+    `
+      INSERT INTO bridge_command_receipts (
+        source_endpoint_id,
+        source_event_id,
+        verb
+      )
+      VALUES ($1, $2, $3)
+      ON CONFLICT (source_endpoint_id, source_event_id) DO NOTHING
+      RETURNING source_event_id
+    `,
+    [input.sourceEndpointId, input.sourceEventId, input.verb],
+  );
+  return result.rows.length === 1;
+}
+
+/**
+ * Unbind a community's dedicated channel to one peer: turn its sends and
+ * receives off so traffic falls back to the inbox, WITHOUT deleting the channel
+ * (renaming/deleting needs owner authority the bridge gave up during the
+ * handoff, so the channel is left archived). Returns the peer's slug for the
+ * confirmation, or null when there is no bound dedicated channel to close.
+ */
+export async function unbindDedicatedPeerChannel(
+  pool: Pool,
+  input: { communityId: string; peerCommunityId: string },
+): Promise<{ slug: string } | null> {
+  const result = await pool.query<{ slug: string | null }>(
+    `
+      UPDATE shared_channel_endpoints AS endpoints
+      SET sends = false, receives = false, updated_at = now()
+      FROM communities AS peer
+      WHERE endpoints.community_id = $1
+        AND endpoints.dedicated_to_community_id = $2
+        AND endpoints.state = 'active'
+        AND (endpoints.sends = true OR endpoints.receives = true)
+        AND peer.id = endpoints.dedicated_to_community_id
+      RETURNING peer.slug
+    `,
+    [input.communityId, input.peerCommunityId],
+  );
+  const row = result.rows[0];
+  return row ? { slug: row.slug ?? input.peerCommunityId } : null;
+}
+
+/**
+ * Re-enable a community's existing dedicated channel to a peer — the `/open`
+ * path when the channel was created earlier and then closed. `attachDedicatedPeerChannel`
+ * only inserts (ON CONFLICT DO NOTHING), so without this a re-`/open` would reply
+ * "Opened" while the endpoint stayed sends/receives off. Returns true when a row
+ * was turned back on, false when there was nothing to re-enable.
+ */
+export async function reopenDedicatedPeerChannel(
+  pool: Pool,
+  input: { communityId: string; peerCommunityId: string },
+): Promise<boolean> {
+  const result = await pool.query(
+    `
+      UPDATE shared_channel_endpoints
+      SET sends = true, receives = true, updated_at = now()
+      WHERE community_id = $1
+        AND dedicated_to_community_id = $2
+        AND state = 'active'
+        AND (sends = false OR receives = false)
+      RETURNING id
+    `,
+    [input.communityId, input.peerCommunityId],
+  );
+  return result.rows.length > 0;
+}
+
+/**
+ * The peer communities a community holds an open (not closed) dedicated channel
+ * to, as slugs. Used by `/list`.
+ */
+export async function listDirectChannelPeers(
+  pool: Pool,
+  communityId: string,
+): Promise<string[]> {
+  const result = await pool.query<{ slug: string | null; peer_id: string }>(
+    `
+      SELECT peer.slug, endpoints.dedicated_to_community_id AS peer_id
+      FROM shared_channel_endpoints AS endpoints
+      JOIN communities AS peer
+        ON peer.id = endpoints.dedicated_to_community_id
+      WHERE endpoints.community_id = $1
+        AND endpoints.dedicated_to_community_id IS NOT NULL
+        AND endpoints.state = 'active'
+        AND endpoints.receives = true
+      ORDER BY peer.slug NULLS LAST, endpoints.dedicated_to_community_id
+    `,
+    [communityId],
+  );
+  return result.rows.map((row) => row.slug ?? row.peer_id);
+}
+
+/**
+ * Peer communities that have sent a message to this community's inbox but that
+ * it holds no open dedicated channel to — the candidates for `/open`. Used by
+ * `/list`.
+ */
+export async function listInboundCommunitiesWithoutDirectChannel(
+  pool: Pool,
+  communityId: string,
+): Promise<string[]> {
+  const result = await pool.query<{ slug: string | null; peer_id: string }>(
+    `
+      SELECT DISTINCT source_community.slug,
+             source_endpoint.community_id AS peer_id
+      FROM bridge_deliveries AS deliveries
+      JOIN shared_channel_endpoints AS inbox
+        ON inbox.id = deliveries.destination_endpoint_id
+      JOIN bridge_messages AS messages
+        ON messages.id = deliveries.bridge_message_id
+      JOIN shared_channel_endpoints AS source_endpoint
+        ON source_endpoint.id = messages.source_endpoint_id
+      JOIN communities AS source_community
+        ON source_community.id = source_endpoint.community_id
+      WHERE inbox.community_id = $1
+        AND inbox.dedicated_to_community_id IS NULL
+        AND source_endpoint.community_id <> $1
+        AND NOT EXISTS (
+          SELECT 1
+          FROM shared_channel_endpoints AS dedicated
+          WHERE dedicated.community_id = $1
+            AND dedicated.dedicated_to_community_id
+              = source_endpoint.community_id
+            AND dedicated.state = 'active'
+            AND dedicated.receives = true
+        )
+      ORDER BY source_community.slug NULLS LAST, peer_id
+    `,
+    [communityId],
+  );
+  return result.rows.map((row) => row.slug ?? row.peer_id);
 }
 
 /**

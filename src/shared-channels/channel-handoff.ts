@@ -29,6 +29,8 @@ const GROUP_PUT_USER_KIND = 9_000;
 // steps itself down to a plain member so it never lingers as channel owner.
 const REQUESTER_ROLE = "owner";
 const BOT_ROLE = "member";
+const MEMBER_ROLE = "member";
+const HEX_PUBKEY = /^[a-f0-9]{64}$/;
 
 const CREATE_CONFIRM_TIMEOUT_MS = 3_000;
 
@@ -39,6 +41,14 @@ export interface CreateDedicatedChannelInput {
   /** The explicit name the owner entered in the channel combobox. */
   channelName: string;
   idempotencyKey: string;
+  /**
+   * Extra pubkeys to add as members while the bridge still owns the channel
+   * (before it demotes itself). Empty for the provisioner; the `/open` command
+   * passes the requester so they can use the channel it just created. Added on
+   * a fresh create only — an already-completed handoff cannot add members,
+   * because the bridge is no longer the owner.
+   */
+  members?: string[];
 }
 
 export interface DedicatedChannel {
@@ -143,7 +153,14 @@ export async function createDedicatedChannel(
           connection.bridgePubkey,
         ),
       }));
-    await runHandoff(pool, relay, privateKey, connection.bridgePubkey, handoff);
+    await runHandoff(
+      pool,
+      relay,
+      privateKey,
+      connection.bridgePubkey,
+      handoff,
+      normalizeMembers(input.members, connection.bridgePubkey),
+    );
     return { channelId: handoff.channelId, channelName: handoff.channelName };
   } finally {
     relay?.close();
@@ -195,6 +212,7 @@ async function runHandoff(
   privateKey: Uint8Array,
   botPubkey: string,
   handoff: ChannelHandoffRecord,
+  members: string[] = [],
 ): Promise<void> {
   if (handoff.state === "creating") {
     await runStep(pool, handoff, "channel_create_failed", async () => {
@@ -223,6 +241,17 @@ async function runHandoff(
           REQUESTER_ROLE,
         )),
       );
+      // Add any extra members here, while the bridge is still the owner and so
+      // may issue kind 9000. Re-adding on a resumed handoff is a harmless
+      // no-op, which is why this can live inside the promote step without its
+      // own journaled state.
+      for (const member of members) {
+        if (member === handoff.requesterPubkey) continue;
+        await publishConfirmed(
+          relay,
+          finalize(privateKey, putUserTemplate(handoff.channelId, member, MEMBER_ROLE)),
+        );
+      }
     });
     await advanceHandoff(pool, handoff, "created", "handed_off");
   }
@@ -467,6 +496,23 @@ function mapHandoff(row: HandoffRow): ChannelHandoffRecord {
     requesterPubkey: row.requester_pubkey,
     state: row.state,
   };
+}
+
+/**
+ * Keep only well-formed pubkeys, drop the bridge's own (it is added as a member
+ * by the demote step already), and de-duplicate — a malformed or repeated entry
+ * would only waste a relay round trip or fail the publish.
+ */
+function normalizeMembers(
+  members: string[] | undefined,
+  botPubkey: string,
+): string[] {
+  if (!members) return [];
+  const seen = new Set<string>();
+  for (const member of members) {
+    if (HEX_PUBKEY.test(member) && member !== botPubkey) seen.add(member);
+  }
+  return [...seen];
 }
 
 function normalizeChannelName(channelName: unknown): string {

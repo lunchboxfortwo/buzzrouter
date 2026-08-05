@@ -14,11 +14,18 @@ import {
 } from "../jobs/provision-peer-channels";
 import { BRIDGE_DELIVERY_QUEUE, configureQueues } from "../jobs/queues";
 import {
+  attachDedicatedPeerChannel,
+  claimCommandReceipt,
   claimUndeliverableNotice,
+  getCommunityInboxEndpoint,
   getOpenHubMembership,
   ingestBridgeMessage,
   joinOpenHub,
   listActiveConnectorConfigs,
+  listDirectChannelPeers,
+  listInboundCommunitiesWithoutDirectChannel,
+  reopenDedicatedPeerChannel,
+  unbindDedicatedPeerChannel,
   updateOpenHubSettings,
 } from "./store";
 
@@ -501,6 +508,115 @@ describeDatabase("open-hub PostgreSQL integration", () => {
     // Scoped to the endpoint that read it: another community's channel can
     // carry an event of the same id and still be answered.
     expect(await claim(secondEndpoint!)).toBe(true);
+  });
+
+  // The command support functions. Unit tests run against a fake pool, so the
+  // real SQL — the inbox lookup, the `/open`/`/close` binding, and the `/list`
+  // reads — is only proven against Postgres here.
+  it("resolves a community's own inbox endpoint for /open", async () => {
+    await createConnectedCommunity(pool, "home", homeHost);
+    const first = await createConnectedCommunity(pool, "first");
+    const membership = await join(first, "first-general");
+
+    const inbox = await getCommunityInboxEndpoint(pool, first.communityId);
+    expect(inbox).toEqual({
+      communityId: first.communityId,
+      ownerPubkey: first.ownerPubkey,
+      sharedChannelId: membership.sharedChannelId,
+    });
+    // A community with no hub endpoint has no inbox to open a channel in.
+    const second = await createConnectedCommunity(pool, "second");
+    expect(await getCommunityInboxEndpoint(pool, second.communityId)).toBeNull();
+  });
+
+  it("claims a command source event for exactly one caller", async () => {
+    await createConnectedCommunity(pool, "home", homeHost);
+    const first = await createConnectedCommunity(pool, "first");
+    const membership = await join(first, "first-general");
+    const sourceEventId = randomBytes(32).toString("hex");
+    const claim = () =>
+      claimCommandReceipt(pool, {
+        sourceEndpointId: membership.endpointId,
+        sourceEventId,
+        verb: "open",
+      });
+
+    expect(await claim()).toBe(true);
+    // The idle rebuild replays the same command event; it must not run twice.
+    expect(await claim()).toBe(false);
+    expect(await Promise.all([claim(), claim()])).toEqual([false, false]);
+  });
+
+  it("opens, lists, and closes direct channels for a community", async () => {
+    await createConnectedCommunity(pool, "home", homeHost);
+    const first = await createConnectedCommunity(pool, "first");
+    const second = await createConnectedCommunity(pool, "second");
+    const third = await createConnectedCommunity(pool, "third");
+    await join(first, "first-general");
+    await join(second, "second-general");
+    const thirdMembership = await join(third, "third-general");
+
+    const inbox = await getCommunityInboxEndpoint(pool, first.communityId);
+    expect(inbox).not.toBeNull();
+
+    // /open: bind first -> second as a dedicated channel (the handoff itself is
+    // covered in channel-handoff.integration.test.ts; here we bind directly).
+    const bound = await attachDedicatedPeerChannel(pool, {
+      home: inbox!,
+      localChannelId: `first-connect-second-${randomUUID()}`,
+      localChannelName: "connect-second",
+      peerCommunityId: second.communityId,
+    });
+    expect(bound).toBe(true);
+    expect(await listDirectChannelPeers(pool, first.communityId)).toEqual([
+      "second",
+    ]);
+
+    // third messages first's inbox but has no direct channel, so /list surfaces
+    // it as a candidate; second, which has a direct channel, does not.
+    await ingestAddressed(
+      thirdMembership.sharedChannelId,
+      thirdMembership.endpointId,
+      first.communityId,
+    );
+    expect(
+      await listInboundCommunitiesWithoutDirectChannel(pool, first.communityId),
+    ).toEqual(["third"]);
+
+    // /close: unbind first -> second; traffic falls back to the inbox.
+    expect(
+      await unbindDedicatedPeerChannel(pool, {
+        communityId: first.communityId,
+        peerCommunityId: second.communityId,
+      }),
+    ).toEqual({ slug: "second" });
+    expect(await listDirectChannelPeers(pool, first.communityId)).toEqual([]);
+    // Closing an already-closed channel reports nothing to close.
+    expect(
+      await unbindDedicatedPeerChannel(pool, {
+        communityId: first.communityId,
+        peerCommunityId: second.communityId,
+      }),
+    ).toBeNull();
+
+    // Re-/open turns the archived endpoint back on rather than replying "Opened"
+    // while it stays off.
+    expect(
+      await reopenDedicatedPeerChannel(pool, {
+        communityId: first.communityId,
+        peerCommunityId: second.communityId,
+      }),
+    ).toBe(true);
+    expect(await listDirectChannelPeers(pool, first.communityId)).toEqual([
+      "second",
+    ]);
+    // Nothing to re-enable when it is already open.
+    expect(
+      await reopenDedicatedPeerChannel(pool, {
+        communityId: first.communityId,
+        peerCommunityId: second.communityId,
+      }),
+    ).toBe(false);
   });
 
   /** Runs one provisioning pass with the relay handoff stubbed out. */

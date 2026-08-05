@@ -19,21 +19,31 @@ import {
   BUZZ_MESSAGE_KIND,
   canonicalizeSourceEvent,
   createDestinationProjection,
+  hasBuzzRouterProjectionMarker,
 } from "./bridge";
+import { createDedicatedChannel } from "./channel-handoff";
+import { COMMAND_USAGE, parseCommand, type ParsedCommand } from "./commands";
 import {
+  attachDedicatedPeerChannel,
   cancelBridgeDelivery,
+  claimCommandReceipt,
   claimUndeliverableNotice,
   completeBridgeDelivery,
   decryptConnectorPrivateKey,
   findRoutableCommunityBySlug,
   getBridgeDeliveryContext,
+  getCommunityInboxEndpoint,
   ingestBridgeMessage,
   isBridgeDeliveryRouteActive,
   listActiveConnectorConfigs,
+  listDirectChannelPeers,
+  listInboundCommunitiesWithoutDirectChannel,
   markBridgeDeliveryDelivering,
   markBridgeDeliveryRetry,
   persistDestinationEvent,
   recordConnectionHealth,
+  reopenDedicatedPeerChannel,
+  unbindDedicatedPeerChannel,
   type ActiveConnectorConfig,
   type ConnectorRouteConfig,
   type UndeliverableReason,
@@ -697,19 +707,50 @@ export class ConnectorSupervisor {
     );
     if (!route) return;
 
+    // Slash commands are intercepted here, before any routing, and are never
+    // mirrored. The bridge's own events (its command replies and its mirrored
+    // messages) are skipped so a reply can never be read back as a command.
+    if (
+      event.pubkey !== session.config.bridgePubkey &&
+      !hasBuzzRouterProjectionMarker(event)
+    ) {
+      const command = parseCommand(event.content);
+      if (command) {
+        await this.handleCommand(session, route, event, command);
+        return;
+      }
+    }
+
     try {
       const canonical = canonicalizeSourceEvent(event, {
         bridgePubkey: session.config.bridgePubkey,
         localChannelId: route.localChannelId,
         sharedChannelId: route.sharedChannelId,
         sourceEndpointId: route.sourceEndpointId,
+        dedicatedToCommunityId: route.dedicatedToCommunityId,
       });
       if (!canonical) return;
+
+      // A direct channel names its destination by binding, so it skips address
+      // resolution and the unknown-community bounce entirely.
+      if (canonical.destinationCommunityId) {
+        const sourceActorName = await session.relay.getProfileName?.(
+          event.pubkey,
+        );
+        await ingestBridgeMessage(this.pool, this.boss, {
+          ...canonical,
+          destinationCommunityId: canonical.destinationCommunityId,
+          messageId: randomUUID(),
+          sourceActorName: sourceActorName ?? undefined,
+        });
+        await recordConnectionHealth(this.pool, session.config.id, "healthy");
+        return;
+      }
 
       const destination = await findRoutableCommunityBySlug(
         this.pool,
         canonical.sharedChannelId,
-        canonical.destinationSlug,
+        canonical.destinationSlug!,
       );
       if (!destination) {
         // Every parse reaching here is in the addressing position — the first
@@ -719,7 +760,7 @@ export class ConnectorSupervisor {
           session,
           route,
           canonical.sourceEventId,
-          canonical.destinationSlug,
+          canonical.destinationSlug!,
         );
         return;
       }
@@ -775,6 +816,206 @@ export class ConnectorSupervisor {
         safeErrorMessage(error),
       );
       console.error("Shared-channel event ingestion failed", error);
+    }
+  }
+
+  /**
+   * Run a slash command and reply in the channel it was typed in.
+   *
+   * The command is claimed BEFORE it runs, exactly like {@link
+   * reportUndeliverable}'s notice, because an intercepted command is never
+   * ingested and so is replayed on every idle rebuild — the claim makes it run,
+   * and reply, exactly once. A command that throws is dropped with a failure
+   * reply rather than degrading the connection; the user can retype.
+   */
+  private async handleCommand(
+    session: ConnectorSession,
+    route: ConnectorRouteConfig,
+    event: Event,
+    command: ParsedCommand,
+  ): Promise<void> {
+    const claimed = await claimCommandReceipt(this.pool, {
+      sourceEndpointId: route.sourceEndpointId,
+      sourceEventId: event.id,
+      verb: command.kind,
+    });
+    if (!claimed) return;
+
+    let reply: string;
+    try {
+      reply = await this.runCommand(session, route, event, command);
+    } catch (error) {
+      console.error("Shared-channel command failed", error);
+      reply = "BuzzRouter: that command could not be completed — try again.";
+    }
+    await this.replyInChannel(session, route, reply);
+  }
+
+  private async runCommand(
+    session: ConnectorSession,
+    route: ConnectorRouteConfig,
+    event: Event,
+    command: ParsedCommand,
+  ): Promise<string> {
+    switch (command.kind) {
+      case "usage":
+        return command.message;
+      case "list":
+        return this.runListCommand(session);
+      case "open":
+        return this.runOpenCommand(session, event, command.slug);
+      case "close":
+        return this.runCloseCommand(session, route, command.slug);
+    }
+  }
+
+  /**
+   * `/open <slug>` — create a direct channel in the requester's OWN community
+   * bound to the peer, so this community can talk to the peer untagged. The
+   * command is only the trigger; the community's own connection authority does
+   * the work, so the typer need not be the owner. Idempotent per peer: the same
+   * key the provisioner uses, so both converge on one channel.
+   */
+  private async runOpenCommand(
+    session: ConnectorSession,
+    event: Event,
+    slug: string,
+  ): Promise<string> {
+    const inbox = await getCommunityInboxEndpoint(
+      this.pool,
+      session.config.communityId,
+    );
+    if (!inbox) {
+      return "BuzzRouter: this community is not fully connected, so a direct channel cannot be opened.";
+    }
+    const peer = await findRoutableCommunityBySlug(
+      this.pool,
+      inbox.sharedChannelId,
+      slug,
+    );
+    if (!peer) return `BuzzRouter: no connected community named ${slug}.`;
+    if (peer.communityId === session.config.communityId) {
+      return `BuzzRouter: ${slug} is this community.`;
+    }
+
+    const channel = await createDedicatedChannel(
+      this.pool,
+      {
+        channelName: `connect-${peer.slug}`,
+        communityId: inbox.communityId,
+        idempotencyKey: `hub-dedicated:${peer.communityId}`,
+        members: [event.pubkey],
+        ownerPubkey: inbox.ownerPubkey,
+      },
+      this.wrappingKeys,
+      this.relayFactory,
+    );
+    const bound = await attachDedicatedPeerChannel(this.pool, {
+      home: inbox,
+      localChannelId: channel.channelId,
+      localChannelName: channel.channelName,
+      peerCommunityId: peer.communityId,
+    });
+    // A channel opened, closed, then reopened already has an endpoint, so the
+    // insert is a no-op — turn its sends/receives back on instead.
+    if (!bound) {
+      await reopenDedicatedPeerChannel(this.pool, {
+        communityId: session.config.communityId,
+        peerCommunityId: peer.communityId,
+      });
+    }
+    return `Opened #${channel.channelName} — talk here, no tags.`;
+  }
+
+  /**
+   * `/close <slug>` or bare `/close` inside a direct channel — unbind the
+   * dedicated endpoint (sends/receives off) so traffic falls back to the inbox.
+   * The channel itself is left archived: renaming or deleting it needs the owner
+   * authority the bridge handed off.
+   */
+  private async runCloseCommand(
+    session: ConnectorSession,
+    route: ConnectorRouteConfig,
+    slug: string | null,
+  ): Promise<string> {
+    let peerCommunityId: string;
+    if (slug === null) {
+      if (!route.dedicatedToCommunityId) {
+        return "BuzzRouter: /close needs a community name, or use it inside a direct channel.";
+      }
+      peerCommunityId = route.dedicatedToCommunityId;
+    } else {
+      const inbox = await getCommunityInboxEndpoint(
+        this.pool,
+        session.config.communityId,
+      );
+      const peer = inbox
+        ? await findRoutableCommunityBySlug(this.pool, inbox.sharedChannelId, slug)
+        : null;
+      if (!peer) return `BuzzRouter: no connected community named ${slug}.`;
+      peerCommunityId = peer.communityId;
+    }
+
+    const closed = await unbindDedicatedPeerChannel(this.pool, {
+      communityId: session.config.communityId,
+      peerCommunityId,
+    });
+    if (!closed) {
+      return slug === null
+        ? "BuzzRouter: there is no open direct channel here to close."
+        : `BuzzRouter: no open direct channel with ${slug} to close.`;
+    }
+    return `Closed the direct channel with @${closed.slug} — messages fall back to your inbox.`;
+  }
+
+  /** `/list` — direct channels this community holds, plus inbound peers without one. */
+  private async runListCommand(session: ConnectorSession): Promise<string> {
+    const [direct, inbound] = await Promise.all([
+      listDirectChannelPeers(this.pool, session.config.communityId),
+      listInboundCommunitiesWithoutDirectChannel(
+        this.pool,
+        session.config.communityId,
+      ),
+    ]);
+    const directLine = direct.length
+      ? `Direct channels: ${direct.map((entry) => `@${entry}`).join(", ")}.`
+      : "Direct channels: none yet.";
+    const inboundLine = inbound.length
+      ? `Messaging your inbox with no direct channel: ${inbound
+          .map((entry) => `@${entry}`)
+          .join(", ")} — open one with /open <community> to reply untagged.`
+      : "No communities are messaging your inbox without a direct channel.";
+    return `BuzzRouter\n${directLine}\n${inboundLine}`;
+  }
+
+  /**
+   * Publish a command reply in the originating channel. Signed with the bridge
+   * key and tagged `br notice command`, so {@link canonicalizeSourceEvent} drops
+   * it before it is ever read as a command or an address — the reply can never
+   * start a loop. Best effort: a failed reply must not degrade the connection.
+   */
+  private async replyInChannel(
+    session: ConnectorSession,
+    route: ConnectorRouteConfig,
+    text: string,
+  ): Promise<void> {
+    try {
+      await session.relay.publish(
+        finalizeEvent(
+          {
+            content: text,
+            created_at: Math.floor(Date.now() / 1_000),
+            kind: BUZZ_MESSAGE_KIND,
+            tags: [
+              ["h", route.localChannelId],
+              ["br", "notice", "command"],
+            ],
+          },
+          session.privateKey,
+        ),
+      );
+    } catch {
+      // Best effort only.
     }
   }
 

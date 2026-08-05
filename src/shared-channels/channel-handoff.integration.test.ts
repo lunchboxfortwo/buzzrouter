@@ -121,6 +121,49 @@ describeDatabase("bridge channel ownership handoff", () => {
     ).resolves.toEqual(result);
   });
 
+  it("adds requested members as members while the bridge still owns the channel", async () => {
+    const community = await createConnectedCommunity(pool, "members");
+    const relay = new RecordingRelay(community.ownerPubkey);
+    const requester = randomBytes(32).toString("hex");
+
+    const result = await createDedicatedChannel(
+      pool,
+      {
+        communityId: community.communityId,
+        idempotencyKey: `idem-${randomUUID()}`,
+        ownerPubkey: community.ownerPubkey,
+        channelName: "connect-peer",
+        members: [requester],
+      },
+      wrappingKeys,
+      new SingleRelayFactory(relay),
+    );
+
+    // The requester lands as a plain member (via a `role` tag, so it is not left
+    // at the default), alongside the promoted owner and the demoted bridge.
+    expect(relay.memberRoles.get(result.channelId)).toEqual(
+      new Map([
+        [community.ownerPubkey, "owner"],
+        [requester, "member"],
+        [community.bridgePubkey, "member"],
+      ]),
+    );
+
+    // The requester was added BEFORE the bridge demoted itself — i.e. while the
+    // bridge was still owner and could issue 9000. The demote is always last.
+    const puts = relay.byKind(9_000);
+    const demoteIndex = puts.findIndex(
+      (event) =>
+        tag(event, "p")?.[1] === community.bridgePubkey &&
+        tag(event, "p")?.[2] === "member",
+    );
+    const requesterIndex = puts.findIndex(
+      (event) => tag(event, "p")?.[1] === requester,
+    );
+    expect(requesterIndex).toBeGreaterThanOrEqual(0);
+    expect(requesterIndex).toBeLessThan(demoteIndex);
+  });
+
   it("retries the handoff after a simulated promotion failure", async () => {
     const community = await createConnectedCommunity(pool, "gamma");
     const relay = new RecordingRelay(community.ownerPubkey);

@@ -2352,3 +2352,15 @@ export async function ensureCommunitySlug(
   }
   throw new ApiError("invalid_input", "Could not assign a community handle.");
 }
+
+/** A community's addressable handle, used to name its dedicated hub channel. */
+export async function getCommunitySlug(
+  pool: Pool,
+  communityId: string,
+): Promise<string | null> {
+  const result = await pool.query<{ slug: string | null }>(
+    "SELECT slug FROM communities WHERE id = $1",
+    [communityId],
+  );
+  return result.rows[0]?.slug ?? null;
+}

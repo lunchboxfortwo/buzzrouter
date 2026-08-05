@@ -332,9 +332,13 @@ describeDatabase("open-hub PostgreSQL integration", () => {
     expect(
       new Set(dedicated.rows.map((row) => row.local_channel_name_snapshot)),
     ).toEqual(
+      // Named for the peer's handle, not its UUID: this string is what a human
+      // reads in the Buzz client, and it cannot be corrected afterwards —
+      // renaming needs channel-owner authority the bridge deliberately gives up.
+      // `joinOpenHub` assigns these slugs from each peer's host.
       new Set([
-        dedicatedChannelName(first.communityId),
-        dedicatedChannelName(second.communityId),
+        dedicatedChannelName(first.communityId, "first"),
+        dedicatedChannelName(second.communityId, "second"),
       ]),
     );
     // The connector reads all three of BuzzRouter's channels, so a reply typed

@@ -16,6 +16,7 @@ import {
   attachDedicatedPeerChannel,
   getHubHomeEndpoint,
   listHubPeersMissingDedicatedChannel,
+  getCommunitySlug,
 } from "../shared-channels/store";
 import { PROVISION_PEER_CHANNELS_QUEUE } from "./queues";
 
@@ -58,9 +59,24 @@ export interface ProvisionPeerChannelsResult {
   provisioned: number;
 }
 
-/** The channel name a peer's dedicated BuzzRouter channel is created with. */
-export function dedicatedChannelName(peerCommunityId: string): string {
-  return `channel-${peerCommunityId}`;
+/**
+ * The channel name a peer's dedicated BuzzRouter channel is created with.
+ *
+ * Named for the peer's addressable handle, not its UUID: this string is what a
+ * human reads in the Buzz client, and `channel-15ffe2aa-e1bd-4f24-...` tells
+ * them nothing. Renaming after creation is not an option — kind 9002 requires
+ * channel-owner authority, and the handoff deliberately leaves a real human as
+ * owner, so the name has to be right at creation.
+ *
+ * Falls back to the id when a peer somehow has no slug, because a channel with
+ * an ugly name beats no channel at all.
+ */
+export function dedicatedChannelName(
+  peerCommunityId: string,
+  peerSlug?: string | null,
+): string {
+  const slug = peerSlug?.trim();
+  return slug ? `connect-${slug}` : `channel-${peerCommunityId}`;
 }
 
 export async function provisionPeerChannels(
@@ -89,7 +105,10 @@ export async function provisionPeerChannels(
   for (const peerCommunityId of peers) {
     try {
       const channel = await createChannel({
-        channelName: dedicatedChannelName(peerCommunityId),
+        channelName: dedicatedChannelName(
+          peerCommunityId,
+          await getCommunitySlug(deps.pool, peerCommunityId),
+        ),
         communityId: home.communityId,
         // Resumable and stable per peer: a retry reuses the same channel
         // rather than creating a second one on our relay.
